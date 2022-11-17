@@ -45,14 +45,14 @@ def evaluate(example, model, tk):
     with torch.no_grad():
         start_scores, end_scores = model(input_ids=input_ids).to_tuple()
 
-    start_score, end_score = get_best_valid_start_end_idx(
-        start_scores[0], end_scores[0], top_k=8, max_size=16
-    )
 
     n = len(input_ids)
     example["output"] = []
     example["match"] = []
     for i in range(n):
+        start_score, end_score = get_best_valid_start_end_idx(
+            start_scores[i], end_scores[i], top_k=8, max_size=16
+        )
         # Let's convert the input ids back to actual tokens
         all_tokens = tk.convert_ids_to_tokens(encoding["input_ids"][i].tolist())
         answer_tokens = all_tokens[start_score : end_score + 1]
