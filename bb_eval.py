@@ -1,3 +1,8 @@
+# Code borrowed from
+# https://colab.research.google.com/drive/1DVOm1VHjW0eKCayFq1N2GpY6GR9M4tJP?usp=sharing#scrollTo=sHgcdBt41gby
+# https://github.com/thevasudevgupta/bigbird/blob/main/LICENSE
+# Used under MIT License
+
 # %%
 from transformers import (
     BigBirdConfig,
@@ -87,18 +92,22 @@ def evaluate(example):
         start_scores[0], end_scores[0], top_k=8, max_size=16
     )
 
-    # Let's convert the input ids back to actual tokens
-    all_tokens = tk.convert_ids_to_tokens(encoding["input_ids"][0].tolist())
-    answer_tokens = all_tokens[start_score : end_score + 1]
+    n = len(input_ids)
+    example["output"] = []
+    example["match"] = []
+    for i in range(n):
+        # Let's convert the input ids back to actual tokens
+        all_tokens = tk.convert_ids_to_tokens(encoding["input_ids"][i].tolist())
+        answer_tokens = all_tokens[start_score : end_score + 1]
 
-    example["output"] = tk.decode(tk.convert_tokens_to_ids(answer_tokens))
-    # .replace('"', '')  # remove space prepending space token and remove unnecessary '"'
+        example["output"].append(tk.decode(tk.convert_tokens_to_ids(answer_tokens)))
+        # .replace('"', '')  # remove space prepending space token and remove unnecessary '"'
 
-    answers = expand_to_aliases([example["targets"]], make_sub_answers=True)
-    predictions = expand_to_aliases([example["output"]])
+        answers = expand_to_aliases([example["targets"][i]], make_sub_answers=True)
+        predictions = expand_to_aliases([example["output"][i]])
 
-    # if there is a common element, it's a match
-    example["match"] = len(list(answers & predictions)) > 0
+        # if there is a common element, it's a match
+        example["match"].append(len(list(answers & predictions)) > 0)
 
     return example
 
@@ -115,5 +124,6 @@ tk = BigBirdTokenizer.from_pretrained(model_id)
 PUNCTUATION_SET_TO_EXCLUDE = set("".join(["‘", "’", "´", "`", ".", ",", "-", '"']))
 
 # print(evaluate(hotpot_dataset[0]))
-hotpot_dataset.map(evaluate, batched=True, batch_size=2)  # todo: enable batching
+results_ds = hotpot_dataset.map(evaluate, batched=True, batch_size=4)  # todo: enable batching
+print(results_ds["match"].count(True) / len(results_ds["match"]))
 pass
