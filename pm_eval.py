@@ -7,10 +7,8 @@
 from dataset_utils import *
 
 from transformers import (
-    BigBirdConfig,
     BigBirdForQuestionAnswering,
     BigBirdTokenizer,
-    AutoTokenizer,
 )
 from datasets import load_dataset
 import datasets
