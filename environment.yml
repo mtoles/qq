@@ -36,6 +36,6 @@ dependencies:
   - black
   - click
   - pip:
-    - transformers==4.21.3
+    - transformers==4.21.3 # Later versions fail during distributed training
     # BigBird (vasudevgupta)
     - apache-beam
