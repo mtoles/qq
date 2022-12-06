@@ -15,6 +15,10 @@ import datasets
 import torch
 import click
 
+from prepare_data import CATEGORY_MAPPING
+
+INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
+
 
 def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100):
     best_start_scores, best_start_idx = torch.topk(start_scores, top_k)
@@ -30,44 +34,68 @@ def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100
 
 def evaluate(example, model, tk):
     # encode question and context so that they are seperated by a tokenizer.sep_token and cut at max_length
-    encoding = tk(
-        example["question"],
-        example["context"],
-        return_tensors="pt",
-        max_length=4096,
-        padding="max_length",
-        truncation=True,
-    )
-    input_ids = encoding.input_ids.to("cuda")
+    # encoding = tk(
+    #     example["question"],
+    #     example["context"],
+    #     return_tensors="pt",
+    #     max_length=4096,
+    #     padding="max_length",
+    #     truncation=True,
+    # )
+    # input_ids = encoding.input_ids.to("cuda")
+    input_ids = torch.Tensor(example["input_ids"]).int().unsqueeze(dim=0).to("cuda")
 
     with torch.no_grad():
         start_scores, end_scores = model(input_ids=input_ids).to_tuple()
 
-
     n = len(input_ids)
     example["output"] = []
     example["match"] = []
-    for i in range(n):
-        start_score, end_score = get_best_valid_start_end_idx(
-            start_scores[i], end_scores[i], top_k=8, max_size=16
-        )
-        # Let's convert the input ids back to actual tokens
-        all_tokens = tk.convert_ids_to_tokens(encoding["input_ids"][i].tolist())
-        answer_tokens = all_tokens[start_score : end_score + 1]
 
-        example["output"].append(tk.decode(tk.convert_tokens_to_ids(answer_tokens)))
+    start_idx_pred, end_idx_pred = get_best_valid_start_end_idx(
+        start_scores[0], end_scores[0], top_k=8, max_size=16
+    )
+    # Let's convert the input ids back to actual tokens
+    # all_tokens = tk.convert_ids_to_tokens(encoding["input_ids"][i].tolist())
+    # answer_tokens = all_tokens[start_score : end_score + 1]
+    answer_tokens_pred = example["input_ids"][start_idx_pred : end_idx_pred + 1]
+
+    # get ground truth answers
+    category = INVERSE_CATEGORY_MAPPING[example["category"]]
+    if category in ["yes", "no"]:
+        answer_gt = set([category])
+    else:
         # .replace('"', '')  # remove space prepending space token and remove unnecessary '"'
+        start_idx_gt = example["start_token"]
+        end_idx_gt = example["end_token"]
+        # answer = example["input_ids"][st:et]
 
-        answers = expand_to_aliases(example["targets"][i], make_sub_answers=True)
-        predictions = expand_to_aliases([example["output"][i]])
+        answer_gt = expand_to_aliases(
+            [tk.decode(input_ids[0][start_idx_gt : end_idx_gt + 1])],
+            make_sub_answers=True,
+        )
 
-        # if there is a common element, it's a match
-        example["match"].append(len(list(answers & predictions)) > 0)
+    # get predicted answers
+    example["output"] = tk.decode(answer_tokens_pred)
+    predictions = expand_to_aliases([example["output"]])
+
+    # if there is a common element, it's a match
+    example["match"].append(len(list(answer_gt & predictions)) > 0)
+
+    # print("start, end: ", start_idx_pred, end_idx_pred)
+    # print("predictions : ", example["output"])
+    # print("ground truth: ", answer_gt)
+    # print("match: ", example["match"])
+    # o = example["output"][i]
+    # a = example["answer"][i]
+    # q = example["question"][i]
+    # c = example["context"][i]
 
     return example
 
 
 @click.command()
+@click.option("--model_path", default=None, help="Path to model")
 @click.option("--model", help="Model name. Implemented models: {bigbird}")
 @click.option(
     "--attention_type",
@@ -84,43 +112,49 @@ def evaluate(example, model, tk):
     default=True,
     help="Disable to prevent loading from any cache (i.e. hugging face datasets, .map",
 )
+@click.option("--cache_dir", default=None, help="Preprocessed data directory")
 def main(
+    model_path,
     model,
     attention_type,
     dataset_name,
     batch_size,
     downsample_data_size,
     load_from_cache,
+    cache_dir,
 ):
     if downsample_data_size is not None:
         downsample_str = f"[:{downsample_data_size}]"
     else:
         downsample_str = ""
     if dataset_name == "hotpot":
-        dataset = load_dataset(
-            "hotpot_qa", "fullwiki", split=f"validation{downsample_str}"
-        ).map(format_dataset_hotpot, load_from_cache_file=load_from_cache)
-    elif dataset_name == "trivia":
-        dataset = datasets.load_dataset(
-            "trivia_qa", "rc", split=f"validation{downsample_str}"
-        ).map(
-            format_dataset_trivia,
-            load_from_cache_file=load_from_cache,
-            remove_columns=[
-                "search_results",
-                "question_source",
-                "entity_pages",
-                "question_id",
-            ],
-        )
-        # filter examples with no context
-        dataset = dataset.filter(lambda x: len(x["context"]) > 0)
-        # filter examples that are too long
-        dataset = dataset.filter(
-            lambda x: (len(x["question"]) + len(x["context"])) < 4 * 4096
-        )
-        # filter examples where the answer is not contained in the context
-        # dataset = dataset.filter(lambda x: x["answer"]["value"] in x["context"])
+        # dataset = load_dataset(
+        #     "hotpot_qa", "fullwiki", split=f"validation{downsample_str}"
+        # ).map(format_dataset_hotpot, load_from_cache_file=load_from_cache)
+        dataset = load_dataset("json", data_files="data/hotpot-validation.jsonl")[
+            "train"
+        ]
+    # elif dataset_name == "trivia":
+    #     dataset = datasets.load_dataset(
+    #         "trivia_qa", "rc", split=f"validation{downsample_str}"
+    #     ).map(
+    #         format_dataset_trivia,
+    #         load_from_cache_file=load_from_cache,
+    #         remove_columns=[
+    #             "search_results",
+    #             "question_source",
+    #             "entity_pages",
+    #             "question_id",
+    #         ],
+    #     )
+    #     # filter examples with no context
+    #     dataset = dataset.filter(lambda x: len(x["context"]) > 0)
+    #     # filter examples that are too long
+    #     dataset = dataset.filter(
+    #         lambda x: (len(x["question"]) + len(x["context"])) < 4 * 4096
+    #     )
+    #     # filter examples where the answer is not contained in the context
+    #     # dataset = dataset.filter(lambda x: x["answer"]["value"] in x["context"])
 
     else:
         raise ValueError("Dataset not implemented")
@@ -130,17 +164,27 @@ def main(
             "original_full",
         ], f"invalid attention_type: {attention_type}"
         model_id = "google/bigbird-base-trivia-itc"
-        model = BigBirdForQuestionAnswering.from_pretrained(
-            model_id, attention_type=attention_type
-        ).cuda()
+        if model_path is None:
+            model = BigBirdForQuestionAnswering.from_pretrained(
+                model_id, attention_type=attention_type
+            ).cuda()
+        else:
+            model = BigBirdForQuestionAnswering.from_pretrained(
+                model_path, attention_type=attention_type
+            ).cuda()
         tk = BigBirdTokenizer.from_pretrained(model_id)
     else:
         raise ValueError("Model not implemented")
 
-    # print(evaluate(hotpot_dataset[0]))
+    # TESTING
+    dataset = dataset.filter(lambda x: x["category"] not in [3, 4]).train_test_split(
+        test_size=0.1
+    )["test"]
+
+
     results_ds = dataset.map(
-        lambda x: evaluate(x, model, tk), batched=True, batch_size=batch_size
-    )  # todo: enable batching
+        lambda x: evaluate(x, model, tk), batched=False, load_from_cache_file=False
+    )
     print("accuracy: ", results_ds["match"].count(True) / len(results_ds["match"]))
     pass
 

@@ -13,8 +13,16 @@ from transformers import (
     TrainingArguments,
 )
 
+# from transformers.utils import logging
+import logging
 
-def collate_fn_nq(features, pad_id=0, threshold=1024):
+
+# Set logging to log level WARN
+bb_logger = logging.getLogger('transformers.models.big_bird.modeling_big_bird')
+bb_logger.setLevel("WARN")
+
+
+def collate_fn(features, pad_id=0, threshold=1024): 
     def pad_elems(ls, pad_id, maxlen):
         while len(ls) < maxlen:
             ls.append(pad_id)
@@ -45,9 +53,6 @@ def collate_fn_nq(features, pad_id=0, threshold=1024):
         "pooler_label": torch.tensor([x["category"] for x in features]),
     }
     return output
-
-def collate_fn_hotpot(features):
-    pass
 
 
 class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
@@ -102,9 +107,9 @@ RESUME_TRAINING = None
 # os.environ["WANDB_PROJECT"] = "bigbird-natural-questions"
 SEED = 42
 GROUP_BY_LENGTH = True
-LEARNING_RATE = 1.0e-4
+LEARNING_RATE = 3.0e-5
 WARMUP_STEPS = 100
-MAX_EPOCHS = 3
+MAX_EPOCHS = 5
 FP16 = False
 SCHEDULER = "linear"
 MODEL_ID = "google/bigbird-roberta-base"
@@ -112,9 +117,7 @@ MODEL_ID = "google/bigbird-roberta-base"
 
 @click.command()
 @click.option("--train_on_small", default="false", help="Use small dataset")
-@click.option(
-    "--dataset", help="{natural_questions | hotpot}"
-)
+@click.option("--dataset", help="{natural_questions | hotpot}")
 @click.option(
     "--local_rank",
     default=-1,
@@ -122,7 +125,8 @@ MODEL_ID = "google/bigbird-roberta-base"
     help="local_rank for distributed training on gpus",
 )
 @click.option("--nproc_per_node", default=1, type=int, help="num of processes per node")
-def main(train_on_small, dataset, local_rank, nproc_per_node):
+@click.option("--batch_size", default=1, type=int, help="batch size")
+def main(train_on_small, dataset, batch_size, local_rank, nproc_per_node):
     # "nq-training.jsonl" & "nq-validation.jsonl" are obtained from running `prepare_nq.py`
 
     if dataset == "natural_questions":
@@ -131,19 +135,15 @@ def main(train_on_small, dataset, local_rank, nproc_per_node):
             "train"
         ]
         output_dir = "bigbird-nq-complete-tuning"
-        collate_fn = collate_fn_nq
     elif dataset == "hotpot":
-        tr_dataset = load_dataset(
-            "hotpot_qa", "fullwiki", split="train"
-        )
-        val_dataset = load_dataset(
-            "hotpot_qa", "fullwiki", split="validation"
-        )
+        tr_dataset = load_dataset("json", data_files="data/hotpot-training.jsonl")[
+            "train"
+        ]
+        val_dataset = load_dataset("json", data_files="data/hotpot-validation.jsonl")[
+            "train"
+        ]
         output_dir = "bigbird-hotpot-complete-tuning"
-        collate_fn = collate_fn_hotpot
 
-        # testing
-        collate_fn(tr_dataset[0])
     else:
         raise ValueError(f"dataset {dataset} not supported")
 
@@ -170,8 +170,8 @@ def main(train_on_small, dataset, local_rank, nproc_per_node):
         do_eval=True,
         evaluation_strategy="epoch",
         # eval_steps=4000,
-        per_device_train_batch_size=4,
-        per_device_eval_batch_size=4,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
         gradient_accumulation_steps=4,
         group_by_length=GROUP_BY_LENGTH,
         learning_rate=LEARNING_RATE,
@@ -206,7 +206,7 @@ def main(train_on_small, dataset, local_rank, nproc_per_node):
     )
     try:
         trainer.train(resume_from_checkpoint=RESUME_TRAINING)
-        trainer.save_model("final-model")
+        trainer.save_model(f"{dataset}-final-model-exp")
     except KeyboardInterrupt:
         trainer.save_model("interrupted-natural-questions")
     # wandb.finish()
