@@ -1,4 +1,4 @@
-
+import datetime
 import numpy as np
 import click
 from datasets import load_dataset
@@ -10,8 +10,7 @@ from transformers import (
 )
 
 
-
-from bb_model import BigBirdForNaturalQuestions, collate_fn
+from bb_model import BigBirdForNaturalQuestions, collate_fn, compute_metrics
 
 
 # TRAIN_ON_SMALL = os.environ.pop("TRAIN_ON_SMALL", "false")
@@ -82,8 +81,6 @@ def main(train_on_small, dataset, batch_size, local_rank, nproc_per_node):
         overwrite_output_dir=False,
         do_train=True,
         do_eval=True,
-        evaluation_strategy="epoch",
-        # eval_steps=4000,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         gradient_accumulation_steps=4,
@@ -92,11 +89,7 @@ def main(train_on_small, dataset, batch_size, local_rank, nproc_per_node):
         warmup_steps=WARMUP_STEPS,
         lr_scheduler_type=SCHEDULER,
         num_train_epochs=MAX_EPOCHS,
-        logging_strategy="steps",
-        logging_steps=10,
-        save_strategy="steps",
-        save_steps=250,
-        run_name=f"bigbird-{dataset}-complete-tuning",
+        run_name=f"bigbird-{dataset}-complete-tuning-exp",
         disable_tqdm=False,
         # load_best_model_at_end=True,
         # report_to="wandb",
@@ -107,6 +100,15 @@ def main(train_on_small, dataset, batch_size, local_rank, nproc_per_node):
             "start_positions",
             "end_positions",
         ],  # it's important to log eval_loss
+        evaluation_strategy="steps",
+        eval_epochs=5,
+        save_strategy="epochs",
+        save_steps=1,
+        logging_strategy="steps",
+        logging_steps=5,
+        logging_dir="tb_logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+        report_to="tensorboard",
+        logging_first_step=True,
     )
     print("Batch Size", args.train_batch_size)
     print("Parallel Mode", args.parallel_mode)
@@ -117,6 +119,7 @@ def main(train_on_small, dataset, batch_size, local_rank, nproc_per_node):
         data_collator=collate_fn,
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
+        compute_metrics=compute_metrics,
     )
     try:
         trainer.train(resume_from_checkpoint=RESUME_TRAINING)

@@ -5,6 +5,9 @@ import torch.nn as nn
 from transformers import BigBirdForQuestionAnswering
 
 
+def compute_metrics():
+    print("computing metrics")
+    pass
 
 # Set logging to log level WARN
 bb_logger = logging.getLogger('transformers.models.big_bird.modeling_big_bird')

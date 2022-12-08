@@ -35,6 +35,7 @@ dependencies:
   - ipykernel
   - black
   - click
+  - tensorboard
   - pip:
     - transformers==4.21.3 # Later versions fail during distributed training
     # BigBird (vasudevgupta)

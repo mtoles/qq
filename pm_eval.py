@@ -96,6 +96,7 @@ def evaluate(example, model, tk):
     return example
 
 
+
 @click.command()
 @click.option("--model_path", default=None, help="Path to model")
 @click.option("--model", help="Model name. Implemented models: {bigbird}")
