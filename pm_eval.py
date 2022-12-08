@@ -6,16 +6,16 @@
 # %%
 from dataset_utils import *
 
-from transformers import (
-    BigBirdForQuestionAnswering,
-    BigBirdTokenizer,
-)
+from transformers import BigBirdTokenizer
+
 from datasets import load_dataset
 import datasets
 import torch
 import click
+import pandas as pd
 
 from prepare_data import CATEGORY_MAPPING
+from bb_model import BigBirdForNaturalQuestions
 
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
 
@@ -33,20 +33,18 @@ def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100
 
 
 def evaluate(example, model, tk):
-    # encode question and context so that they are seperated by a tokenizer.sep_token and cut at max_length
-    # encoding = tk(
-    #     example["question"],
-    #     example["context"],
-    #     return_tensors="pt",
-    #     max_length=4096,
-    #     padding="max_length",
-    #     truncation=True,
-    # )
-    # input_ids = encoding.input_ids.to("cuda")
     input_ids = torch.Tensor(example["input_ids"]).int().unsqueeze(dim=0).to("cuda")
 
     with torch.no_grad():
-        start_scores, end_scores = model(input_ids=input_ids).to_tuple()
+        # start_scores, end_scores = model(input_ids=input_ids).to_tuple()
+        model_output = model(input_ids=input_ids)
+
+    loss = model_output["loss"]
+    start_scores = model_output["start_logits"]
+    end_scores = model_output["end_logits"]
+    cls_out = model_output["cls_out"].argmax()
+
+    cat_pred = INVERSE_CATEGORY_MAPPING[cls_out.item()]
 
     n = len(input_ids)
     example["output"] = []
@@ -76,7 +74,11 @@ def evaluate(example, model, tk):
         )
 
     # get predicted answers
-    example["output"] = tk.decode(answer_tokens_pred)
+    if cat_pred in ["yes", "no"]:
+        example["output"] = cat_pred
+    else:
+        example["output"] = tk.decode(answer_tokens_pred)
+
     predictions = expand_to_aliases([example["output"]])
 
     # if there is a common element, it's a match
@@ -165,11 +167,11 @@ def main(
         ], f"invalid attention_type: {attention_type}"
         model_id = "google/bigbird-base-trivia-itc"
         if model_path is None:
-            model = BigBirdForQuestionAnswering.from_pretrained(
+            model = BigBirdForNaturalQuestions.from_pretrained(
                 model_id, attention_type=attention_type
             ).cuda()
         else:
-            model = BigBirdForQuestionAnswering.from_pretrained(
+            model = BigBirdForNaturalQuestions.from_pretrained(
                 model_path, attention_type=attention_type
             ).cuda()
         tk = BigBirdTokenizer.from_pretrained(model_id)
@@ -177,15 +179,17 @@ def main(
         raise ValueError("Model not implemented")
 
     # TESTING
-    dataset = dataset.filter(lambda x: x["category"] not in [3, 4]).train_test_split(
-        test_size=0.1
-    )["test"]
+    # dataset = dataset.train_test_split(test_size=100)["test"]
 
-
-    results_ds = dataset.map(
-        lambda x: evaluate(x, model, tk), batched=False, load_from_cache_file=False
-    )
-    print("accuracy: ", results_ds["match"].count(True) / len(results_ds["match"]))
+    results_df = pd.DataFrame(dataset)
+    matches = [
+        x[0]
+        for x in dataset.map(
+            lambda x: evaluate(x, model, tk), batched=False, load_from_cache_file=False
+        )["match"]
+    ]
+    results_df["match"] = matches
+    print("accuracy: ", len(results_df[results_df["match"] == True]) / len(results_df))
     pass
 
 
