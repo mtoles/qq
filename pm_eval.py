@@ -4,7 +4,6 @@
 # Used under MIT License
 
 # %%
-from dataset_utils import *
 
 from transformers import BigBirdTokenizer
 
@@ -15,21 +14,7 @@ import click
 import pandas as pd
 
 from prepare_data import CATEGORY_MAPPING
-from bb_model import BigBirdForNaturalQuestions
-
-INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
-
-
-def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100):
-    best_start_scores, best_start_idx = torch.topk(start_scores, top_k)
-    best_end_scores, best_end_idx = torch.topk(end_scores, top_k)
-
-    widths = best_end_idx[:, None] - best_start_idx[None, :]
-    mask = torch.logical_or(widths < 0, widths > max_size)
-    scores = (best_end_scores[:, None] + best_start_scores[None, :]) - (1e8 * mask)
-    best_score = torch.argmax(scores).item()
-
-    return best_start_idx[best_score % top_k], best_end_idx[best_score // top_k]
+from bb_model import BigBirdForNaturalQuestions, _is_match_single
 
 
 def evaluate(example, model, tk):
@@ -39,61 +24,19 @@ def evaluate(example, model, tk):
         # start_scores, end_scores = model(input_ids=input_ids).to_tuple()
         model_output = model(input_ids=input_ids)
 
-    loss = model_output["loss"]
-    start_scores = model_output["start_logits"]
-    end_scores = model_output["end_logits"]
-    cls_out = model_output["cls_out"].argmax()
+    start_logits = model_output["start_logits"]
+    end_logits = model_output["end_logits"]
+    cls_logits = model_output["cls_out"]
 
-    cat_pred = INVERSE_CATEGORY_MAPPING[cls_out.item()]
+    start_idx_gt = example["start_token"]
+    end_idx_gt = example["end_token"]
+    cls_gt = example["category"]
 
-    n = len(input_ids)
-    example["output"] = []
-    example["match"] = []
-
-    start_idx_pred, end_idx_pred = get_best_valid_start_end_idx(
-        start_scores[0], end_scores[0], top_k=8, max_size=16
+    accuracy = _is_match_single(
+        start_logits, end_logits, cls_logits, input_ids, start_idx_gt, end_idx_gt, cls_gt, tk
     )
-    # Let's convert the input ids back to actual tokens
-    # all_tokens = tk.convert_ids_to_tokens(encoding["input_ids"][i].tolist())
-    # answer_tokens = all_tokens[start_score : end_score + 1]
-    answer_tokens_pred = example["input_ids"][start_idx_pred : end_idx_pred + 1]
 
-    # get ground truth answers
-    category = INVERSE_CATEGORY_MAPPING[example["category"]]
-    if category in ["yes", "no"]:
-        answer_gt = set([category])
-    else:
-        # .replace('"', '')  # remove space prepending space token and remove unnecessary '"'
-        start_idx_gt = example["start_token"]
-        end_idx_gt = example["end_token"]
-        # answer = example["input_ids"][st:et]
-
-        answer_gt = expand_to_aliases(
-            [tk.decode(input_ids[0][start_idx_gt : end_idx_gt + 1])],
-            make_sub_answers=True,
-        )
-
-    # get predicted answers
-    if cat_pred in ["yes", "no"]:
-        example["output"] = cat_pred
-    else:
-        example["output"] = tk.decode(answer_tokens_pred)
-
-    predictions = expand_to_aliases([example["output"]])
-
-    # if there is a common element, it's a match
-    example["match"].append(len(list(answer_gt & predictions)) > 0)
-
-    # print("start, end: ", start_idx_pred, end_idx_pred)
-    # print("predictions : ", example["output"])
-    # print("ground truth: ", answer_gt)
-    # print("match: ", example["match"])
-    # o = example["output"][i]
-    # a = example["answer"][i]
-    # q = example["question"][i]
-    # c = example["context"][i]
-
-    return example
+    return accuracy
 
 
 

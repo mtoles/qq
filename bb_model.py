@@ -4,17 +4,110 @@ import torch
 import torch.nn as nn
 from transformers import BigBirdForQuestionAnswering
 
+from prepare_data import CATEGORY_MAPPING
+from dataset_utils import *
 
-def compute_metrics():
-    print("computing metrics")
-    pass
+INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
+
+
+def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100):
+    best_start_scores, best_start_idx = torch.topk(start_scores, top_k)
+    best_end_scores, best_end_idx = torch.topk(end_scores, top_k)
+
+    widths = best_end_idx[:, None] - best_start_idx[None, :]
+    mask = torch.logical_or(widths < 0, widths > max_size)
+    scores = (best_end_scores[:, None] + best_start_scores[None, :]) - (1e8 * mask)
+    best_score = torch.argmax(scores).item()
+
+    return best_start_idx[best_score % top_k], best_end_idx[best_score // top_k]
+
+
+def _is_match_single(
+    start_logits,
+    end_logits,
+    cls_logits,
+    input_ids,
+    start_idx_gt,
+    end_idx_gt,
+    cls_gt,
+    tk,
+):
+    cls_out = cls_logits.argmax()
+    cat_pred = INVERSE_CATEGORY_MAPPING[cls_out.item()]
+
+    start_idx_pred, end_idx_pred = get_best_valid_start_end_idx(
+        torch.Tensor(start_logits), torch.Tensor(end_logits), top_k=8, max_size=16
+    )
+    # Let's convert the input ids back to actual tokens
+    answer_tokens_pred = input_ids[start_idx_pred : end_idx_pred + 1]
+
+    # get ground truth answers
+    category = INVERSE_CATEGORY_MAPPING[cls_gt]
+    if category in ["yes", "no"]:
+        answer_gt = set([category])
+    else:
+        answer_gt = expand_to_aliases(
+            [tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])],
+            make_sub_answers=True,
+        )
+
+    # get predicted answers
+    if cat_pred in ["yes", "no"]:
+        model_output = cat_pred
+    else:
+        model_output = tk.decode(answer_tokens_pred)
+
+    predictions = expand_to_aliases([model_output])
+
+    # if there is a common element, it's a match
+    match = len(list(answer_gt & predictions)) > 0
+    return match
+
+
+def is_match(
+    start_logits,
+    end_logits,
+    cls_logits,
+    input_ids,
+    start_idx_gt,
+    end_idx_gt,
+    cls_gt,
+    tk,
+):
+    matches = []
+    for i in range(len(start_logits)):
+        matches.append(
+            _is_match_single(
+                start_logits[i],
+                end_logits[i],
+                cls_logits[i],
+                input_ids[i],
+                start_idx_gt[i],
+                end_idx_gt[i],
+                cls_gt[i],
+                tk,
+            )
+        )
+    accuracy = sum(matches) / len(matches)
+    return {"accuracy": accuracy}
+
+
+def compute_metrics(tk, x):
+    start_logits, end_logits, cls_logits, input_ids = x[0]
+    cls_gt, start_gt, end_gt = x[1]
+
+    accuracy = is_match(
+        start_logits, end_logits, cls_logits, input_ids, start_gt, end_gt, cls_gt, tk
+    )
+    return accuracy
+
 
 # Set logging to log level WARN
-bb_logger = logging.getLogger('transformers.models.big_bird.modeling_big_bird')
+bb_logger = logging.getLogger("transformers.models.big_bird.modeling_big_bird")
 bb_logger.setLevel("WARN")
 
 
-def collate_fn(features, pad_id=0, threshold=1024): 
+def collate_fn(features, pad_id=0, threshold=1024):
     def pad_elems(ls, pad_id, maxlen):
         while len(ls) < maxlen:
             ls.append(pad_id)
@@ -89,4 +182,5 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             "start_logits": outputs.start_logits,
             "end_logits": outputs.end_logits,
             "cls_out": cls_out,
+            "input_ids": input_ids,
         }
