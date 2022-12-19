@@ -99,6 +99,7 @@ def compute_metrics(tk, x):
     accuracy = is_match(
         start_logits, end_logits, cls_logits, input_ids, start_gt, end_gt, cls_gt, tk
     )
+    assert False
     return accuracy
 
 

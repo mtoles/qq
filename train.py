@@ -4,6 +4,8 @@ import click
 import torch
 from datasets import load_dataset
 
+from utils import get_downsample_dataset_size_str
+
 from transformers import (
     BigBirdTokenizer,
     Trainer,
@@ -23,18 +25,33 @@ SEED = 42
 GROUP_BY_LENGTH = True
 LEARNING_RATE = 3.0e-5
 WARMUP_STEPS = 100
-MAX_EPOCHS = 5
+MAX_EPOCHS = 9
 FP16 = False
 SCHEDULER = "linear"
 MODEL_ID = "google/bigbird-roberta-base"
 
 
 @click.command()
+
+# model
 @click.option("--model_path", default=None, help="path to mdoel")
 @click.option("--mode", default="train", help="{train | eval}")
-@click.option("--train_on_small", default="false", help="Use small dataset")
+
+# data
 @click.option("--dataset", help="{natural_questions | hotpot}")
 @click.option("--batch_size", default=1, type=int, help="batch size")
+@click.option(
+    "--downsample_data_size_val",
+    default=None,
+    help="use at most this many examples in validation",
+)
+@click.option(
+    "--downsample_data_size_train",
+    default=None,
+    help="use at most this many examples in training",
+)
+
+# distributed training
 @click.option(
     "--local_rank",
     default=0,
@@ -43,7 +60,17 @@ MODEL_ID = "google/bigbird-roberta-base"
 )
 @click.option("--nproc_per_node", default=1, type=int, help="num of processes per node")
 @click.option("--master_port", default=1234, type=int, help="master port")
-def main(model_path, mode, train_on_small, dataset, batch_size, local_rank, nproc_per_node, master_port):
+def main(
+    model_path,
+    mode,
+    dataset,
+    batch_size,
+    downsample_data_size_val,
+    downsample_data_size_train,
+    local_rank,
+    nproc_per_node,
+    master_port,
+):
     # "nq-training.jsonl" & "nq-validation.jsonl" are obtained from running `prepare_nq.py`
     # prepare training run for multiple GPUs:
     # if local_rank != -1:
@@ -51,33 +78,25 @@ def main(model_path, mode, train_on_small, dataset, batch_size, local_rank, npro
     #     device = torch.device("cuda", local_rank)
     #     torch.distributed.init_process_group(backend="nccl", init_method="env://")
     assert mode in ["train", "eval"], f"mode {mode} not supported"
-    assert dataset in ["natural_questions", "hotpot"], f"dataset {dataset} not supported"
-
+    assert dataset in [
+        "natural_questions",
+        "hotpot",
+    ], f"dataset {dataset} not supported"
 
     if dataset == "natural_questions":
-        tr_dataset = load_dataset("json", data_files="data/nq-training.jsonl")["train"]
-        val_dataset = load_dataset("json", data_files="data/nq-validation.jsonl")[
-            "train"
-        ]
+        tr_dataset = load_dataset("json", data_files="data/nq-training.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}")
+        val_dataset = load_dataset("json", data_files="data/nq-validation.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}")
         output_dir = "bigbird-nq-complete-tuning"
     elif dataset == "hotpot":
-        tr_dataset = load_dataset("json", data_files="data/hotpot-training.jsonl")[
-            "train"
-        ]
-        val_dataset = load_dataset("json", data_files="data/hotpot-validation.jsonl")[
-            "train"
-        ]
+        tr_dataset = load_dataset(
+            "json",
+            data_files="data/hotpot-training.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}"
+        )
+        val_dataset = load_dataset("json", data_files="data/hotpot-validation.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}")
         output_dir = "bigbird-hotpot-complete-tuning"
 
-
-    if train_on_small == "true":
-        # this will run for ~12 hrs on 2 K80 GPU (natural questions)
-        np.random.seed(SEED)
-        indices = np.random.randint(0, 298152, size=8000)
-        tr_dataset = tr_dataset.select(indices)
-        np.random.seed(SEED)
-        indices = np.random.randint(0, 9000, size=1000)
-        val_dataset = val_dataset.select(indices)
+    # tr_dataset = downsample(tr_dataset, downsample_data_size_train)
+    # val_dataset = downsample(val_dataset, downsample_data_size_val)
 
     print(tr_dataset, val_dataset)
 
@@ -89,7 +108,6 @@ def main(model_path, mode, train_on_small, dataset, batch_size, local_rank, npro
             MODEL_ID, gradient_checkpointing=True
         )
 
-
     args = TrainingArguments(
         output_dir=output_dir,
         overwrite_output_dir=False,
@@ -97,8 +115,8 @@ def main(model_path, mode, train_on_small, dataset, batch_size, local_rank, npro
         do_eval=False,
         per_gpu_train_batch_size=batch_size,
         per_gpu_eval_batch_size=batch_size,
-        per_device_train_batch_size=2*batch_size,
-        gradient_accumulation_steps=4,
+        per_device_train_batch_size=2 * batch_size,
+        gradient_accumulation_steps=10,
         group_by_length=GROUP_BY_LENGTH,
         learning_rate=LEARNING_RATE,
         warmup_steps=WARMUP_STEPS,
@@ -116,11 +134,11 @@ def main(model_path, mode, train_on_small, dataset, batch_size, local_rank, npro
             "end_positions",
         ],  # it's important to log eval_loss
         evaluation_strategy="epoch",
-        eval_steps=0.1,
+        eval_steps=0.05,
         save_strategy="epoch",
-        save_steps=0.5,
+        save_steps=0.05,
         logging_strategy="epoch",
-        logging_steps=0.1,
+        logging_steps=0.05,
         logging_dir="tb_logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
         report_to="tensorboard",
         logging_first_step=True,
@@ -137,7 +155,8 @@ def main(model_path, mode, train_on_small, dataset, batch_size, local_rank, npro
         compute_metrics=lambda x: compute_metrics(tokenizer, x),
     )
     if mode == "eval":
-        trainer.evaluate()
+        metrics = trainer.evaluate()
+        print(metrics)
         return
     elif mode == "train":
         try:

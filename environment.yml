@@ -36,6 +36,7 @@ dependencies:
   - black
   - click
   - tensorboard
+  - scikit-learn>=1.2.0
   - pip:
     - transformers==4.21.3 # Later versions fail during distributed training
     # BigBird (vasudevgupta)

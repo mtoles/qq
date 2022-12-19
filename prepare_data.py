@@ -397,7 +397,7 @@ def save_to_disk(hf_data, file_name):
 
 
 @click.command()
-@click.option("--split", type=str, help="{train | validation}")
+@click.option("--split", type=str, help="{train | validation | both}")
 @click.option("--dataset", type=str, help="{natural_questions | hotpot}")
 @click.option("--cache_dir", type=str, help="Path to cache directory")
 @click.option("--load_from_cache", type=bool, default=True)
@@ -407,6 +407,16 @@ def main(split, dataset, cache_dir, load_from_cache):
     assert dataset in ["natural_questions", "hotpot"], "Invalid dataset"
 
     tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+
+    sets = []
+    if split == "train":
+        sets.append("train")
+    if split == "validation":
+        sets.append("validation")
+    if split == "both":
+        sets.append("train")
+        sets.append("validation")
+
     if dataset == "natural_questions":
         data = load_dataset(
             "natural_questions",
@@ -415,50 +425,58 @@ def main(split, dataset, cache_dir, load_from_cache):
         )
 
         # data = data["train" if PROCESS_TRAIN == "true" else "validation"]
-        data = data[split]
+        for s in sets:
+            data = data[s]
 
-        cache_file_name = (
-            "data/nq-training" if split == "train" else "data/nq-validation"
-        )
-        fn_kwargs = dict(
-            tokenizer=tokenizer,
-            doc_stride=DOC_STRIDE,
-            max_length=MAX_LENGTH,
-            assertion=False,
-        )
-        # testing
-        data = data.map(
-            prepare_inputs_nq, fn_kwargs=fn_kwargs, cache_file_name=cache_file_name, load_from_cache_file=load_from_cache
-        )
-        data = data.remove_columns(["annotations", "document", "id", "question"])
-        print(data)
-    elif dataset == "hotpot":
-        data = load_dataset("hotpot_qa", "distractor", cache_dir=cache_dir)
-        data = data[split]
-        # drop examples where the answer is not in the context
-        before = len(data)
-        data = data.filter(
-            lambda x: (
-                x["answer"]
-                in " ".join([" ".join(l) for l in x["context"]["sentences"]])
+            cache_file_name = (
+                "data/nq-training" if split == "train" else "data/nq-validation"
             )
-            or (x["answer"] in ["yes", "no"])
-        )
-        after = len(data)
-        print(f"{before - after} examples dropped for lacking answer in context")
-        cache_file_name = (
-            "data/hotpot-training" if split == "train" else "data/hotpot-validation"
-        )
-        fn_kwargs = dict(
-            tokenizer=tokenizer,
-            doc_stride=DOC_STRIDE,
-            max_length=MAX_LENGTH,
-            assertion=False,
-        )
-        data = data.map(
-            prepare_inputs_hp, fn_kwargs=fn_kwargs, cache_file_name=cache_file_name, load_from_cache_file=load_from_cache
-        )
-        print(data)
+            fn_kwargs = dict(
+                tokenizer=tokenizer,
+                doc_stride=DOC_STRIDE,
+                max_length=MAX_LENGTH,
+                assertion=False,
+            )
+            # testing
+            data = data.map(
+                prepare_inputs_nq,
+                fn_kwargs=fn_kwargs,
+                cache_file_name=cache_file_name,
+                load_from_cache_file=load_from_cache,
+            )
+            data = data.remove_columns(["annotations", "document", "id", "question"])
+            print(data)
+    elif dataset == "hotpot":
+        for s in sets:
+            data = load_dataset("hotpot_qa", "distractor", cache_dir=cache_dir)
+            data = data[s]
+            # drop examples where the answer is not in the context
+            before = len(data)
+            data = data.filter(
+                lambda x: (
+                    x["answer"]
+                    in " [SEP] ".join([" ".join(l) for l in x["context"]["sentences"]])
+                )
+                or (x["answer"] in ["yes", "no"])
+            )
+            after = len(data)
+            print(f"{before - after} examples dropped for lacking answer in context")
+            cache_file_name = (
+                "data/hotpot-training" if s == "train" else "data/hotpot-validation"
+            )
+            fn_kwargs = dict(
+                tokenizer=tokenizer,
+                doc_stride=DOC_STRIDE,
+                max_length=MAX_LENGTH,
+                assertion=False,
+            )
+            data = data.map(
+                prepare_inputs_hp,
+                fn_kwargs=fn_kwargs,
+                cache_file_name=cache_file_name,
+                load_from_cache_file=load_from_cache,
+            )
+            print(data)
 
     np.random.seed(SEED)
     save_to_disk(data, file_name=cache_file_name + ".jsonl")
