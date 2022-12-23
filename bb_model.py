@@ -22,7 +22,7 @@ def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100
     return best_start_idx[best_score % top_k], best_end_idx[best_score // top_k]
 
 
-def _is_match_single(
+def _get_metrics_single(
     start_logits,
     end_logits,
     cls_logits,
@@ -44,10 +44,12 @@ def _is_match_single(
     # get ground truth answers
     category = INVERSE_CATEGORY_MAPPING[cls_gt]
     if category in ["yes", "no"]:
-        answer_gt = set([category])
+        answer_gt = category
+        answer_gt_expanded = set([category])
     else:
-        answer_gt = expand_to_aliases(
-            [tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])],
+        answer_gt = tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])
+        answer_gt_expanded = expand_to_aliases(
+            [answer_gt],
             make_sub_answers=True,
         )
 
@@ -60,11 +62,22 @@ def _is_match_single(
     predictions = expand_to_aliases([model_output])
 
     # if there is a common element, it's a match
-    match = len(list(answer_gt & predictions)) > 0
-    return match
+    match = len(list(answer_gt_expanded & predictions)) > 0
+
+    # f1
+    tp = sum([word in answer_gt for word in model_output])
+    fp = sum([word not in answer_gt for word in model_output])
+    fn = sum([word not in model_output for word in answer_gt])
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    try:
+        f1 = 2 * (precision * recall) / (precision + recall)
+    except ZeroDivisionError:
+        f1 = 0
+    return match, f1, precision, recall
 
 
-def is_match(
+def get_metrics(
     start_logits,
     end_logits,
     cls_logits,
@@ -75,32 +88,40 @@ def is_match(
     tk,
 ):
     matches = []
+    f1s = []
+    precisions = []
+    recalls = []
     for i in range(len(start_logits)):
-        matches.append(
-            _is_match_single(
-                start_logits[i],
-                end_logits[i],
-                cls_logits[i],
-                input_ids[i],
-                start_idx_gt[i],
-                end_idx_gt[i],
-                cls_gt[i],
-                tk,
-            )
+        m, f, p, r = _get_metrics_single(
+            start_logits[i],
+            end_logits[i],
+            cls_logits[i],
+            input_ids[i],
+            start_idx_gt[i],
+            end_idx_gt[i],
+            cls_gt[i],
+            tk,
         )
+        matches.append(m)
+        f1s.append(f)
+        precisions.append(p)
+        recalls.append(r)
+
     accuracy = sum(matches) / len(matches)
-    return {"accuracy": accuracy}
+    f1 = sum(f1s) / len(f1s)
+    precision = sum(precisions) / len(precisions)
+    recall = sum(recalls) / len(recalls)
+    return {"accuracy": accuracy, "f1": f1, "precision": precision, "recall": recall}
 
 
 def compute_metrics(tk, x):
     start_logits, end_logits, cls_logits, input_ids = x[0]
     cls_gt, start_gt, end_gt = x[1]
 
-    accuracy = is_match(
+    metrics = get_metrics(
         start_logits, end_logits, cls_logits, input_ids, start_gt, end_gt, cls_gt, tk
     )
-    assert False
-    return accuracy
+    return metrics
 
 
 # Set logging to log level WARN

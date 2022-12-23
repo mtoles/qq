@@ -14,7 +14,7 @@ import click
 import pandas as pd
 
 from prepare_data import CATEGORY_MAPPING
-from bb_model import BigBirdForNaturalQuestions, _is_match_single
+from bb_model import BigBirdForNaturalQuestions, _get_metrics_single
 
 
 def evaluate(example, model, tk):
@@ -32,12 +32,18 @@ def evaluate(example, model, tk):
     end_idx_gt = example["end_token"]
     cls_gt = example["category"]
 
-    accuracy = _is_match_single(
-        start_logits, end_logits, cls_logits, input_ids, start_idx_gt, end_idx_gt, cls_gt, tk
+    accuracy = _get_metrics_single(
+        start_logits,
+        end_logits,
+        cls_logits,
+        input_ids,
+        start_idx_gt,
+        end_idx_gt,
+        cls_gt,
+        tk,
     )
 
     return accuracy
-
 
 
 @click.command()
