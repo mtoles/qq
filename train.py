@@ -4,7 +4,7 @@ import click
 import torch
 from datasets import load_dataset
 
-from utils import get_downsample_dataset_size_str
+from utils import get_downsample_dataset_size_str, dc, tokenizer, MODEL_ID
 
 from transformers import (
     BigBirdTokenizer,
@@ -28,17 +28,21 @@ WARMUP_STEPS = 100
 MAX_EPOCHS = 9
 FP16 = False
 SCHEDULER = "linear"
-MODEL_ID = "google/bigbird-roberta-base"
 
 
 @click.command()
 
 # model
-@click.option("--model_path", default=None, help="path to mdoel")
+@click.option("--model_path", default=None, help="path to model")
 @click.option("--mode", default="train", help="{train | eval}")
 
 # data
-@click.option("--dataset", help="{natural_questions | hotpot}")
+@click.option(
+    "--tr_dataset_path", help="path to train {natural_questions | hotpot} dataset"
+)
+@click.option(
+    "--val_dataset_path", help="path to validation {natural_questions | hotpot} dataset"
+)
 @click.option("--batch_size", default=1, type=int, help="batch size")
 @click.option(
     "--downsample_data_size_val",
@@ -63,7 +67,8 @@ MODEL_ID = "google/bigbird-roberta-base"
 def main(
     model_path,
     mode,
-    dataset,
+    tr_dataset_path,
+    val_dataset_path,
     batch_size,
     downsample_data_size_val,
     downsample_data_size_train,
@@ -77,30 +82,36 @@ def main(
     #     torch.cuda.set_device(local_rank)
     #     device = torch.device("cuda", local_rank)
     #     torch.distributed.init_process_group(backend="nccl", init_method="env://")
+
     assert mode in ["train", "eval"], f"mode {mode} not supported"
-    assert dataset in [
-        "natural_questions",
-        "hotpot",
-    ], f"dataset {dataset} not supported"
-
-    if dataset == "natural_questions":
-        tr_dataset = load_dataset("json", data_files="data/nq-training.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}")
-        val_dataset = load_dataset("json", data_files="data/nq-validation.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}")
-        output_dir = "bigbird-nq-complete-tuning"
-    elif dataset == "hotpot":
-        tr_dataset = load_dataset(
-            "json",
-            data_files="data/hotpot-training.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}"
+    assert val_dataset_path is not None, "val_dataset_path must be specified"
+    if "natural_questions" in val_dataset_path:
+        base_dataset = "natural_questions"
+    elif "hotpot" in val_dataset_path:
+        base_dataset = "hotpot"
+    else:
+        raise ValueError(
+            f"dataset {val_dataset} does not contain 'natural_questions' or 'hotpot'"
         )
-        val_dataset = load_dataset("json", data_files="data/hotpot-validation.jsonl", split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}")
-        output_dir = "bigbird-hotpot-complete-tuning"
 
-    # tr_dataset = downsample(tr_dataset, downsample_data_size_train)
-    # val_dataset = downsample(val_dataset, downsample_data_size_val)
+    output_dir = f"bigbird_{base_dataset}_complete_tuning"
+    tr_dataset = (
+        load_dataset(
+            "json",
+            data_files=tr_dataset_path,
+            split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}",
+            download_mode="force_redownload",
+        )
+        if mode == "train"
+        else None
+    )
+    val_dataset = load_dataset(
+        "json",
+        data_files=val_dataset_path,
+        split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}",
+        download_mode="force_redownload",
+    )
 
-    print(tr_dataset, val_dataset)
-
-    tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
     if model_path is not None:
         model = BigBirdForNaturalQuestions.from_pretrained(model_path)
     else:
@@ -122,7 +133,7 @@ def main(
         warmup_steps=WARMUP_STEPS,
         lr_scheduler_type=SCHEDULER,
         num_train_epochs=MAX_EPOCHS,
-        run_name=f"bigbird-{dataset}-complete-tuning-exp",
+        run_name=f"bigbird-{base_dataset}-complete-tuning-exp",
         disable_tqdm=False,
         # load_best_model_at_end=True,
         # report_to="wandb",
@@ -161,9 +172,9 @@ def main(
     elif mode == "train":
         try:
             trainer.train(resume_from_checkpoint=RESUME_TRAINING)
-            trainer.save_model(f"{dataset}-final-model-exp")
+            trainer.save_model(f"models/{base_dataset}-final-model-exp")
         except KeyboardInterrupt:
-            trainer.save_model(f"{dataset}-interrupted-model-exp")
+            trainer.save_model(f"models/{base_dataset}-interrupted-model-exp")
         # wandb.finish()
 
 

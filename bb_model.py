@@ -6,6 +6,7 @@ from transformers import BigBirdForQuestionAnswering
 
 from prepare_data import CATEGORY_MAPPING
 from dataset_utils import *
+from utils import dc
 
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
 
