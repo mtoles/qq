@@ -31,6 +31,7 @@ def _get_metrics_single(
     start_idx_gt,
     end_idx_gt,
     cls_gt,
+    log_path,
     tk,
 ):
     cls_out = cls_logits.argmax()
@@ -66,16 +67,57 @@ def _get_metrics_single(
     match = len(list(answer_gt_expanded & predictions)) > 0
 
     # f1
-    tp = sum([word in answer_gt for word in model_output])
-    fp = sum([word not in answer_gt for word in model_output])
-    fn = sum([word not in model_output for word in answer_gt])
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
+    tp = sum([word in answer_gt for word in model_output.split(" ")])
+    fp = sum([word not in answer_gt for word in model_output.split(" ")])
+    fn = sum([word not in model_output for word in answer_gt.split(" ")])
+    try:
+        precision = tp / (tp + fp)
+    except ZeroDivisionError:
+        precision = 0
+    try:
+        recall = tp / (tp + fn)
+    except ZeroDivisionError:
+        recall = 0
     try:
         f1 = 2 * (precision * recall) / (precision + recall)
     except ZeroDivisionError:
         f1 = 0
+    if log_path is not None:
+        log_results(log_path, start_idx_pred, end_idx_pred, cls_logits, input_ids, start_idx_gt, end_idx_gt, cls_gt, match, f1, precision, recall, tk)
     return match, f1, precision, recall
+
+
+def log_results(
+    log_path,
+    start_idx_pred,
+    end_idx_pred,
+    cls_logits,
+    input_ids,
+    start_idx_gt,
+    end_idx_gt,
+    cls_gt,
+    match,
+    f1,
+    precision,
+    recall,
+    tk,
+):
+    # ignore input_ids where the input_id value is -100
+    input_ids = input_ids[input_ids != -100]
+    context = tk.decode(input_ids).replace("[SEP]","\n\n")
+    log_entry = f"""{context}
+answer: {tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])}
+prediction: {tk.decode(input_ids[start_idx_pred : end_idx_pred + 1])}
+cls_gt: {cls_gt}
+cls_pred: {cls_logits.argmax()}
+match: {match}
+f1: {str(f1)[:5]}
+precision: {str(precision)[:5]}
+recall: {str(recall)[:5]}
+======================================
+"""
+    with open(log_path, "a") as f:
+        f.write(log_entry)
 
 
 def get_metrics(
@@ -86,6 +128,7 @@ def get_metrics(
     start_idx_gt,
     end_idx_gt,
     cls_gt,
+    log_path,
     tk,
 ):
     matches = []
@@ -101,6 +144,7 @@ def get_metrics(
             start_idx_gt[i],
             end_idx_gt[i],
             cls_gt[i],
+            log_path,
             tk,
         )
         matches.append(m)
@@ -115,12 +159,12 @@ def get_metrics(
     return {"accuracy": accuracy, "f1": f1, "precision": precision, "recall": recall}
 
 
-def compute_metrics(tk, x):
+def compute_metrics(tk, log_path, x):
     start_logits, end_logits, cls_logits, input_ids = x[0]
     cls_gt, start_gt, end_gt = x[1]
 
     metrics = get_metrics(
-        start_logits, end_logits, cls_logits, input_ids, start_gt, end_gt, cls_gt, tk
+        start_logits, end_logits, cls_logits, input_ids, start_gt, end_gt, cls_gt, log_path, tk
     )
     return metrics
 

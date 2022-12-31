@@ -23,9 +23,9 @@ RESUME_TRAINING = None
 # os.environ["WANDB_PROJECT"] = "bigbird-natural-questions"
 SEED = 42
 GROUP_BY_LENGTH = True
-LEARNING_RATE = 3.0e-5
+# LEARNING_RATE = 3.0e-5
 WARMUP_STEPS = 100
-MAX_EPOCHS = 9
+# MAX_EPOCHS = 9
 FP16 = False
 SCHEDULER = "linear"
 
@@ -35,6 +35,8 @@ SCHEDULER = "linear"
 # model
 @click.option("--model_path", default=None, help="path to model")
 @click.option("--mode", default="train", help="{train | eval}")
+@click.option("--learning_rate", type=float, help="learning rate")
+@click.option("--max_epochs",  type=int, help="max epochs")
 
 # data
 @click.option(
@@ -54,6 +56,11 @@ SCHEDULER = "linear"
     default=None,
     help="use at most this many examples in training",
 )
+@click.option(
+    "--log_eval",
+    default=False,
+    help="write eval metrics and examples to log file in inf_logs/"
+)
 
 # distributed training
 @click.option(
@@ -67,11 +74,14 @@ SCHEDULER = "linear"
 def main(
     model_path,
     mode,
+    batch_size,
+    learning_rate,
+    max_epochs,
     tr_dataset_path,
     val_dataset_path,
-    batch_size,
     downsample_data_size_val,
     downsample_data_size_train,
+    log_eval,
     local_rank,
     nproc_per_node,
     master_port,
@@ -118,7 +128,7 @@ def main(
         model = BigBirdForNaturalQuestions.from_pretrained(
             MODEL_ID, gradient_checkpointing=True
         )
-
+    now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     args = TrainingArguments(
         output_dir=output_dir,
         overwrite_output_dir=False,
@@ -129,10 +139,10 @@ def main(
         per_device_train_batch_size=2 * batch_size,
         gradient_accumulation_steps=10,
         group_by_length=GROUP_BY_LENGTH,
-        learning_rate=LEARNING_RATE,
+        learning_rate=learning_rate,
         warmup_steps=WARMUP_STEPS,
         lr_scheduler_type=SCHEDULER,
-        num_train_epochs=MAX_EPOCHS,
+        num_train_epochs=max_epochs,
         run_name=f"bigbird-{base_dataset}-complete-tuning-exp",
         disable_tqdm=False,
         # load_best_model_at_end=True,
@@ -150,20 +160,21 @@ def main(
         save_steps=0.05,
         logging_strategy="epoch",
         logging_steps=0.05,
-        logging_dir="tb_logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+        logging_dir="tb_logs/" + now,
         report_to="tensorboard",
         logging_first_step=True,
     )
     print("Batch Size", args.train_batch_size)
     print("Parallel Mode", args.parallel_mode)
 
+    log_path = "inf_logs/" + now if log_eval else None
     trainer = Trainer(
         model=model,
         args=args,
         data_collator=collate_fn,
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
-        compute_metrics=lambda x: compute_metrics(tokenizer, x),
+        compute_metrics=lambda x: compute_metrics(tokenizer, log_path, x),
     )
     if mode == "eval":
         metrics = trainer.evaluate()

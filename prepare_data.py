@@ -420,7 +420,7 @@ def save_to_disk(hf_data, file_name):
 @click.command()
 @click.option("--split", type=str, help="{train | validation | both}")
 @click.option("--dataset", type=str, help="{natural_questions | hotpot}")
-@click.option("--masking_scheme", type=str, default="random_sentence")
+@click.option("--masking_scheme", type=str, default=None)
 @click.option("--downsample_data_size", type=str, default=None)
 @click.option("--cache_dir", type=str, help="Path to cache directory")
 @click.option("--load_from_cache", type=bool, default=True)

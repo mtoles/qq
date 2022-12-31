@@ -2,7 +2,7 @@ from transformers import BigBirdTokenizer
 from sklearn.model_selection import train_test_split
 from pathlib import PurePath
 
-MODEL_ID = "google/bigbird-roberta-base"
+MODEL_ID = "google/bigbird-base-trivia-itc"
 tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
 
 
@@ -15,7 +15,7 @@ def get_downsample_dataset_size_str(downsample_data_size):
 
 
 def make_cache_file_name(split, dataset, downsample_data_size, masking_scheme):
-    masking_scheme = masking_scheme.replace("_", "")
+    masking_scheme = str(masking_scheme).replace("_", "")
     cache_file_name = (
         PurePath("data") / f"{dataset}-{split}-{downsample_data_size}-{masking_scheme}"
     )
