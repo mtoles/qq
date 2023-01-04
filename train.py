@@ -182,7 +182,8 @@ def main(
         return
     elif mode == "train":
         try:
-            trainer.train(resume_from_checkpoint=RESUME_TRAINING)
+            # trainer.train(resume_from_checkpoint=RESUME_TRAINING)
+            trainer.train(model_path)
             trainer.save_model(f"models/{base_dataset}-final-model-exp")
         except KeyboardInterrupt:
             trainer.save_model(f"models/{base_dataset}-interrupted-model-exp")
