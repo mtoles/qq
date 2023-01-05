@@ -16,6 +16,8 @@ import pandas as pd
 from prepare_data import CATEGORY_MAPPING
 from bb_model import BigBirdForNaturalQuestions, _get_metrics_single
 
+from utils import MODEL_ID
+
 
 def evaluate(example, model, tk):
     input_ids = torch.Tensor(example["input_ids"]).int().unsqueeze(dim=0).to("cuda")
@@ -115,16 +117,16 @@ def main(
             "block_sparse",
             "original_full",
         ], f"invalid attention_type: {attention_type}"
-        model_id = "google/bigbird-base-trivia-itc"
+        # MODEL_ID = "google/bigbird-large-trivia-itc"
         if model_path is None:
             model = BigBirdForNaturalQuestions.from_pretrained(
-                model_id, attention_type=attention_type
+                MODEL_ID, attention_type=attention_type
             ).cuda()
         else:
             model = BigBirdForNaturalQuestions.from_pretrained(
                 model_path, attention_type=attention_type
             ).cuda()
-        tk = BigBirdTokenizer.from_pretrained(model_id)
+        tk = BigBirdTokenizer.from_pretrained(MODEL_ID)
     else:
         raise ValueError("Model not implemented")
 
