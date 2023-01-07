@@ -37,6 +37,7 @@ SCHEDULER = "linear"
 @click.option("--mode", default="train", help="{train | eval}")
 @click.option("--learning_rate", type=float, help="learning rate")
 @click.option("--max_epochs",  type=int, help="max epochs")
+@click.option("--gradient_accumulation_steps", type=int, help="gradient accumulation steps")
 
 # data
 @click.option(
@@ -77,6 +78,7 @@ def main(
     batch_size,
     learning_rate,
     max_epochs,
+    gradient_accumulation_steps,
     tr_dataset_path,
     val_dataset_path,
     downsample_data_size_val,
@@ -137,7 +139,7 @@ def main(
         # per_gpu_train_batch_size=batch_size,
         per_gpu_eval_batch_size=batch_size,
         per_device_train_batch_size=batch_size,
-        gradient_accumulation_steps=10,
+        gradient_accumulation_steps=gradient_accumulation_steps,
         group_by_length=GROUP_BY_LENGTH,
         learning_rate=learning_rate,
         warmup_steps=WARMUP_STEPS,
