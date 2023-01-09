@@ -24,7 +24,6 @@ RESUME_TRAINING = None
 SEED = 42
 GROUP_BY_LENGTH = True
 # LEARNING_RATE = 3.0e-5
-WARMUP_STEPS = 100
 # MAX_EPOCHS = 9
 FP16 = False
 SCHEDULER = "linear"
@@ -36,8 +35,11 @@ SCHEDULER = "linear"
 @click.option("--model_path", default=None, help="path to model")
 @click.option("--mode", default="train", help="{train | eval}")
 @click.option("--learning_rate", type=float, help="learning rate")
-@click.option("--max_epochs",  type=int, help="max epochs")
-@click.option("--gradient_accumulation_steps", type=int, help="gradient accumulation steps")
+@click.option("--max_epochs", type=int, help="max epochs")
+@click.option(
+    "--gradient_accumulation_steps", type=int, help="gradient accumulation steps"
+)
+@click.option("--warmup_steps", type=int, help="warmup steps")
 
 # data
 @click.option(
@@ -60,7 +62,7 @@ SCHEDULER = "linear"
 @click.option(
     "--log_eval",
     default=False,
-    help="write eval metrics and examples to log file in inf_logs/"
+    help="write eval metrics and examples to log file in inf_logs/",
 )
 
 # distributed training
@@ -79,6 +81,7 @@ def main(
     learning_rate,
     max_epochs,
     gradient_accumulation_steps,
+    warmup_steps,
     tr_dataset_path,
     val_dataset_path,
     downsample_data_size_val,
@@ -142,7 +145,7 @@ def main(
         gradient_accumulation_steps=gradient_accumulation_steps,
         group_by_length=GROUP_BY_LENGTH,
         learning_rate=learning_rate,
-        warmup_steps=WARMUP_STEPS,
+        warmup_steps=warmup_steps,
         lr_scheduler_type=SCHEDULER,
         num_train_epochs=max_epochs,
         run_name=f"bigbird-{base_dataset}-complete-tuning-exp",
@@ -186,9 +189,9 @@ def main(
         try:
             # trainer.train(resume_from_checkpoint=RESUME_TRAINING)
             trainer.train(model_path)
-            trainer.save_model(f"models/{base_dataset}-final-model-exp")
+            trainer.save_model(f"models/{base_dataset}-final-model-exp-{now}")
         except KeyboardInterrupt:
-            trainer.save_model(f"models/{base_dataset}-interrupted-model-exp")
+            trainer.save_model(f"models/{base_dataset}-interrupted-model-exp-{now}")
         # wandb.finish()
 
 
