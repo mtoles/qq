@@ -1,5 +1,4 @@
 from numpy import random
-from utils import dc, tokenizer
 
 
 def mask_random_sentence(example):

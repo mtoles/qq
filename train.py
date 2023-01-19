@@ -3,6 +3,7 @@ import numpy as np
 import click
 import torch
 from datasets import load_dataset
+from prepare_data2 import load_from_disk
 
 from utils import get_downsample_dataset_size_str, dc, tokenizer, MODEL_ID
 
@@ -33,6 +34,7 @@ SCHEDULER = "linear"
 
 # model
 @click.option("--model_path", default=None, help="path to model")
+@click.option("--model_")
 @click.option("--mode", default="train", help="{train | eval}")
 @click.option("--learning_rate", type=float, help="learning rate")
 @click.option("--max_epochs", type=int, help="max epochs")
@@ -91,12 +93,7 @@ def main(
     nproc_per_node,
     master_port,
 ):
-    # "nq-training.jsonl" & "nq-validation.jsonl" are obtained from running `prepare_nq.py`
-    # prepare training run for multiple GPUs:
-    # if local_rank != -1:
-    #     torch.cuda.set_device(local_rank)
-    #     device = torch.device("cuda", local_rank)
-    #     torch.distributed.init_process_group(backend="nccl", init_method="env://")
+    # Unit Tests
 
     assert mode in ["train", "eval"], f"mode {mode} not supported"
     assert val_dataset_path is not None, "val_dataset_path must be specified"
@@ -106,26 +103,10 @@ def main(
         base_dataset = "hotpot"
     else:
         raise ValueError(
-            f"dataset {val_dataset} does not contain 'natural_questions' or 'hotpot'"
+            f"dataset {val_dataset_path} does not contain 'natural_questions' or 'hotpot'"
         )
 
-    output_dir = f"bigbird_{base_dataset}_complete_tuning"
-    tr_dataset = (
-        load_dataset(
-            "json",
-            data_files=tr_dataset_path,
-            split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}",
-            download_mode="force_redownload",
-        )
-        if mode == "train"
-        else None
-    )
-    val_dataset = load_dataset(
-        "json",
-        data_files=val_dataset_path,
-        split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}",
-        download_mode="force_redownload",
-    )
+    # Load Model
 
     if model_path is not None:
         model = BigBirdForNaturalQuestions.from_pretrained(model_path)
@@ -133,6 +114,29 @@ def main(
         model = BigBirdForNaturalQuestions.from_pretrained(
             MODEL_ID, gradient_checkpointing=True
         )
+    output_dir = f"bigbird_{base_dataset}_complete_tuning"
+
+    # Load Data
+
+    tr_dataset = load_from_disk(tr_dataset_path, tokenizer)
+
+    # tr_dataset = (
+    #     load_dataset(
+    #         "json",
+    #         data_files=tr_dataset_path,
+    #         split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}",
+    #         download_mode="force_redownload",
+    #     )
+    #     if mode == "train"
+    #     else None
+    # )
+    # val_dataset = load_dataset(
+    #     "json",
+    #     data_files=val_dataset_path,
+    #     split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}",
+    #     download_mode="force_redownload",
+    # )
+
     now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     args = TrainingArguments(
         output_dir=output_dir,
