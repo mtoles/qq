@@ -12,7 +12,7 @@ from typing import List, Optional, Tuple
 from collections import defaultdict, Counter
 
 from masking import mask_random_sentence
-from utils import make_cache_file_name, get_downsample_dataset_size_str, dc
+from utils import make_cache_file_name, get_downsample_dataset_size_str
 
 DOC_STRIDE = 2048
 MAX_LENGTH = 4096

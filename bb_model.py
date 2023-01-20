@@ -6,7 +6,6 @@ from transformers import BigBirdForQuestionAnswering
 
 from prepare_data import CATEGORY_MAPPING
 from dataset_utils import *
-from utils import dc
 
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
 
@@ -83,7 +82,21 @@ def _get_metrics_single(
     except ZeroDivisionError:
         f1 = 0
     if log_path is not None:
-        log_results(log_path, start_idx_pred, end_idx_pred, cls_logits, input_ids, start_idx_gt, end_idx_gt, cls_gt, match, f1, precision, recall, tk)
+        log_results(
+            log_path,
+            start_idx_pred,
+            end_idx_pred,
+            cls_logits,
+            input_ids,
+            start_idx_gt,
+            end_idx_gt,
+            cls_gt,
+            match,
+            f1,
+            precision,
+            recall,
+            tk,
+        )
     return match, f1, precision, recall
 
 
@@ -104,7 +117,7 @@ def log_results(
 ):
     # ignore input_ids where the input_id value is -100
     input_ids = input_ids[input_ids != -100]
-    context = tk.decode(input_ids).replace("[SEP]","\n\n")
+    context = tk.decode(input_ids).replace("[SEP]", "\n\n")
     log_entry = f"""{context}
 answer: {tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])}
 prediction: {tk.decode(input_ids[start_idx_pred : end_idx_pred + 1])}
@@ -164,7 +177,15 @@ def compute_metrics(tk, log_path, x):
     cls_gt, start_gt, end_gt = x[1]
 
     metrics = get_metrics(
-        start_logits, end_logits, cls_logits, input_ids, start_gt, end_gt, cls_gt, log_path, tk
+        start_logits,
+        end_logits,
+        cls_logits,
+        input_ids,
+        start_gt,
+        end_gt,
+        cls_gt,
+        log_path,
+        tk,
     )
     return metrics
 

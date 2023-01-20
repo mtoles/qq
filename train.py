@@ -2,10 +2,10 @@ import datetime
 import numpy as np
 import click
 import torch
-from datasets import load_dataset
-from prepare_data2 import load_from_disk
+from datasets import load_from_disk
 
-from utils import get_downsample_dataset_size_str, dc, tokenizer, MODEL_ID
+from prepare_data import prepare_inputs_hp
+from utils import BB_MODEL_ID
 
 from transformers import (
     BigBirdTokenizer,
@@ -34,7 +34,7 @@ SCHEDULER = "linear"
 
 # model
 @click.option("--model_path", default=None, help="path to model")
-@click.option("--model_")
+@click.option("--model_class", help="model name { bigbird }")
 @click.option("--mode", default="train", help="{train | eval}")
 @click.option("--learning_rate", type=float, help="learning rate")
 @click.option("--max_epochs", type=int, help="max epochs")
@@ -62,6 +62,11 @@ SCHEDULER = "linear"
     help="use at most this many examples in training",
 )
 @click.option(
+    "--masking_scheme",
+    default="None",
+    help="which context column to use. {'None' | 'randomsentence'}",
+)
+@click.option(
     "--log_eval",
     default=False,
     help="write eval metrics and examples to log file in inf_logs/",
@@ -78,6 +83,7 @@ SCHEDULER = "linear"
 @click.option("--master_port", default=1234, type=int, help="master port")
 def main(
     model_path,
+    model_class,
     mode,
     batch_size,
     learning_rate,
@@ -88,6 +94,7 @@ def main(
     val_dataset_path,
     downsample_data_size_val,
     downsample_data_size_train,
+    masking_scheme,
     log_eval,
     local_rank,
     nproc_per_node,
@@ -109,16 +116,30 @@ def main(
     # Load Model
 
     if model_path is not None:
+        # todo: need tokenizer from somewhere
         model = BigBirdForNaturalQuestions.from_pretrained(model_path)
     else:
-        model = BigBirdForNaturalQuestions.from_pretrained(
-            MODEL_ID, gradient_checkpointing=True
-        )
+        if model_class == "bigbird":
+            MODEL_ID = BB_MODEL_ID
+            model = BigBirdForNaturalQuestions.from_pretrained(
+                MODEL_ID, gradient_checkpointing=True
+            )
+            tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
+        else:
+            raise ValueError(f"model {model_class} not supported")
     output_dir = f"bigbird_{base_dataset}_complete_tuning"
 
     # Load Data
+    if tr_dataset_path is not None:
+        tr_dataset = load_from_disk(tr_dataset_path)
 
-    tr_dataset = load_from_disk(tr_dataset_path, tokenizer)
+    val_dataset = load_from_disk(val_dataset_path)
+
+    val_dataset = val_dataset.map(
+        lambda x: prepare_inputs_hp(x, tokenizer, masking_scheme=masking_scheme)
+    )
+
+    print
 
     # tr_dataset = (
     #     load_dataset(
