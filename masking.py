@@ -31,5 +31,18 @@ def mask_random_sentence(example):
     # return example
 
 
+def drop_distractor(example):
+    """Edit the example IN PLACE to remove distractor content."""
+    supporting_titles = example["supporting_facts"]["title"]
+    all_titles = example["context_None"]["title"]
+    for i in reversed(
+        range(len(example["context_None"]["title"]))
+    ):  # fix edit while iterating issue
+        if all_titles[i] not in supporting_titles:
+            example["context_None"]["sentences"].pop(i)  # TODO: iterate backwards
+            example["context_None"]["title"].pop(i)
+    return example
+
+
 def mask_None(example):
     return example
