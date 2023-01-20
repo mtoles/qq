@@ -1,3 +1,5 @@
+"""Process and tokenize the data from preprocess.py at training and validation time"""
+
 import os
 
 import numpy as np

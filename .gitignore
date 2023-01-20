@@ -1,2 +1,12 @@
 evaluating_big_bird_on_triviaqa.py
 .vscode/launch.json
+.cache/
+.vscode/
+data/
+data2/
+tb_logs/
+models/
+inf_logs/
+command_palette.md
+tmp.txt
+__pycache__/
