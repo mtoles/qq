@@ -322,7 +322,7 @@ def prepare_inputs_hp(
     assertion=False,
     masking_scheme=None,
 ):
-    example = adapt_example(example, tokenizer)
+    example = adapt_example(example, masking_scheme=masking_scheme)
     example = get_strided_contexts_and_ans(
         example,
         tokenizer,
@@ -358,7 +358,9 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
     return -1, -1
 
 
-def adapt_example(example, tokenizer):
+def adapt_example(example, masking_scheme=None):
+    masking_scheme = str(masking_scheme)
+    masking_str = f"flat_context_{masking_scheme}"
     """Convert the HP example to look like an NQ example"""
     new_example = {}
     new_example["question"] = {"text": example["question"]}
@@ -366,7 +368,8 @@ def adapt_example(example, tokenizer):
     new_example["answer"] = {"text": answer}
     # TODO: Separate paragraphs from different articles with [SEP] token
     # Warning: this will render the answer token indeices inaccurate
-    context = " ".join([" ".join(l) for l in example["context"]["sentences"]])
+    # context = " ".join([" ".join(l) for l in example[masking_str]["sentences"]])
+    context = example[masking_str]
     # Call join/split an extra time to normalize whitespaces and unicode nonsense
     context = " ".join(context.split())
     answer = " ".join(answer.split())
