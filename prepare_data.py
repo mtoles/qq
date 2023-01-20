@@ -91,17 +91,17 @@ def get_context_and_ans(example, assertion=False):
             },
         }
 
-    # later, help in removing all no answers
-    if answer["start_token"] == [-1]:
-        return {
-            "context": "None",
-            "answer": {
-                "start_token": -1,
-                "end_token": -1,
-                "category": "null",
-                "span": "None",  # extra
-            },
-        }
+    # # later, help in removing all no answers
+    # if answer["start_token"] == [-1]:
+    #     return {
+    #         "context": "None",
+    #         "answer": {
+    #             "start_token": -1,
+    #             "end_token": -1,
+    #             "category": "null",
+    #             "span": "None",  # extra
+    #         },
+    #     }
 
     # handling normal samples
 
@@ -135,8 +135,7 @@ def get_context_and_ans(example, assertion=False):
             print("ID:", example["id"])
             print("New:", new, end="\n")
             print("Old:", old, end="\n\n")
-
-    return {
+    output = {
         "context": " ".join(context),
         "answer": {
             "start_token": start_token,
@@ -145,6 +144,7 @@ def get_context_and_ans(example, assertion=False):
             "span": new,  # extra
         },
     }
+    return output
 
 
 def get_strided_contexts_and_ans(
@@ -159,20 +159,20 @@ def get_strided_contexts_and_ans(
 
     out = get_context_and_ans(example, assertion=assertion)
     answer = out["answer"]
+    input_ids = tokenizer(example["question"]["text"], out["context"]).input_ids
 
     # later, removing these samples
     if answer["start_token"] == -1:
         return {
             "example_id": example["id"],
-            "input_ids": [[-1]],
+            "input_ids": input_ids,
             "labels": {
                 "start_token": [-1],
                 "end_token": [-1],
-                "category": ["null"],
+                "category": answer["category"],
             },
         }
 
-    input_ids = tokenizer(example["question"]["text"], out["context"]).input_ids
     q_len = input_ids.index(tokenizer.sep_token_id) + 1
 
     # return yes/no
@@ -181,6 +181,9 @@ def get_strided_contexts_and_ans(
         category = []
         q_indices = input_ids[:q_len]
         doc_start_indices = range(q_len, len(input_ids), max_length - doc_stride)
+        assert (
+            len(doc_start_indices) == 1
+        ), "doc_start_indices should be exactly 1"  # todo: clean up following for loop and range
         for i in doc_start_indices:
             end_index = i + max_length - q_len
             slice = input_ids[i:end_index]
@@ -243,7 +246,7 @@ def get_strided_contexts_and_ans(
         if len(input_ids) <= max_length:
             output = {
                 "example_id": example["id"],
-                "input_ids": [input_ids],
+                "input_ids": input_ids,
                 "labels": {
                     "start_token": [answer["start_token"]],
                     "end_token": [answer["end_token"]],
@@ -252,50 +255,52 @@ def get_strided_contexts_and_ans(
             }
         # input is longer than max_length
         else:
-            q_indices = input_ids[:q_len]
-            doc_start_indices = range(q_len, len(input_ids), max_length - doc_stride)
+            print("LONGER THAN MAX LENGTH")
+            raise NotImplementedError
+    #         q_indices = input_ids[:q_len]
+    #         doc_start_indices = range(q_len, len(input_ids), max_length - doc_stride)
 
-            inputs = []
-            answers_start_token = []
-            answers_end_token = []
-            answers_category = []  # null, yes, no, long, short
-            for i in doc_start_indices:
-                end_index = i + max_length - q_len
-                slice = input_ids[i:end_index]
-                inputs.append(q_indices + slice)
-                assert len(inputs[-1]) <= max_length, "Issue in truncating length"
+    #         inputs = []
+    #         answers_start_token = []
+    #         answers_end_token = []
+    #         answers_category = []  # null, yes, no, long, short
+    #         for i in doc_start_indices:
+    #             end_index = i + max_length - q_len
+    #             slice = input_ids[i:end_index]
+    #             inputs.append(q_indices + slice)
+    #             assert len(inputs[-1]) <= max_length, "Issue in truncating length"
 
-                if start_token >= i and end_token <= end_index - 1:
-                    start_token = start_token - i + q_len
-                    end_token = end_token - i + q_len
-                    answers_category.append(
-                        answer["category"][0]
-                    )  # ["short"] -> "short"
-                else:
-                    start_token = -100
-                    end_token = -100
-                    answers_category.append("null")
-                new = inputs[-1][start_token : end_token + 1]
+    #             if start_token >= i and end_token <= end_index - 1:
+    #                 start_token = start_token - i + q_len
+    #                 end_token = end_token - i + q_len
+    #                 answers_category.append(
+    #                     answer["category"][0]
+    #                 )  # ["short"] -> "short"
+    #             else:
+    #                 start_token = -100
+    #                 end_token = -100
+    #                 answers_category.append("null")
+    #             new = inputs[-1][start_token : end_token + 1]
 
-                answers_start_token.append(start_token)
-                answers_end_token.append(end_token)
-                if assertion:
-                    """checking if above code is working as expected for all the samples"""
-                    if new != old and new != [tokenizer.cls_token_id]:
-                        print("ISSUE in strided for ID:", example["id"])
-                        print("New:", tokenizer.decode(new))
-                        print("Old:", tokenizer.decode(old), end="\n\n")
-                if slice[-1] == tokenizer.sep_token_id:
-                    break
-            output = {
-                "example_id": example["id"],
-                "input_ids": inputs,
-                "labels": {
-                    "start_token": answers_start_token,
-                    "end_token": answers_end_token,
-                    "category": answers_category,
-                },
-            }
+    #             answers_start_token.append(start_token)
+    #             answers_end_token.append(end_token)
+    #             if assertion:
+    #                 """checking if above code is working as expected for all the samples"""
+    #                 if new != old and new != [tokenizer.cls_token_id]:
+    #                     print("ISSUE in strided for ID:", example["id"])
+    #                     print("New:", tokenizer.decode(new))
+    #                     print("Old:", tokenizer.decode(old), end="\n\n")
+    #             if slice[-1] == tokenizer.sep_token_id:
+    #                 break
+    #         output = {
+    #             "example_id": example["id"],
+    #             "input_ids": inputs,
+    #             "labels": {
+    #                 "start_token": answers_start_token,
+    #                 "end_token": answers_end_token,
+    #                 "category": answers_category,
+    #             },
+    #         }
 
     return output
 
@@ -317,14 +322,14 @@ def prepare_inputs_nq(
 def prepare_inputs_hp(
     example,
     tokenizer,
-    doc_stride=512,
-    max_length=512,
+    doc_stride=2048,  # todo: remove entirely, currently set to match downstream defaults. kind of arbitrary
+    max_length=4096,  # todo: remove entirely
     assertion=False,
     masking_scheme=None,
 ):
-    example = adapt_example(example, masking_scheme=masking_scheme)
-    example = get_strided_contexts_and_ans(
-        example,
+    adapted_example = adapt_example(example, masking_scheme=masking_scheme)
+    tokenized_example = get_strided_contexts_and_ans(
+        adapted_example,
         tokenizer,
         doc_stride=doc_stride,
         max_length=max_length,
@@ -332,7 +337,7 @@ def prepare_inputs_hp(
         masking_scheme=masking_scheme,
     )
 
-    return example
+    return tokenized_example
 
 
 def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
@@ -351,10 +356,10 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
         assert answer in " ".join(context.split()[start_token_index:end_token_index])
         return start_token_index, end_token_index
 
-    assert answer in [
-        "yes",
-        "no",
-    ], f"answer {answer} not found in context {context[:200]}..."
+    # assert answer in [
+    #     "yes",
+    #     "no",
+    # ], f"answer {answer} not found in context {context[:200]}..."
     return -1, -1
 
 
@@ -398,28 +403,28 @@ def adapt_example(example, masking_scheme=None):
     return new_example
 
 
-def save_to_disk(hf_data, file_name):
-    with jsonlines.open(file_name, "a") as writer:
-        for example in tqdm(hf_data, total=len(hf_data), desc="Saving samples ... "):
-            labels = example["labels"]
-            for ids, start, end, cat in zip(
-                example["input_ids"],
-                labels["start_token"],
-                labels["end_token"],
-                labels["category"],
-            ):
-                if start == -1 and end == -1:
-                    continue  # leave waste samples with no answer
-                if cat == "null" and np.random.rand() < 0.6:
-                    continue  # removing 50 % samples
-                writer.write(
-                    {
-                        "input_ids": ids,
-                        "start_token": start,
-                        "end_token": end,
-                        "category": CATEGORY_MAPPING[cat],
-                    }
-                )
+# def save_to_disk(hf_data, file_name):
+#     with jsonlines.open(file_name, "a") as writer:
+#         for example in tqdm(hf_data, total=len(hf_data), desc="Saving samples ... "):
+#             labels = example["labels"]
+#             for ids, start, end, cat in zip(
+#                 example["input_ids"],
+#                 labels["start_token"],
+#                 labels["end_token"],
+#                 labels["category"],
+#             ):
+#                 if start == -1 and end == -1:
+#                     continue  # leave waste samples with no answer
+#                 if cat == "null" and np.random.rand() < 0.6:
+#                     continue  # removing 50 % samples
+#                 writer.write(
+#                     {
+#                         "input_ids": ids,
+#                         "start_token": start,
+#                         "end_token": end,
+#                         "category": CATEGORY_MAPPING[cat],
+#                     }
+#                 )
 
 
 @click.command()

@@ -2,6 +2,7 @@
 import logging
 import torch
 import torch.nn as nn
+import numpy as np
 from transformers import BigBirdForQuestionAnswering
 
 from prepare_data import CATEGORY_MAPPING
@@ -48,11 +49,19 @@ def _get_metrics_single(
         answer_gt = category
         answer_gt_expanded = set([category])
     else:
-        answer_gt = tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])
-        answer_gt_expanded = expand_to_aliases(
-            [answer_gt],
-            make_sub_answers=True,
-        )
+        # TODO: needs to take in actual ground truth text and compare rather than use indexing
+        # start_idx_gt==-1 indicates answer does not exist in context. 
+        raise NotImplementedError # needs implementing
+        if start_idx_gt >= 0:
+            answer_gt = tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])
+            answer_gt_expanded = expand_to_aliases(
+                [answer_gt],
+                make_sub_answers=True,
+            )
+        elif start_idx_gt == -1:
+            answer_gt = None
+        else:
+            raise ValueError("start_idx_gt should be -1 or >=0")
 
     # get predicted answers
     if cat_pred in ["yes", "no"]:
@@ -171,7 +180,7 @@ def get_metrics(
     recall = sum(recalls) / len(recalls)
     return {"accuracy": accuracy, "f1": f1, "precision": precision, "recall": recall}
 
-
+# TODO: needs to be moved outside the model and made model agnostic
 def compute_metrics(tk, log_path, x):
     start_logits, end_logits, cls_logits, input_ids = x[0]
     cls_gt, start_gt, end_gt = x[1]
@@ -218,12 +227,16 @@ def collate_fn(features, pad_id=0, threshold=1024):
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "start_positions": torch.tensor(
-            [x["start_token"] for x in features], dtype=torch.long
+            [x["labels"]["start_token"] for x in features],
+            dtype=torch.long,  # cleanup by removing ["labels"]?
         ),
         "end_positions": torch.tensor(
-            [x["end_token"] for x in features], dtype=torch.long
+            [x["labels"]["end_token"] for x in features],
+            dtype=torch.long,  # cleanup by removing ["labels"]
         ),
-        "pooler_label": torch.tensor([x["category"] for x in features]),
+        "pooler_label": torch.tensor(
+            [CATEGORY_MAPPING[x["labels"]["category"][0]] for x in features]
+        ),
     }
     return output
 
@@ -255,15 +268,20 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
                 start_positions = start_positions.squeeze(-1)
             if len(end_positions.size()) > 1:
                 end_positions = end_positions.squeeze(-1)
-
-            start_loss = loss_fct(outputs.start_logits, start_positions)
-            end_loss = loss_fct(outputs.end_logits, end_positions)
-
-            if pooler_label is not None:
-                cls_loss = loss_fct(cls_out, pooler_label)
-                loss = (start_loss + end_loss + cls_loss) / 3
+            if self.training:
+                # only compute loss during training since validation will have
+                # unanswerable questions, thus loss is not defined
+                start_loss = loss_fct(outputs.start_logits, start_positions)
+                end_loss = loss_fct(outputs.end_logits, end_positions)
+                # cls_loss is still defined during validation, but it is not used
+                if pooler_label is not None:
+                    cls_loss = loss_fct(cls_out, pooler_label)
+                    loss = (start_loss + end_loss + cls_loss) / 3
+                else:
+                    raise ValueError("pooler_label is None")  # shouldn't happen?
+                    # loss = (start_loss + end_loss) / 2
             else:
-                loss = (start_loss + end_loss) / 2
+                loss = torch.tensor([np.nan])
 
         return {
             "loss": loss,

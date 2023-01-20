@@ -132,14 +132,25 @@ def main(
     # Load Data
     if tr_dataset_path is not None:
         tr_dataset = load_from_disk(tr_dataset_path)
+    else:
+        tr_dataset = None
 
     val_dataset = load_from_disk(val_dataset_path)
-
+    val_dataset = val_dataset.select(range(20, 25)) # testing
     val_dataset = val_dataset.map(
-        lambda x: prepare_inputs_hp(x, tokenizer, masking_scheme=masking_scheme)
+        lambda x: prepare_inputs_hp(x, tokenizer, masking_scheme=masking_scheme),
+        load_from_cache_file=False,
     )
 
-    print
+    # # test some examples
+    # for i in range(5):
+    #     ex = val_dataset[i]
+    #     st = val_dataset[i]["labels"]["start_token"]
+    #     et = val_dataset[i]["labels"]["end_token"]
+    #     lab = ex["input_ids"][st:et]
+    #     print(f"processed: {lab} | raw: {ex['answer']}")
+
+    # print
 
     # tr_dataset = (
     #     load_dataset(
