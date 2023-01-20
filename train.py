@@ -121,10 +121,10 @@ def main(
     else:
         if model_class == "bigbird":
             MODEL_ID = BB_MODEL_ID
-            model = BigBirdForNaturalQuestions.from_pretrained(
-                MODEL_ID, gradient_checkpointing=True
-            )
             tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
+            model = BigBirdForNaturalQuestions.from_pretrained(
+                MODEL_ID, gradient_checkpointing=True, tk=tokenizer
+            )
         else:
             raise ValueError(f"model {model_class} not supported")
     output_dir = f"bigbird_{base_dataset}_complete_tuning"

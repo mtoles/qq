@@ -50,8 +50,8 @@ def _get_metrics_single(
         answer_gt_expanded = set([category])
     else:
         # TODO: needs to take in actual ground truth text and compare rather than use indexing
-        # start_idx_gt==-1 indicates answer does not exist in context. 
-        raise NotImplementedError # needs implementing
+        # start_idx_gt==-1 indicates answer does not exist in context.
+        raise NotImplementedError  # needs implementing
         if start_idx_gt >= 0:
             answer_gt = tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])
             answer_gt_expanded = expand_to_aliases(
@@ -180,6 +180,7 @@ def get_metrics(
     recall = sum(recalls) / len(recalls)
     return {"accuracy": accuracy, "f1": f1, "precision": precision, "recall": recall}
 
+
 # TODO: needs to be moved outside the model and made model agnostic
 def compute_metrics(tk, log_path, x):
     start_logits, end_logits, cls_logits, input_ids = x[0]
@@ -244,9 +245,10 @@ def collate_fn(features, pad_id=0, threshold=1024):
 class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
     """BigBirdForQuestionAnswering with CLS Head over the top for predicting category"""
 
-    def __init__(self, config):
+    def __init__(self, config, tk):
         super().__init__(config, add_pooling_layer=True)
         self.cls = nn.Linear(config.hidden_size, 5)
+        self.tk = tk
 
     def forward(
         self,
@@ -258,35 +260,64 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
     ):
 
         outputs = super().forward(input_ids, attention_mask=attention_mask)
+
         cls_out = self.cls(outputs.pooler_output)
 
+        # Compute Loss
+
         loss = None
-        if start_positions is not None and end_positions is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            if self.training:
-                # only compute loss during training since validation will have
-                # unanswerable questions, thus loss is not defined
-                start_loss = loss_fct(outputs.start_logits, start_positions)
-                end_loss = loss_fct(outputs.end_logits, end_positions)
-                # cls_loss is still defined during validation, but it is not used
-                if pooler_label is not None:
-                    cls_loss = loss_fct(cls_out, pooler_label)
-                    loss = (start_loss + end_loss + cls_loss) / 3
-                else:
-                    raise ValueError("pooler_label is None")  # shouldn't happen?
-                    # loss = (start_loss + end_loss) / 2
+        # if start_positions is not None and end_positions is not None:
+        assert (
+            start_positions is not None and end_positions is not None
+        ), "something bad happening"
+        loss_fct = nn.CrossEntropyLoss()
+        # If we are on multi-GPU, split add a dimension
+        if len(start_positions.size()) > 1:
+            start_positions = start_positions.squeeze(-1)
+        if len(end_positions.size()) > 1:
+            end_positions = end_positions.squeeze(-1)
+        if self.training:
+            # only compute loss during training since validation will have
+            # unanswerable questions, thus loss is not defined
+            start_loss = loss_fct(outputs.start_logits, start_positions)
+            end_loss = loss_fct(outputs.end_logits, end_positions)
+            # cls_loss is still defined during validation, but it is not used
+            if pooler_label is not None:
+                cls_loss = loss_fct(cls_out, pooler_label)
+                loss = (start_loss + end_loss + cls_loss) / 3
             else:
-                loss = torch.tensor([np.nan])
+                raise ValueError("pooler_label is None")  # shouldn't happen?
+                # loss = (start_loss + end_loss) / 2
+        else:
+            loss = torch.tensor([np.nan])
+
+        # Get the Answer as a String
+        pred_str = self.get_pred_str(
+            input_ids, outputs.start_logits, outputs.end_logits
+        )
 
         return {
             "loss": loss,
             "start_logits": outputs.start_logits,
             "end_logits": outputs.end_logits,
             "cls_out": cls_out,
-            "input_ids": input_ids,
+            # "input_ids": input_ids,
+            "input_ids": None,  # TODO: drop once verified unnecessary
+            "pred_str": pred_str,
         }
+
+    def get_pred_str(self, input_ids, start_logits, end_logits):
+        pred_strs = []
+        for i in range(len(start_logits)):
+
+            start_idx_pred, end_idx_pred = get_best_valid_start_end_idx(
+                torch.Tensor(start_logits[i]),
+                torch.Tensor(end_logits[i]),
+                top_k=8,
+                max_size=16,
+            )
+            # Let's convert the input ids back to actual tokens
+            answer_tokens_pred = input_ids[i][start_idx_pred : end_idx_pred + 1]
+            pred_str = self.tk.decode(answer_tokens_pred)
+            pred_strs.append(pred_str)
+        return pred_str
