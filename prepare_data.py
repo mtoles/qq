@@ -14,13 +14,16 @@ from typing import List, Optional, Tuple
 from collections import defaultdict, Counter
 
 from masking import mask_random_sentence
-from utils import make_cache_file_name, get_downsample_dataset_size_str
+from utils import (
+    make_cache_file_name,
+    get_downsample_dataset_size_str,
+    CATEGORY_MAPPING,
+)
 
 DOC_STRIDE = 2048
 MAX_LENGTH = 4096
 SEED = 42
 PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
-CATEGORY_MAPPING = {"null": 0, "short": 1, "long": 2, "yes": 3, "no": 4}
 
 
 def _get_single_answer(example):

@@ -6,15 +6,14 @@ from datasets import load_from_disk
 
 from prepare_data import prepare_inputs_hp
 from utils import BB_MODEL_ID
+from metrics import compute_metrics
+from bb_model import BigBirdForNaturalQuestions, collate_fn
 
 from transformers import (
     BigBirdTokenizer,
     Trainer,
     TrainingArguments,
 )
-
-
-from bb_model import BigBirdForNaturalQuestions, collate_fn, compute_metrics
 
 
 # TRAIN_ON_SMALL = os.environ.pop("TRAIN_ON_SMALL", "false")
@@ -136,7 +135,7 @@ def main(
         tr_dataset = None
 
     val_dataset = load_from_disk(val_dataset_path)
-    val_dataset = val_dataset.select(range(20, 25)) # testing
+    val_dataset = val_dataset.select(range(20, 25))  # testing
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(x, tokenizer, masking_scheme=masking_scheme),
         load_from_cache_file=False,

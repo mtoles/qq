@@ -5,10 +5,9 @@ import torch.nn as nn
 import numpy as np
 from transformers import BigBirdForQuestionAnswering
 
-from prepare_data import CATEGORY_MAPPING
-from dataset_utils import *
 
-INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
+from dataset_utils import *
+from utils import INVERSE_CATEGORY_MAPPING, CATEGORY_MAPPING, stack_with_padding
 
 
 def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100):
@@ -21,183 +20,6 @@ def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100
     best_score = torch.argmax(scores).item()
 
     return best_start_idx[best_score % top_k], best_end_idx[best_score // top_k]
-
-
-def _get_metrics_single(
-    start_logits,
-    end_logits,
-    cls_logits,
-    input_ids,
-    start_idx_gt,
-    end_idx_gt,
-    cls_gt,
-    log_path,
-    tk,
-):
-    cls_out = cls_logits.argmax()
-    cat_pred = INVERSE_CATEGORY_MAPPING[cls_out.item()]
-
-    start_idx_pred, end_idx_pred = get_best_valid_start_end_idx(
-        torch.Tensor(start_logits), torch.Tensor(end_logits), top_k=8, max_size=16
-    )
-    # Let's convert the input ids back to actual tokens
-    answer_tokens_pred = input_ids[start_idx_pred : end_idx_pred + 1]
-
-    # get ground truth answers
-    category = INVERSE_CATEGORY_MAPPING[cls_gt]
-    if category in ["yes", "no"]:
-        answer_gt = category
-        answer_gt_expanded = set([category])
-    else:
-        # TODO: needs to take in actual ground truth text and compare rather than use indexing
-        # start_idx_gt==-1 indicates answer does not exist in context.
-        raise NotImplementedError  # needs implementing
-        if start_idx_gt >= 0:
-            answer_gt = tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])
-            answer_gt_expanded = expand_to_aliases(
-                [answer_gt],
-                make_sub_answers=True,
-            )
-        elif start_idx_gt == -1:
-            answer_gt = None
-        else:
-            raise ValueError("start_idx_gt should be -1 or >=0")
-
-    # get predicted answers
-    if cat_pred in ["yes", "no"]:
-        model_output = cat_pred
-    else:
-        model_output = tk.decode(answer_tokens_pred)
-
-    predictions = expand_to_aliases([model_output])
-
-    # if there is a common element, it's a match
-    match = len(list(answer_gt_expanded & predictions)) > 0
-
-    # f1
-    tp = sum([word in answer_gt for word in model_output.split(" ")])
-    fp = sum([word not in answer_gt for word in model_output.split(" ")])
-    fn = sum([word not in model_output for word in answer_gt.split(" ")])
-    try:
-        precision = tp / (tp + fp)
-    except ZeroDivisionError:
-        precision = 0
-    try:
-        recall = tp / (tp + fn)
-    except ZeroDivisionError:
-        recall = 0
-    try:
-        f1 = 2 * (precision * recall) / (precision + recall)
-    except ZeroDivisionError:
-        f1 = 0
-    if log_path is not None:
-        log_results(
-            log_path,
-            start_idx_pred,
-            end_idx_pred,
-            cls_logits,
-            input_ids,
-            start_idx_gt,
-            end_idx_gt,
-            cls_gt,
-            match,
-            f1,
-            precision,
-            recall,
-            tk,
-        )
-    return match, f1, precision, recall
-
-
-def log_results(
-    log_path,
-    start_idx_pred,
-    end_idx_pred,
-    cls_logits,
-    input_ids,
-    start_idx_gt,
-    end_idx_gt,
-    cls_gt,
-    match,
-    f1,
-    precision,
-    recall,
-    tk,
-):
-    # ignore input_ids where the input_id value is -100
-    input_ids = input_ids[input_ids != -100]
-    context = tk.decode(input_ids).replace("[SEP]", "\n\n")
-    log_entry = f"""{context}
-answer: {tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])}
-prediction: {tk.decode(input_ids[start_idx_pred : end_idx_pred + 1])}
-cls_gt: {cls_gt}
-cls_pred: {cls_logits.argmax()}
-match: {match}
-f1: {str(f1)[:5]}
-precision: {str(precision)[:5]}
-recall: {str(recall)[:5]}
-======================================
-"""
-    with open(log_path, "a") as f:
-        f.write(log_entry)
-
-
-def get_metrics(
-    start_logits,
-    end_logits,
-    cls_logits,
-    input_ids,
-    start_idx_gt,
-    end_idx_gt,
-    cls_gt,
-    log_path,
-    tk,
-):
-    matches = []
-    f1s = []
-    precisions = []
-    recalls = []
-    for i in range(len(start_logits)):
-        m, f, p, r = _get_metrics_single(
-            start_logits[i],
-            end_logits[i],
-            cls_logits[i],
-            input_ids[i],
-            start_idx_gt[i],
-            end_idx_gt[i],
-            cls_gt[i],
-            log_path,
-            tk,
-        )
-        matches.append(m)
-        f1s.append(f)
-        precisions.append(p)
-        recalls.append(r)
-
-    accuracy = sum(matches) / len(matches)
-    f1 = sum(f1s) / len(f1s)
-    precision = sum(precisions) / len(precisions)
-    recall = sum(recalls) / len(recalls)
-    return {"accuracy": accuracy, "f1": f1, "precision": precision, "recall": recall}
-
-
-# TODO: needs to be moved outside the model and made model agnostic
-def compute_metrics(tk, log_path, x):
-    start_logits, end_logits, cls_logits, input_ids = x[0]
-    cls_gt, start_gt, end_gt = x[1]
-
-    metrics = get_metrics(
-        start_logits,
-        end_logits,
-        cls_logits,
-        input_ids,
-        start_gt,
-        end_gt,
-        cls_gt,
-        log_path,
-        tk,
-    )
-    return metrics
 
 
 # Set logging to log level WARN
@@ -292,7 +114,7 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             loss = torch.tensor([np.nan])
 
         # Get the Answer as a String
-        pred_str = self.get_pred_str(
+        pred_tokens = self.get_tokens_pred(
             input_ids, outputs.start_logits, outputs.end_logits
         )
 
@@ -302,12 +124,13 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             "end_logits": outputs.end_logits,
             "cls_out": cls_out,
             # "input_ids": input_ids,
-            "input_ids": None,  # TODO: drop once verified unnecessary
-            "pred_str": pred_str,
+            # "input_ids": None,  # TODO: drop once verified unnecessary
+            "pred_str": pred_tokens,
         }
 
-    def get_pred_str(self, input_ids, start_logits, end_logits):
-        pred_strs = []
+    def get_tokens_pred(self, input_ids, start_logits, end_logits):
+        # TODO: vectorize
+        answer_tokens_preds = []
         for i in range(len(start_logits)):
 
             start_idx_pred, end_idx_pred = get_best_valid_start_end_idx(
@@ -318,6 +141,6 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             )
             # Let's convert the input ids back to actual tokens
             answer_tokens_pred = input_ids[i][start_idx_pred : end_idx_pred + 1]
-            pred_str = self.tk.decode(answer_tokens_pred)
-            pred_strs.append(pred_str)
-        return pred_str
+            answer_tokens_preds.append(answer_tokens_pred)
+        preds_as_tensor = stack_with_padding(answer_tokens_preds)
+        return preds_as_tensor
