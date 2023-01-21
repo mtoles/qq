@@ -81,7 +81,7 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             loss = torch.tensor([np.nan])
 
         # Get the Answer as Tokens
-        pred_tokens = self.get_tokens_pred(
+        tokens_pred = self.get_tokens_pred(
             input_ids, outputs.start_logits, outputs.end_logits
         )
 
@@ -93,9 +93,8 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             "start_logits": outputs.start_logits,
             "end_logits": outputs.end_logits,
             "cls_pred": cls_pred,
-            # "input_ids": input_ids,
-            # "input_ids": None,  # TODO: drop once verified unnecessary
-            "pred_str": pred_tokens,
+            "pred_str": tokens_pred,
+            "input_ids": input_ids, # keep here so we can log them later
         }
 
 

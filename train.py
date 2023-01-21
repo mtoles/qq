@@ -215,7 +215,7 @@ def main(
         data_collator=(lambda x: collate_fn(x, tokenizer)),
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
-        compute_metrics=lambda x: compute_metrics(tokenizer, log_path, x),
+        compute_metrics=lambda x: compute_metrics(x, tokenizer, log_path),
     )
     if mode == "eval":
         metrics = trainer.evaluate()
