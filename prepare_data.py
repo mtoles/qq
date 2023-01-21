@@ -87,7 +87,7 @@ def get_context_and_ans(example, assertion=False):
         return {
             "context": " ".join(context),
             "answer": {
-                "start_token": -100,  # ignore index in cross-entropy
+                "start_token": -100,  # ignore index in cross-entropy # TODO: Why not -1 like elsewhere?
                 "end_token": -100,  # ignore index in cross-entropy
                 "category": answer["category"],
                 "span": answer["category"],  # extra
@@ -197,10 +197,10 @@ def get_strided_contexts_and_ans(
 
         output = {
             "example_id": example["id"],
-            "input_ids": inputs,
+            "input_ids": inputs[0],
             "labels": {
-                "start_token": [-100] * len(category),
-                "end_token": [-100] * len(category),
+                "start_token": [-100],
+                "end_token": [-100],
                 "category": category,
             },
         }

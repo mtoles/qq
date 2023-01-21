@@ -9,7 +9,6 @@ BB_MODEL_ID = "google/bigbird-base-trivia-itc"
 GPT_NEO_X_MODEL_ID = "EleutherAI/gpt-neo-20B"
 CATEGORY_MAPPING = {"null": 0, "short": 1, "long": 2, "yes": 3, "no": 4}
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
-PAD_ID = -100
 
 
 def get_downsample_dataset_size_str(downsample_data_size):
@@ -40,6 +39,7 @@ def stack_with_padding(tensor_list, pad_id):
 
 def unpad_and_tokenize(tokenized_answer, tk):
     output = []
+    tokenized_answer = standardize_padding(tokenized_answer)
     for ta in tokenized_answer:
         output.append(tk.decode(ta))
     return output
@@ -97,3 +97,14 @@ def collate_fn(features, tk, threshold=1024):
 def check_tokenizer(tokenizer):
     """make sure the tokenizer handles padding correctly"""
     assert tokenizer.decode([0]) == ""
+
+def standardize_padding(tokens):
+    """make sure the padding token is always 0 and not -100 as set by the huggingface trainer.
+    inputs: 
+        Tokens: a 2d array of token ids
+    outputs: 
+        Tokens: a 2d tensor of token ids with padding token 0
+    """
+    tokens = torch.tensor(tokens)
+    tokens[tokens == -100] = 0
+    return tokens

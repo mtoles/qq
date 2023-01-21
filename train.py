@@ -127,7 +127,7 @@ def main(
         else:
             raise ValueError(f"model {model_class} not supported")
     output_dir = f"bigbird_{base_dataset}_complete_tuning"
-    check_tokenizer(tokenizer) 
+    check_tokenizer(tokenizer)
     # Load Data
     if tr_dataset_path is not None:
         tr_dataset = load_from_disk(tr_dataset_path)
@@ -135,9 +135,15 @@ def main(
         tr_dataset = None
 
     val_dataset = load_from_disk(val_dataset_path)
-    val_dataset = val_dataset.select(range(20, 25))  # testing
+
+    # val_dataset = val_dataset.select(range(990, 1010))  # testing
+    # prepare_inputs_hp(val_dataset[0], tokenizer=tokenizer, masking_scheme=masking_scheme)
+    # prepare_inputs_hp(val_dataset[1], tokenizer=tokenizer, masking_scheme=masking_scheme)
+
     val_dataset = val_dataset.map(
-        lambda x: prepare_inputs_hp(x, tokenizer, masking_scheme=masking_scheme),
+        lambda x: prepare_inputs_hp(
+            x, tokenizer=tokenizer, masking_scheme=masking_scheme
+        ),
         load_from_cache_file=False,
     )
 
@@ -186,7 +192,6 @@ def main(
         run_name=f"bigbird-{base_dataset}-complete-tuning-exp",
         disable_tqdm=False,
         # load_best_model_at_end=True,
-        # report_to="wandb",
         remove_unused_columns=False,
         fp16=FP16,
         label_names=[
@@ -216,11 +221,11 @@ def main(
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
         compute_metrics=lambda x: compute_metrics(x, tokenizer, log_path),
+        tokenizer=tokenizer,  # experimental... trying to get pad_token_id==0, not ==-100
     )
     if mode == "eval":
         metrics = trainer.evaluate()
         print(metrics)
-        return
     elif mode == "train":
         try:
             # trainer.train(resume_from_checkpoint=RESUME_TRAINING)
