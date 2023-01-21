@@ -5,7 +5,7 @@ import torch
 from datasets import load_from_disk
 
 from prepare_data import prepare_inputs_hp
-from utils import BB_MODEL_ID, collate_fn
+from utils import BB_MODEL_ID, collate_fn, check_tokenizer
 from metrics import compute_metrics
 from bb_model import BigBirdForNaturalQuestions
 
@@ -127,7 +127,7 @@ def main(
         else:
             raise ValueError(f"model {model_class} not supported")
     output_dir = f"bigbird_{base_dataset}_complete_tuning"
-
+    check_tokenizer(tokenizer) 
     # Load Data
     if tr_dataset_path is not None:
         tr_dataset = load_from_disk(tr_dataset_path)

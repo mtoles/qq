@@ -38,24 +38,14 @@ def stack_with_padding(tensor_list, pad_id):
     output = torch.stack(padded_tensor_list, dim=0)
     return output
 
-
-def unpad_and_tokenize_single(tokenized_answer, tk):
-    # unpad
-    tokenized_answer = tokenized_answer[tokenized_answer != tk.pad_token_id]
-    # tokenize
-    tokenized_answer = tk.convert_ids_to_tokens(tokenized_answer)
-    return tokenized_answer
-
 def unpad_and_tokenize(tokenized_answer, tk):
     output = []
     for ta in tokenized_answer:
-        output.append(unpad_and_tokenize_single(ta, tk))
+        output.append(tk.decode(ta))
     return output
-
 
 def unstack_with_padding(tensor, lengths):
     return [t[:l] for t, l in zip(tensor, lengths)]
-
 
 def collate_fn(features, tk, threshold=1024):
     pad_id = tk.pad_token_id
@@ -103,3 +93,7 @@ def collate_fn(features, tk, threshold=1024):
         "gt_answers": tokenized_answers,
     }
     return output
+
+def check_tokenizer(tokenizer):
+    """make sure the tokenizer handles padding correctly"""
+    assert tokenizer.decode([0]) == ""
