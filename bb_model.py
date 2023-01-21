@@ -7,7 +7,7 @@ from transformers import BigBirdForQuestionAnswering
 
 
 from dataset_utils import *
-from utils import INVERSE_CATEGORY_MAPPING, CATEGORY_MAPPING, stack_with_padding
+from utils import INVERSE_CATEGORY_MAPPING, CATEGORY_MAPPING, stack_with_padding, collate_fn
 
 
 def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100):
@@ -27,41 +27,7 @@ bb_logger = logging.getLogger("transformers.models.big_bird.modeling_big_bird")
 bb_logger.setLevel("WARN")
 
 
-def collate_fn(features, pad_id=0, threshold=1024):
-    def pad_elems(ls, pad_id, maxlen):
-        while len(ls) < maxlen:
-            ls.append(pad_id)
-        return ls
 
-    maxlen = max([len(x["input_ids"]) for x in features])
-    # avoid attention_type switching
-    if maxlen < threshold:
-        maxlen = threshold
-
-    # dynamic padding
-    input_ids = [pad_elems(x["input_ids"], pad_id, maxlen) for x in features]
-    input_ids = torch.tensor(input_ids, dtype=torch.long)
-
-    # padding mask
-    attention_mask = input_ids.clone()
-    attention_mask[attention_mask != pad_id] = 1
-    attention_mask[attention_mask == pad_id] = 0
-    output = {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "start_positions": torch.tensor(
-            [x["labels"]["start_token"] for x in features],
-            dtype=torch.long,  # cleanup by removing ["labels"]?
-        ),
-        "end_positions": torch.tensor(
-            [x["labels"]["end_token"] for x in features],
-            dtype=torch.long,  # cleanup by removing ["labels"]
-        ),
-        "pooler_label": torch.tensor(
-            [CATEGORY_MAPPING[x["labels"]["category"][0]] for x in features]
-        ),
-    }
-    return output
 
 
 class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
@@ -79,8 +45,9 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
         start_positions=None,
         end_positions=None,
         pooler_label=None,
+        gt_answers=None,
     ):
-
+        gt_answers = gt_answers
         outputs = super().forward(input_ids, attention_mask=attention_mask)
 
         cls_out = self.cls(outputs.pooler_output)
@@ -113,26 +80,30 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
         else:
             loss = torch.tensor([np.nan])
 
-        # Get the Answer as a String
+        # Get the Answer as Tokens
         pred_tokens = self.get_tokens_pred(
             input_ids, outputs.start_logits, outputs.end_logits
         )
+
+        # Get the Predicted Category
+        cls_pred = cls_out.argmax(axis=1)
 
         return {
             "loss": loss,
             "start_logits": outputs.start_logits,
             "end_logits": outputs.end_logits,
-            "cls_out": cls_out,
+            "cls_pred": cls_pred,
             # "input_ids": input_ids,
             # "input_ids": None,  # TODO: drop once verified unnecessary
             "pred_str": pred_tokens,
         }
 
+
+
     def get_tokens_pred(self, input_ids, start_logits, end_logits):
         # TODO: vectorize
         answer_tokens_preds = []
         for i in range(len(start_logits)):
-
             start_idx_pred, end_idx_pred = get_best_valid_start_end_idx(
                 torch.Tensor(start_logits[i]),
                 torch.Tensor(end_logits[i]),
@@ -142,5 +113,7 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             # Let's convert the input ids back to actual tokens
             answer_tokens_pred = input_ids[i][start_idx_pred : end_idx_pred + 1]
             answer_tokens_preds.append(answer_tokens_pred)
-        preds_as_tensor = stack_with_padding(answer_tokens_preds)
+        preds_as_tensor = stack_with_padding(answer_tokens_preds, self.tk.pad_token_id)
         return preds_as_tensor
+
+

@@ -5,9 +5,9 @@ import torch
 from datasets import load_from_disk
 
 from prepare_data import prepare_inputs_hp
-from utils import BB_MODEL_ID
+from utils import BB_MODEL_ID, collate_fn
 from metrics import compute_metrics
-from bb_model import BigBirdForNaturalQuestions, collate_fn
+from bb_model import BigBirdForNaturalQuestions
 
 from transformers import (
     BigBirdTokenizer,
@@ -193,6 +193,7 @@ def main(
             "pooler_label",
             "start_positions",
             "end_positions",
+            "gt_answers",
         ],  # it's important to log eval_loss
         evaluation_strategy="epoch",
         eval_steps=0.05,
@@ -211,7 +212,7 @@ def main(
     trainer = Trainer(
         model=model,
         args=args,
-        data_collator=collate_fn,
+        data_collator=(lambda x: collate_fn(x, tokenizer)),
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
         compute_metrics=lambda x: compute_metrics(tokenizer, log_path, x),
