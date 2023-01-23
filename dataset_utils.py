@@ -59,7 +59,7 @@ def has_answer(example, masking_str):
 
 
 def drop_unanswerable(dataset, masking_scheme, load_from_cache_file):
-    masking_str = f"flat_context_{masking_scheme}"
+    masking_str = f"fc_{masking_scheme}"
     clean_ds = dataset.filter(lambda x: has_answer(x, masking_str), load_from_cache_file=load_from_cache_file)
     print(
         f"dropped {len(dataset) - len(clean_ds)}/{len(dataset)} unanswerable examples"

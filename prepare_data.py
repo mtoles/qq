@@ -368,7 +368,7 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
 
 def adapt_example(example, masking_scheme=None):
     masking_scheme = str(masking_scheme)
-    masking_str = f"flat_context_{masking_scheme}"
+    masking_str = f"fc_{masking_scheme}"
     """Convert the HP example to look like an NQ example"""
     new_example = {}
     new_example["question"] = {"text": example["question"]}

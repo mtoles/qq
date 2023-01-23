@@ -116,11 +116,11 @@ def main(
 
     # bb_tk = new_ds.map(lambda x: bb_tk(x["flat_context_None"]), batched=True)
     # Save the Dataset
-    df = pd.DataFrame(new_ds["flat_context_None"])
-    df = df.rename(columns={0: "flat_context_None"})
-    df["gpt"] = df["flat_context_None"].apply(lambda x: len(gpt_tk(x)["input_ids"]))
-    df["neo"] = df["flat_context_None"].apply(lambda x: len(neo_tk(x)["input_ids"]))
-    df["bb"] = df["flat_context_None"].apply(lambda x: len(bb_tk(x)["input_ids"]))
+    df = pd.DataFrame(new_ds["fc_None"])
+    df = df.rename(columns={0: "fc_None"})
+    df["gpt"] = df["fc_None"].apply(lambda x: len(gpt_tk(x)["input_ids"]))
+    df["neo"] = df["fc_None"].apply(lambda x: len(neo_tk(x)["input_ids"]))
+    df["bb"] = df["fc_None"].apply(lambda x: len(bb_tk(x)["input_ids"]))
 
     save_path = (
         f"data/{dataset}-{split}-{downsample_data_size}-{''.join(masking_schemes)}"

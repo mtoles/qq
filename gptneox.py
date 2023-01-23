@@ -19,7 +19,7 @@ start = datetime.now()
 for i in range(10):
     prompt = " ".join(
         [
-            ds["flat_context_None"][i],
+            ds["fc_None"][i],
             ds["question"][i],
             "Answer in as few words as possible. Answer: ",
         ]
