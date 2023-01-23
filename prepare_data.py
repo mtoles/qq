@@ -430,119 +430,123 @@ def adapt_example(example, masking_scheme=None):
 #                 )
 
 
-@click.command()
-@click.option("--split", type=str, help="{train | validation | both}")
-@click.option("--dataset", type=str, help="{natural_questions | hotpot}")
-@click.option("--masking_scheme", type=str, default=None)
-@click.option("--downsample_data_size", type=str, default=None)
-@click.option("--cache_dir", type=str, help="Path to cache directory")
-@click.option("--load_from_cache", type=bool, default=True)
-def main(
-    split,
-    dataset,
-    masking_scheme,
-    downsample_data_size,
-    cache_dir,
-    load_from_cache,
-):
-    """Running area"""
-    assert split in ["train", "validation"], "Invalid split"
-    assert dataset in ["natural_questions", "hotpot"], "Invalid dataset"
+# @click.command()
+# @click.option("--split", type=str, help="{train | validation | both}")
+# @click.option("--dataset", type=str, help="{natural_questions | hotpot}")
+# @click.option("--masking_scheme", type=str, default=None)
+# @click.option("--downsample_data_size", type=str, default=None)
+# @click.option("--cache_dir", type=str, help="Path to cache directory")
+# @click.option("--load_from_cache", type=bool, default=True)
+# def main(
+#     split,
+#     dataset,
+#     masking_scheme,
+#     downsample_data_size,
+#     cache_dir,
+#     load_from_cache,
+# ):
+#     """Running area"""
+#     assert split in ["train", "validation"], "Invalid split"
+#     assert dataset in ["natural_questions", "hotpot"], "Invalid dataset"
 
-    tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+#     tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
 
-    sets = []
-    if split == "train":
-        sets.append("train")
-    if split == "validation":
-        sets.append("validation")
-    if split == "both":
-        sets.append("train")
-        sets.append("validation")
+#     sets = []
+#     if split == "train":
+#         sets.append("train")
+#     if split == "validation":
+#         sets.append("validation")
+#     if split == "both":
+#         sets.append("train")
+#         sets.append("validation")
 
-    if dataset == "natural_questions":
-        raise NotImplementedError
-        # # data = data["train" if PROCESS_TRAIN == "true" else "validation"]
-        # for s in sets:
-        #     data = load_dataset(
-        #         "natural_questions",
-        #         split=f"{s}{get_downsample_dataset_size_str(downsample_data_size)}",
-        #         cache_dir=cache_dir,
-        #     )
+#     if dataset == "natural_questions":
+#         raise NotImplementedError
+#         # # data = data["train" if PROCESS_TRAIN == "true" else "validation"]
+#         # for s in sets:
+#         #     data = load_dataset(
+#         #         "natural_questions",
+#         #         split=f"{s}{get_downsample_dataset_size_str(downsample_data_size)}",
+#         #         cache_dir=cache_dir,
+#         #     )
 
-        #     cache_file_name = (
-        #         "data/nq-training" if split == "train" else "data/nq-validation"
-        #     )
-        #     fn_kwargs = dict(
-        #         tokenizer=tokenizer,
-        #         doc_stride=DOC_STRIDE,
-        #         max_length=MAX_LENGTH,
-        #         assertion=False,
-        #     )
-        #     # testing
-        #     data = data.map(
-        #         prepare_inputs_nq,
-        #         fn_kwargs=fn_kwargs,
-        #         cache_file_name=cache_file_name,
-        #         load_from_cache_file=load_from_cache,
-        #     )
-        #     data = data.remove_columns(["annotations", "document", "id", "question"])
-        #     print(data)
-    elif dataset == "hotpot":
-        for s in sets:
-            cache_file_name = make_cache_file_name(
-                split, dataset, downsample_data_size, masking_scheme
-            )
+#         #     cache_file_name = (
+#         #         "data/nq-training" if split == "train" else "data/nq-validation"
+#         #     )
+#         #     fn_kwargs = dict(
+#         #         tokenizer=tokenizer,
+#         #         doc_stride=DOC_STRIDE,
+#         #         max_length=MAX_LENGTH,
+#         #         assertion=False,
+#         #     )
+#         #     # testing
+#         #     data = data.map(
+#         #         prepare_inputs_nq,
+#         #         fn_kwargs=fn_kwargs,
+#         #         cache_file_name=cache_file_name,
+#         #         load_from_cache_file=load_from_cache,
+#         #     )
+#         #     data = data.remove_columns(["annotations", "document", "id", "question"])
+#         #     print(data)
+#     elif dataset == "hotpot":
+#         for s in sets:
+#             cache_file_name = os.path.join(
+#                 "data",
+#                 "prepare",
+#                 make_cache_file_name(
+#                     split, dataset, downsample_data_size, masking_scheme
+#                 ),
+#             )
 
-            data = load_dataset(
-                "hotpot_qa",
-                "distractor",
-                cache_dir=cache_dir,
-                split=f"{s}{get_downsample_dataset_size_str(downsample_data_size)}",
-            )
-            # drop examples where the answer is not in the context
-            before = len(data)
+#             data = load_dataset(
+#                 "hotpot_qa",
+#                 "distractor",
+#                 cache_dir=cache_dir,
+#                 split=f"{s}{get_downsample_dataset_size_str(downsample_data_size)}",
+#             )
+#             # drop examples where the answer is not in the context
+#             before = len(data)
 
-            if masking_scheme is not None:
-                if masking_scheme == "random_sentence":
-                    masking_fn = mask_random_sentence
-                else:
-                    raise ValueError("Masking scheme not supported")
-                data = data.map(
-                    mask_random_sentence,
-                    cache_file_name=cache_file_name,
-                    load_from_cache_file=load_from_cache,
-                )
-            data = data.filter(
-                lambda x: (
-                    x["answer"]
-                    in " [SEP] ".join([" ".join(l) for l in x["context"]["sentences"]])
-                )
-                or (x["answer"] in ["yes", "no"])
-            )
-            after = len(data)
-            print(f"{before - after} examples dropped for lacking answer in context")
-            fn_kwargs = dict(
-                tokenizer=tokenizer,
-                doc_stride=DOC_STRIDE,
-                max_length=MAX_LENGTH,
-                assertion=False,
-                masking_scheme=masking_scheme,
-            )
-            data = data.map(
-                prepare_inputs_hp,
-                fn_kwargs=fn_kwargs,
-                cache_file_name=cache_file_name,
-                load_from_cache_file=load_from_cache,
-            )
-            print(data)
+#             if masking_scheme is not None:
+#                 if masking_scheme == "random_sentence":
+#                     masking_fn = mask_random_sentence
+#                 else:
+#                     raise ValueError("Masking scheme not supported")
+#                 data = data.map(
+#                     mask_random_sentence,
+#                     cache_file_name=cache_file_name,
+#                     load_from_cache_file=load_from_cache,
+#                 )
+#             data = data.filter(
+#                 lambda x: (
+#                     x["answer"]
+#                     in " [SEP] ".join([" ".join(l) for l in x["context"]["sentences"]])
+#                 )
+#                 or (x["answer"] in ["yes", "no"])
+#             )
+#             after = len(data)
+#             print(f"{before - after} examples dropped for lacking answer in context")
+#             fn_kwargs = dict(
+#                 tokenizer=tokenizer,
+#                 doc_stride=DOC_STRIDE,
+#                 max_length=MAX_LENGTH,
+#                 assertion=False,
+#                 masking_scheme=masking_scheme,
+#             )
+#             data = data.map(
+#                 prepare_inputs_hp,
+#                 fn_kwargs=fn_kwargs,
+#                 cache_file_name=cache_file_name,
+#                 load_from_cache_file=load_from_cache,
+#             )
+#             print(data)
 
-    np.random.seed(SEED)
+#     np.random.seed(SEED)
 
-    debug_context = "[SEP]".join([" ".join(x) for x in data[0]["context"]["sentences"]])
+#     debug_context = "[SEP]".join([" ".join(x) for x in data[0]["context"]["sentences"]])
 
-    save_to_disk(data, file_name=cache_file_name + ".jsonl")
+#     save_to_disk(data, file_name=cache_file_name + ".jsonl")
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

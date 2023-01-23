@@ -19,12 +19,13 @@ def get_downsample_dataset_size_str(downsample_data_size):
     return downsample_str
 
 
-def make_cache_file_name(split, dataset, downsample_data_size, masking_schemes):
-    masking_scheme = "".join(masking_schemes)
-    cache_file_name = (
-        PurePath("data") / f"{dataset}-{split}-{downsample_data_size}-{masking_scheme}"
-    )
-    return str(cache_file_name)
+def make_cache_file_name(dataset, split, downsample_data_size, masking_schemes, distract_or_focus):
+    # masking_scheme = "".join(masking_schemes)
+    # cache_file_name = (
+    #     PurePath("data") / f"{dataset}-{split}-{downsample_data_size}-{masking_scheme}"
+    # )
+    cache_file_name = f"{dataset}-{split}-{downsample_data_size}-{''.join(list(masking_schemes)+['None'])}-{distract_or_focus}"
+    return cache_file_name
 
 
 def stack_with_padding(tensor_list, pad_id):
