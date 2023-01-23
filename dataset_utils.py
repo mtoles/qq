@@ -49,3 +49,19 @@ def format_dataset_trivia(example):
     example["targets"] = example["answer"]["aliases"]
     example["norm_target"] = example["answer"]["normalized_value"]
     return example
+
+
+def has_answer(example, masking_str):
+    is_answerable = (example["answer"] in ["yes", "no"]) or (
+        example["answer"].lower() in example[masking_str].lower()
+    )
+    return is_answerable
+
+
+def drop_unanswerable(dataset, masking_scheme, load_from_cache_file):
+    masking_str = f"flat_context_{masking_scheme}"
+    clean_ds = dataset.filter(lambda x: has_answer(x, masking_str), load_from_cache_file=load_from_cache_file)
+    print(
+        f"dropped {len(dataset) - len(clean_ds)}/{len(dataset)} unanswerable examples"
+    )
+    return clean_ds

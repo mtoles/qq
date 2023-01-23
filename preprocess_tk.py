@@ -123,7 +123,7 @@ def main(
     df["bb"] = df["flat_context_None"].apply(lambda x: len(bb_tk(x)["input_ids"]))
 
     save_path = (
-        f"data2/{dataset}-{split}-{downsample_data_size}-{''.join(masking_schemes)}"
+        f"data/{dataset}-{split}-{downsample_data_size}-{''.join(masking_schemes)}"
     )
     new_ds.save_to_disk(save_path)
 

@@ -6,6 +6,7 @@ from datasets import load_from_disk
 
 from prepare_data import prepare_inputs_hp
 from utils import BB_MODEL_ID, collate_fn, check_tokenizer
+from dataset_utils import drop_unanswerable
 from metrics import compute_metrics
 from bb_model import BigBirdForNaturalQuestions
 
@@ -66,6 +67,11 @@ SCHEDULER = "linear"
     help="which context column to use. {'None' | 'randomsentence'}",
 )
 @click.option(
+    "--load_from_cache",
+    type=bool,
+    help="use huggingface cache for data load, map, and filter"
+)
+@click.option(
     "--log_eval",
     default=False,
     help="write eval metrics and examples to log file in inf_logs/",
@@ -94,6 +100,7 @@ def main(
     downsample_data_size_val,
     downsample_data_size_train,
     masking_scheme,
+    load_from_cache,
     log_eval,
     local_rank,
     nproc_per_node,
@@ -136,15 +143,26 @@ def main(
 
     val_dataset = load_from_disk(val_dataset_path)
 
+
+    # Drop examples that do not have answer in the context
+    # Should drop 6 examples from train
+    tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
+
+
     # val_dataset = val_dataset.select(range(990, 1010))  # testing
     # prepare_inputs_hp(val_dataset[0], tokenizer=tokenizer, masking_scheme=masking_scheme)
     # prepare_inputs_hp(val_dataset[1], tokenizer=tokenizer, masking_scheme=masking_scheme)
-
+    tr_dataset = tr_dataset.map(
+        lambda x: prepare_inputs_hp(
+            x, tokenizer=tokenizer, masking_scheme=masking_scheme
+        ),
+        load_from_cache_file=load_from_cache,
+    )
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
             x, tokenizer=tokenizer, masking_scheme=masking_scheme
         ),
-        load_from_cache_file=False,
+        load_from_cache_file=load_from_cache,
     )
 
     # # test some examples

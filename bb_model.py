@@ -47,6 +47,8 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
         pooler_label=None,
         gt_answers=None,
     ):
+        # assert (start_positions < 0).sum() == 0, "start positions should be >= 0" # can't use due to yes/no questions
+        # assert (end_positions < 0).sum() == 0, "end positions should be >= 0" # can't use due to yes/no questions
         gt_answers = gt_answers
         outputs = super().forward(input_ids, attention_mask=attention_mask)
 
