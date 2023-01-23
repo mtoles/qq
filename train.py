@@ -135,6 +135,7 @@ def main(
             raise ValueError(f"model {model_class} not supported")
     output_dir = f"bigbird_{base_dataset}_complete_tuning"
     check_tokenizer(tokenizer)
+    max_length = model.bert.embeddings.position_embeddings.weight.shape[0]
     # Load Data
     if tr_dataset_path is not None:
         tr_dataset = load_from_disk(tr_dataset_path)
@@ -154,13 +155,13 @@ def main(
     # prepare_inputs_hp(val_dataset[1], tokenizer=tokenizer, masking_scheme=masking_scheme)
     tr_dataset = tr_dataset.map(
         lambda x: prepare_inputs_hp(
-            x, tokenizer=tokenizer, masking_scheme=masking_scheme
+            x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme
         ),
         load_from_cache_file=load_from_cache,
     )
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
-            x, tokenizer=tokenizer, masking_scheme=masking_scheme
+            x, tokenizer=tokenizer, nmax_length=max_length, masking_scheme=masking_scheme
         ),
         load_from_cache_file=load_from_cache,
     )

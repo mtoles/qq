@@ -153,7 +153,7 @@ def get_context_and_ans(example, assertion=False):
 def get_strided_contexts_and_ans(
     example,
     tokenizer,
-    doc_stride=2048,
+    # doc_stride=2048,
     max_length=4096,
     assertion=True,
     masking_scheme=None,
@@ -180,28 +180,31 @@ def get_strided_contexts_and_ans(
 
     # return yes/no
     if answer["category"][0] in ["yes", "no"]:  # category is list with one element
-        inputs = []
-        category = []
-        q_indices = input_ids[:q_len]
-        doc_start_indices = range(q_len, len(input_ids), max_length - doc_stride)
         assert (
-            len(doc_start_indices) == 1
-        ), "doc_start_indices should be exactly 1"  # todo: clean up following for loop and range
-        for i in doc_start_indices:
-            end_index = i + max_length - q_len
-            slice = input_ids[i:end_index]
-            inputs.append(q_indices + slice)
-            category.append(answer["category"][0])
-            if slice[-1] == tokenizer.sep_token_id:
-                break
+            len(input_ids) < max_length
+        ), "input_ids should be greater than max_length"
+        # inputs = []
+        # category = []
+        # q_indices = input_ids[:q_len]
+        # doc_start_indices = range(q_len, len(input_ids), max_length - doc_stride)
+        # assert (
+        #     len(doc_start_indices) == 1
+        # ), "doc_start_indices should be exactly 1"  # todo: clean up following for loop and range
+        # for i in doc_start_indices:
+        # end_index = i + max_length - q_len
+        # slice = input_ids[i:end_index]
+        # inputs.append(q_indices + slice)
+        # category.append(answer["category"][0])
+        # if slice[-1] == tokenizer.sep_token_id:
+        # break
 
         output = {
             "example_id": example["id"],
-            "input_ids": inputs[0],
+            "input_ids": input_ids,
             "labels": {
                 "start_token": [-100],
                 "end_token": [-100],
-                "category": category,
+                "category": answer["category"],
             },
         }
     # question is not a yes/no question
@@ -325,8 +328,8 @@ def prepare_inputs_nq(
 def prepare_inputs_hp(
     example,
     tokenizer,
-    doc_stride=2048,  # todo: remove entirely, currently set to match downstream defaults. kind of arbitrary
-    max_length=4096,  # todo: remove entirely
+    # doc_stride=2048,  # todo: remove entirely, currently set to match downstream defaults. kind of arbitrary
+    max_length,  # todo: remove entirely
     assertion=False,
     masking_scheme=None,
 ):
@@ -334,7 +337,6 @@ def prepare_inputs_hp(
     tokenized_example = get_strided_contexts_and_ans(
         adapted_example,
         tokenizer,
-        doc_stride=doc_stride,
         max_length=max_length,
         assertion=assertion,
         masking_scheme=masking_scheme,
