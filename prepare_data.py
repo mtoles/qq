@@ -338,7 +338,7 @@ def prepare_inputs_hp(
         tokenizer,
         max_length=max_length,
         assertion=assertion,
-        masking_scheme=masking_scheme,
+        # masking_scheme=masking_scheme,
     )
 
     return tokenized_example
