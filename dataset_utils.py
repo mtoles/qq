@@ -60,8 +60,29 @@ def has_answer(example, masking_str):
 
 def drop_unanswerable(dataset, masking_scheme, load_from_cache_file):
     masking_str = f"fc_{masking_scheme}"
-    clean_ds = dataset.filter(lambda x: has_answer(x, masking_str), load_from_cache_file=load_from_cache_file)
+    clean_ds = dataset.filter(
+        lambda x: has_answer(x, masking_str), load_from_cache_file=load_from_cache_file
+    )
     print(
         f"dropped {len(dataset) - len(clean_ds)}/{len(dataset)} unanswerable examples"
     )
     return clean_ds
+
+
+def check_example(ex, tk):
+    st = ex["labels"]["start_token"][0]
+    et = ex["labels"]["end_token"][0]
+    input_ids = ex["input_ids"]
+    answer = ex["answer"]
+    answer_tokens = input_ids[st : et + 1]
+    answer_indexed = tk.decode(answer_tokens)
+    # assert (
+    #     answer == answer_indexed
+    # ), f"answer {answer} != {answer_indexed} at {st}:{et}"
+    if answer != answer_indexed:
+        print(f"answer {answer} != {answer_indexed} at {st}:{et}")
+
+
+def check_dataset(dataset, tk):
+    """Check that answers are actually at their identified position in the context and other sanity checks"""
+    dataset.map(lambda x: check_example(x, tk), batched=False)

@@ -6,7 +6,7 @@ from datasets import load_from_disk
 
 from prepare_data import prepare_inputs_hp
 from utils import BB_MODEL_ID, collate_fn, check_tokenizer
-from dataset_utils import drop_unanswerable
+from dataset_utils import drop_unanswerable, check_dataset
 from metrics import compute_metrics
 from bb_model import BigBirdForNaturalQuestions
 
@@ -160,6 +160,7 @@ def main(
             ),
             load_from_cache_file=load_from_cache,
         )
+        check_dataset(tr_dataset, tokenizer)
     else:
         tr_dataset = None
 
@@ -171,6 +172,7 @@ def main(
         ),
         load_from_cache_file=load_from_cache,
     )
+    check_dataset(val_dataset, tokenizer, masking_scheme)
 
     # # test some examples
     # for i in range(5):
