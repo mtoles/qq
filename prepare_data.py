@@ -210,21 +210,27 @@ def get_strided_contexts_and_ans(
     else:
         splitted_context = out["context"].split()
         complete_end_token = splitted_context[answer["end_token"]]
-        answer["start_token"] = len(
-            tokenizer(
-                " ".join(splitted_context[: answer["start_token"]]),
-                add_special_tokens=False,
-            ).input_ids
+        answer["start_token"] = (
+            len(
+                tokenizer(
+                    " ".join(splitted_context[: answer["start_token"]]),
+                    add_special_tokens=False,
+                ).input_ids
+            )
+            + 1
         )
-        answer["end_token"] = len(
-            tokenizer(
-                " ".join(splitted_context[: answer["end_token"]]),
-                add_special_tokens=False,
-            ).input_ids
+        answer["end_token"] = (
+            len(
+                tokenizer(
+                    " ".join(splitted_context[: answer["end_token"]]),
+                    add_special_tokens=False,
+                ).input_ids
+            )
+            + 1
         )
 
-        answer["start_token"] += q_len
-        answer["end_token"] += q_len
+        # answer["start_token"] #+= q_len
+        # answer["end_token"] #+= q_len
 
         # fixing end token
         num_sub_tokens = len(
@@ -328,7 +334,7 @@ def prepare_inputs_hp(
     example,
     tokenizer,
     # doc_stride=2048,  # todo: remove entirely, currently set to match downstream defaults. kind of arbitrary
-    max_length,  
+    max_length,
     assertion=False,
     masking_scheme=None,
 ):
