@@ -50,7 +50,8 @@ SCHEDULER = "linear"
 @click.option(
     "--val_dataset_path", help="path to validation {natural_questions | hotpot} dataset"
 )
-@click.option("--batch_size", default=1, type=int, help="batch size")
+@click.option("--tr_batch_size", default=1, type=int, help="batch size")
+@click.option("--eval_batch_size", default=64, type=int, help="eval batch size")
 @click.option(
     "--downsample_data_size_val",
     default=None,
@@ -90,7 +91,8 @@ def main(
     model_path,
     model_class,
     mode,
-    batch_size,
+    tr_batch_size,
+    eval_batch_size,
     learning_rate,
     max_epochs,
     gradient_accumulation_steps,
@@ -197,8 +199,8 @@ def main(
         do_train=True,
         do_eval=False,
         # per_gpu_train_batch_size=batch_size,
-        per_gpu_eval_batch_size=batch_size,
-        per_device_train_batch_size=batch_size,
+        per_gpu_eval_batch_size=eval_batch_size,
+        per_device_train_batch_size=tr_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
         group_by_length=GROUP_BY_LENGTH,
         learning_rate=learning_rate,
