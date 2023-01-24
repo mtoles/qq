@@ -17,6 +17,7 @@ dependencies:
   - sentencepiece
   - joblib
   - urllib3
+  - ujson
   # BigBird (vasudevgupta)
   - jsonlines=3.1.0
   - openssl=1.1.1

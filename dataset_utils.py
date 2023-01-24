@@ -1,7 +1,7 @@
 """
 Utilities for processing datasets
 """
-
+from hotpot_evaluate_v1 import f1_score
 
 PUNCTUATION_SET_TO_EXCLUDE = set("".join(["‘", "’", "´", "`", ".", ",", "-", '"']))
 
@@ -79,8 +79,14 @@ def check_example(ex, tk):
     # assert (
     #     answer == answer_indexed
     # ), f"answer {answer} != {answer_indexed} at {st}:{et}"
-    if answer != answer_indexed:
-        print(f"answer {answer} != {answer_indexed} at {st}:{et}")
+    if st == -100 and et == -100:
+        if answer not in ["yes", "no"]:
+            print(f"answer {answer} should be 'yes' or 'no' if st and et are -100")
+    else:
+        f1, precision, recall = f1_score(answer, answer_indexed)
+        if not (f1==1 and precision==1 and recall==1):
+            print(f"answer {answer} != {answer_indexed} at {st}:{et}")
+            print
 
 
 def check_dataset(dataset, tk):

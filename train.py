@@ -72,6 +72,7 @@ SCHEDULER = "linear"
 @click.option(
     "--load_from_cache",
     type=bool,
+    default=False,
     help="use huggingface cache for data load, map, and filter",
 )
 @click.option(
@@ -165,14 +166,15 @@ def main(
         tr_dataset = None
 
     val_dataset = load_from_disk(val_dataset_path)
-    val_dataset = val_dataset.select(range(downsample_data_size_val))
+    if downsample_data_size_val is not None:
+        val_dataset = val_dataset.select(range(downsample_data_size_val))
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
             x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme
         ),
         load_from_cache_file=load_from_cache,
     )
-    check_dataset(val_dataset, tokenizer, masking_scheme)
+    check_dataset(val_dataset, tokenizer)
 
     # # test some examples
     # for i in range(5):
