@@ -153,16 +153,15 @@ def get_context_and_ans(example, assertion=False):
 def get_strided_contexts_and_ans(
     example,
     tokenizer,
-    # doc_stride=2048,
-    max_length=4096,
+    max_length,
     assertion=True,
-    masking_scheme=None,
+    # masking_scheme=None,
 ):
     # overlap will be of doc_stride - q_len
 
     out = get_context_and_ans(example, assertion=assertion)
     answer = out["answer"]
-    input_ids = tokenizer(example["question"]["text"], out["context"]).input_ids
+    input_ids = tokenizer(out["context"]).input_ids
 
     # later, removing these samples
     if answer["start_token"] == -1:
@@ -329,7 +328,7 @@ def prepare_inputs_hp(
     example,
     tokenizer,
     # doc_stride=2048,  # todo: remove entirely, currently set to match downstream defaults. kind of arbitrary
-    max_length,  # todo: remove entirely
+    max_length,  
     assertion=False,
     masking_scheme=None,
 ):

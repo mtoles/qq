@@ -69,7 +69,7 @@ SCHEDULER = "linear"
 @click.option(
     "--load_from_cache",
     type=bool,
-    help="use huggingface cache for data load, map, and filter"
+    help="use huggingface cache for data load, map, and filter",
 )
 @click.option(
     "--log_eval",
@@ -121,47 +121,44 @@ def main(
 
     # Load Model
 
-    if model_path is not None:
-        # todo: need tokenizer from somewhere
-        model = BigBirdForNaturalQuestions.from_pretrained(model_path)
-    else:
-        if model_class == "bigbird":
-            MODEL_ID = BB_MODEL_ID
-            tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
+    if model_class == "bigbird":
+        MODEL_ID = BB_MODEL_ID
+        tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
+        if model_path is not None:
+            # todo: need tokenizer from somewhere
+            model = BigBirdForNaturalQuestions.from_pretrained(model_path, tokenizer)
+        else:
             model = BigBirdForNaturalQuestions.from_pretrained(
                 MODEL_ID, gradient_checkpointing=True, tk=tokenizer
             )
-        else:
-            raise ValueError(f"model {model_class} not supported")
+    else:
+        raise ValueError(f"model {model_class} not supported")
     output_dir = f"bigbird_{base_dataset}_complete_tuning"
     check_tokenizer(tokenizer)
     max_length = model.bert.embeddings.position_embeddings.weight.shape[0]
     # Load Data
     if tr_dataset_path is not None:
         tr_dataset = load_from_disk(tr_dataset_path)
+        # Drop examples that do not have answer in the context
+        # Should drop 6 examples from train
+        tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
+
+        # val_dataset = val_dataset.select(range(990, 1010))  # testing
+        # prepare_inputs_hp(val_dataset[0], tokenizer=tokenizer, masking_scheme=masking_scheme)
+        # prepare_inputs_hp(val_dataset[1], tokenizer=tokenizer, masking_scheme=masking_scheme)
+        tr_dataset = tr_dataset.map(
+            lambda x: prepare_inputs_hp(
+                x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme
+            ),
+            load_from_cache_file=load_from_cache,
+        )
     else:
         tr_dataset = None
 
     val_dataset = load_from_disk(val_dataset_path)
-
-
-    # Drop examples that do not have answer in the context
-    # Should drop 6 examples from train
-    tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
-
-
-    # val_dataset = val_dataset.select(range(990, 1010))  # testing
-    # prepare_inputs_hp(val_dataset[0], tokenizer=tokenizer, masking_scheme=masking_scheme)
-    # prepare_inputs_hp(val_dataset[1], tokenizer=tokenizer, masking_scheme=masking_scheme)
-    tr_dataset = tr_dataset.map(
-        lambda x: prepare_inputs_hp(
-            x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme
-        ),
-        load_from_cache_file=load_from_cache,
-    )
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
-            x, tokenizer=tokenizer, nmax_length=max_length, masking_scheme=masking_scheme
+            x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme
         ),
         load_from_cache_file=load_from_cache,
     )
