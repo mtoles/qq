@@ -169,6 +169,7 @@ def main(
     if downsample_data_size_val is not None:
         val_dataset = val_dataset.select(range(downsample_data_size_val))
     print("Preparing validation inputs hotpot...")
+    val_dataset = drop_unanswerable(val_dataset, masking_scheme, load_from_cache)
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
             x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme
