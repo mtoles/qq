@@ -148,9 +148,10 @@ def main(
             tr_dataset = tr_dataset.select(range(downsample_data_size_train))
         # Drop examples that do not have answer in the context
         # Should drop 6 examples from train
+        # tr_dataset = tr_dataset.filter(lambda x: x["id"]=="5a828cd455429940e5e1a8f1")
         tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
 
-        # tr_dataset = tr_dataset.select(range(347, 349))  # testing
+        # tr_dataset = tr_dataset.select(range(54000, 55000))  # testing
         print("Preparing train inputs hotpot...")
         tr_dataset = tr_dataset.map(
             lambda x: prepare_inputs_hp(

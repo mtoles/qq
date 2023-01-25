@@ -53,12 +53,15 @@ def format_dataset_trivia(example):
 
 
 def has_answer(example, masking_str):
-    answer = example["answer"]
-    context = example[masking_str]
-    if answer in ["yes", "no"]:
+    # answer = example["answer"]
+    # context = example["fc_None"]
+    answer = [normalize_answer(x) for x in example["answer"].split()]
+    context = [normalize_answer(x) for x in example[masking_str].split()]
+    if answer[0] in ["yes", "no"]:
         return True
-    if sublist_is_in_list(normalize_answer(answer).split(), normalize_answer(context).split()):
+    if sublist_is_in_list(answer, context):
         return True
+
     return False
 
 
@@ -73,9 +76,11 @@ def drop_unanswerable(dataset, masking_scheme, load_from_cache_file):
     )
     return clean_ds
 
+
 def clean_answer(ex, tk):
     ex["answer"] = tk.decode(tk.encode(ex["answer"]))
     return ex
+
 
 def check_example(ex, tk):
     st = ex["labels"]["start_token"][0]
@@ -91,13 +96,12 @@ def check_example(ex, tk):
         if answer not in ["yes", "no"]:
             print(f"answer {answer} should be 'yes' or 'no' if st and et are -100")
     else:
-        # run the answer through the tokenizer so it doesn't trigger on tokenizer failures 
+        # run the answer through the tokenizer so it doesn't trigger on tokenizer failures
         # since the input_ids are tokenized elsewhere
         tk_answer = tk.decode(tk.encode(answer)[1:-1])
         f1, precision, recall = f1_score(tk_answer, answer_indexed)
-        if not (f1==1 and precision==1 and recall==1):
+        if not (f1 == 1 and precision == 1 and recall == 1):
             print(f"answer {tk_answer} != {answer_indexed} at {st}:{et}")
-            print
 
 
 def check_dataset(dataset, tk):
