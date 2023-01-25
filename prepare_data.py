@@ -13,10 +13,12 @@ from transformers import BigBirdTokenizer
 from typing import List, Optional, Tuple
 from collections import defaultdict, Counter
 
+from hotpot_evaluate_v1 import normalize_answer
 from masking import mask_random_sentence
 from utils import (
     make_cache_file_name,
     get_downsample_dataset_size_str,
+    find_sublist_in_list,
     CATEGORY_MAPPING,
 )
 
@@ -27,8 +29,12 @@ PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
 
 
 def _get_single_answer(example):
+    # This function actually does nothing since examples never have more than one
+    # answer in HotpotQA (unlike Natural Questions) -Matt
+    # TODO: remove entirely
     def choose_first(answer, is_long_answer=False):
         assert isinstance(answer, list)
+        assert len(answer) == 1  # matt
         if len(answer) == 1:
             answer = answer[0]
             return {k: [answer[k]] for k in answer} if is_long_answer else answer
@@ -351,26 +357,30 @@ def prepare_inputs_hp(
 
 
 def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
+
     # for i in range(len(context)):
     #     for j in range(len(answer)):
     #         if not context[i + j].startswith(answer[j]):
     #             break
     #         elif j == len(answer) - 1:
     #             return i, i + j
+    if answer in ["yes", "no"]:
+        return -1, -1
     context = " ".join(context.split())  # normalize whitespaces
-    if answer in context:
-        start_char_index = context.index(answer)
-        num_spaces_before = Counter(context[:start_char_index])[" "]
-        start_token_index = num_spaces_before
-        end_token_index = start_token_index + len(answer.split())
-        assert answer in " ".join(context.split()[start_token_index:end_token_index])
-        return start_token_index, end_token_index
-
-    # assert answer in [
-    #     "yes",
-    #     "no",
-    # ], f"answer {answer} not found in context {context[:200]}..."
-    return -1, -1
+    context_li = [normalize_answer(x) for x in context.split()]
+    answer_li = [normalize_answer(x) for x in answer.split()]
+    start_token_index = find_sublist_in_list(answer_li, context_li)
+    end_token_index = start_token_index + len(answer_li)
+    return start_token_index, end_token_index
+    # if answer in context:
+    #     start_char_index = context.index(answer)
+    #     num_spaces_before = Counter(context[:start_char_index])[" "]
+    #     start_token_index = num_spaces_before
+    #     end_token_index = start_token_index + len(answer.split())
+    #     assert answer in " ".join(context.split()[start_token_index:end_token_index])
+    #     return start_token_index, end_token_index
+    # else:
+    #     raise ValueError(f"Answer {answer} not found in context {context}")
 
 
 def adapt_example(example, masking_scheme=None):
@@ -410,6 +420,7 @@ def adapt_example(example, masking_scheme=None):
         ],
         "yes_no_answer": yn_dict[answer],
     }
+    assert answer in ["yes", "no"] or normalize_answer(example["answer"]) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
     return new_example
 
 

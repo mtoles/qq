@@ -134,6 +134,7 @@ def main(
     # dataset = dataset.train_test_split(test_size=100)["test"]
 
     results_df = pd.DataFrame(dataset)
+    print("Evaluating...")
     matches = [
         x[0]
         for x in dataset.map(

@@ -144,14 +144,14 @@ def main(
     # Load Data
     if tr_dataset_path is not None:
         tr_dataset = load_from_disk(tr_dataset_path)
-        tr_dataset = tr_dataset.select(range(downsample_data_size_train))
+        if downsample_data_size_train is not None:
+            tr_dataset = tr_dataset.select(range(downsample_data_size_train))
         # Drop examples that do not have answer in the context
         # Should drop 6 examples from train
         tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
 
-        # val_dataset = val_dataset.select(range(990, 1010))  # testing
-        # prepare_inputs_hp(val_dataset[0], tokenizer=tokenizer, masking_scheme=masking_scheme)
-        # prepare_inputs_hp(val_dataset[1], tokenizer=tokenizer, masking_scheme=masking_scheme)
+        # tr_dataset = tr_dataset.select(range(347, 349))  # testing
+        print("Preparing train inputs hotpot...")
         tr_dataset = tr_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
@@ -168,6 +168,7 @@ def main(
     val_dataset = load_from_disk(val_dataset_path)
     if downsample_data_size_val is not None:
         val_dataset = val_dataset.select(range(downsample_data_size_val))
+    print("Preparing validation inputs hotpot...")
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
             x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme

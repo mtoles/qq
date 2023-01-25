@@ -1,7 +1,8 @@
 """
 Utilities for processing datasets
 """
-from hotpot_evaluate_v1 import f1_score
+from hotpot_evaluate_v1 import f1_score, normalize_answer
+from utils import sublist_is_in_list
 
 PUNCTUATION_SET_TO_EXCLUDE = set("".join(["‘", "’", "´", "`", ".", ",", "-", '"']))
 
@@ -52,13 +53,17 @@ def format_dataset_trivia(example):
 
 
 def has_answer(example, masking_str):
-    is_answerable = (example["answer"] in ["yes", "no"]) or (
-        example["answer"].lower() in example[masking_str].lower()
-    )
-    return is_answerable
+    answer = example["answer"]
+    context = example[masking_str]
+    if answer in ["yes", "no"]:
+        return True
+    if sublist_is_in_list(normalize_answer(answer).split(), normalize_answer(context).split()):
+        return True
+    return False
 
 
 def drop_unanswerable(dataset, masking_scheme, load_from_cache_file):
+    print("dropping unanswerable examples...")
     masking_str = f"fc_{masking_scheme}"
     clean_ds = dataset.filter(
         lambda x: has_answer(x, masking_str), load_from_cache_file=load_from_cache_file
@@ -68,6 +73,9 @@ def drop_unanswerable(dataset, masking_scheme, load_from_cache_file):
     )
     return clean_ds
 
+def clean_answer(ex, tk):
+    ex["answer"] = tk.decode(tk.encode(ex["answer"]))
+    return ex
 
 def check_example(ex, tk):
     st = ex["labels"]["start_token"][0]
@@ -83,12 +91,16 @@ def check_example(ex, tk):
         if answer not in ["yes", "no"]:
             print(f"answer {answer} should be 'yes' or 'no' if st and et are -100")
     else:
-        f1, precision, recall = f1_score(answer, answer_indexed)
+        # run the answer through the tokenizer so it doesn't trigger on tokenizer failures 
+        # since the input_ids are tokenized elsewhere
+        tk_answer = tk.decode(tk.encode(answer)[1:-1])
+        f1, precision, recall = f1_score(tk_answer, answer_indexed)
         if not (f1==1 and precision==1 and recall==1):
-            print(f"answer {answer} != {answer_indexed} at {st}:{et}")
+            print(f"answer {tk_answer} != {answer_indexed} at {st}:{et}")
             print
 
 
 def check_dataset(dataset, tk):
     """Check that answers are actually at their identified position in the context and other sanity checks"""
+    print("Checking dataset...")
     dataset.map(lambda x: check_example(x, tk), batched=False)

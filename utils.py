@@ -19,7 +19,9 @@ def get_downsample_dataset_size_str(downsample_data_size):
     return downsample_str
 
 
-def make_cache_file_name(dataset, split, downsample_data_size, masking_schemes, distract_or_focus):
+def make_cache_file_name(
+    dataset, split, downsample_data_size, masking_schemes, distract_or_focus
+):
     # masking_scheme = "".join(masking_schemes)
     # cache_file_name = (
     #     PurePath("data") / f"{dataset}-{split}-{downsample_data_size}-{masking_scheme}"
@@ -38,6 +40,7 @@ def stack_with_padding(tensor_list, pad_id):
     output = torch.stack(padded_tensor_list, dim=0)
     return output
 
+
 def unpad_and_tokenize(tokenized_answer, tk):
     output = []
     tokenized_answer = standardize_padding(tokenized_answer)
@@ -45,8 +48,10 @@ def unpad_and_tokenize(tokenized_answer, tk):
         output.append(tk.decode(ta))
     return output
 
+
 def unstack_with_padding(tensor, lengths):
     return [t[:l] for t, l in zip(tensor, lengths)]
+
 
 def collate_fn(features, tk, threshold=1024):
     pad_id = tk.pad_token_id
@@ -95,17 +100,40 @@ def collate_fn(features, tk, threshold=1024):
     }
     return output
 
+
 def check_tokenizer(tokenizer):
     """make sure the tokenizer handles padding correctly"""
     assert tokenizer.decode([0]) == ""
 
+
 def standardize_padding(tokens):
     """make sure the padding token is always 0 and not -100 as set by the huggingface trainer.
-    inputs: 
+    inputs:
         Tokens: a 2d array of token ids
-    outputs: 
+    outputs:
         Tokens: a 2d tensor of token ids with padding token 0
     """
     tokens = torch.tensor(tokens)
     tokens[tokens == -100] = 0
     return tokens
+
+
+def find_sublist_in_list(sl, l):
+    """Return the index of the first occurrence of the sublist `sl` in the list `l`"""
+    result = -1
+    subsequence_length = len(sl)
+    for i in range(len(l)):
+        if l[i : i + subsequence_length] == sl:
+            result = i
+            break
+    assert result != -1, "Sublist not found in list"
+    return result
+
+
+def sublist_is_in_list(sl, l):
+    """Return whether the sublist `sl` is in the list `l`"""
+    subsequence_length = len(sl)
+    for i in range(len(l)):
+        if l[i : i + subsequence_length] == sl:
+            return True
+    return False
