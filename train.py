@@ -162,7 +162,7 @@ def main(
             ),
             load_from_cache_file=load_from_cache,
         )
-        check_dataset(tr_dataset, tokenizer)
+        # check_dataset(tr_dataset, tokenizer)
     else:
         tr_dataset = None
 
@@ -177,7 +177,7 @@ def main(
         ),
         load_from_cache_file=load_from_cache,
     )
-    check_dataset(val_dataset, tokenizer)
+    # check_dataset(val_dataset, tokenizer)
 
     # # test some examples
     # for i in range(5):
@@ -236,8 +236,8 @@ def main(
         eval_steps=0.05,
         save_strategy="epoch",
         save_steps=0.05,
-        logging_strategy="epoch",
-        logging_steps=0.05,
+        # logging_strategy="epoch",
+        logging_steps=10,
         logging_dir="tb_logs/" + now,
         report_to="tensorboard",
         logging_first_step=True,
