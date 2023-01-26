@@ -49,8 +49,8 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
     ):
         # assert (start_positions < 0).sum() == 0, "start positions should be >= 0" # can't use due to yes/no questions
         # assert (end_positions < 0).sum() == 0, "end positions should be >= 0" # can't use due to yes/no questions
-        gt_answers = gt_answers
-        outputs = super().forward(input_ids, attention_mask=attention_mask)
+        question_lengths = torch.zeros(input_ids.shape[1]).cuda() # allow super to look for answers in the question. I think this is not actually done in the original implementation (or vasadevgupta's), but it might just be an artifact from repurposing the natrual questions code. Either way I think it's fine and I don't want to rewrite the whole thing.
+        outputs = super().forward(input_ids, attention_mask=attention_mask, question_lengths=question_lengths)
 
         cls_out = self.cls(outputs.pooler_output)
 
@@ -89,7 +89,8 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
 
         # Get the Predicted Category
         cls_pred = cls_out.argmax(axis=1)
-
+        if loss > 1e5:
+            print(f"ALERT: loss is big!: {loss}")
         return {
             "loss": loss,
             "start_logits": outputs.start_logits,
