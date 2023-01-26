@@ -235,8 +235,8 @@ def get_strided_contexts_and_ans(
             + 1
         )
 
-        # answer["start_token"] #+= q_len
-        # answer["end_token"] #+= q_len
+        answer["start_token"] #+= q_len
+        answer["end_token"] #+= q_len
 
         # fixing end token
         num_sub_tokens = len(
