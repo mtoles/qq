@@ -1,7 +1,5 @@
 import datetime
-import numpy as np
 import click
-import torch
 from datasets import load_from_disk
 
 from prepare_data import prepare_inputs_hp
@@ -17,15 +15,9 @@ from transformers import (
 )
 
 
-# TRAIN_ON_SMALL = os.environ.pop("TRAIN_ON_SMALL", "false")
 RESUME_TRAINING = None
-
-# os.environ["WANDB_WATCH"] = "false"
-# os.environ["WANDB_PROJECT"] = "bigbird-natural-questions"
 SEED = 42
 GROUP_BY_LENGTH = True
-# LEARNING_RATE = 3.0e-5
-# MAX_EPOCHS = 9
 FP16 = False
 SCHEDULER = "linear"
 
@@ -130,7 +122,6 @@ def main(
         MODEL_ID = BB_MODEL_ID
         tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
         if model_path is not None:
-            # todo: need tokenizer from somewhere
             model = BigBirdForNaturalQuestions.from_pretrained(model_path, tokenizer)
         else:
             model = BigBirdForNaturalQuestions.from_pretrained(
@@ -147,11 +138,8 @@ def main(
         if downsample_data_size_train is not None:
             tr_dataset = tr_dataset.select(range(downsample_data_size_train))
         # Drop examples that do not have answer in the context
-        # Should drop 6 examples from train
-        # tr_dataset = tr_dataset.filter(lambda x: x["id"]=="5a828cd455429940e5e1a8f1")
         tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
 
-        # tr_dataset = tr_dataset.select(range(54000, 55000))  # testing
         print("Preparing train inputs hotpot...")
         tr_dataset = tr_dataset.map(
             lambda x: prepare_inputs_hp(
@@ -179,33 +167,6 @@ def main(
     )
     # check_dataset(val_dataset, tokenizer)
 
-    # # test some examples
-    # for i in range(5):
-    #     ex = val_dataset[i]
-    #     st = val_dataset[i]["labels"]["start_token"]
-    #     et = val_dataset[i]["labels"]["end_token"]
-    #     lab = ex["input_ids"][st:et]
-    #     print(f"processed: {lab} | raw: {ex['answer']}")
-
-    # print
-
-    # tr_dataset = (
-    #     load_dataset(
-    #         "json",
-    #         data_files=tr_dataset_path,
-    #         split=f"train{get_downsample_dataset_size_str(downsample_data_size_train)}",
-    #         download_mode="force_redownload",
-    #     )
-    #     if mode == "train"
-    #     else None
-    # )
-    # val_dataset = load_dataset(
-    #     "json",
-    #     data_files=val_dataset_path,
-    #     split=f"train{get_downsample_dataset_size_str(downsample_data_size_val)}",
-    #     download_mode="force_redownload",
-    # )
-
     now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     args = TrainingArguments(
         output_dir=output_dir,
@@ -231,7 +192,7 @@ def main(
             "start_positions",
             "end_positions",
             "gt_answers",
-        ],  # it's important to log eval_loss
+        ],  
         evaluation_strategy="epoch",
         eval_steps=0.05,
         save_strategy="epoch",
@@ -253,7 +214,7 @@ def main(
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
         compute_metrics=lambda x: compute_metrics(x, tokenizer, log_path),
-        tokenizer=tokenizer,  # experimental... trying to get pad_token_id==0, not ==-100
+        tokenizer=tokenizer,  
     )
     if mode == "eval":
         metrics = trainer.evaluate()
@@ -265,7 +226,7 @@ def main(
             trainer.save_model(f"models/{base_dataset}-final-model-exp-{now}")
         except KeyboardInterrupt:
             trainer.save_model(f"models/{base_dataset}-interrupted-model-exp-{now}")
-        # wandb.finish()
+
 
 
 if __name__ == "__main__":

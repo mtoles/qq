@@ -2,22 +2,10 @@
 
 import os
 
-import numpy as np
-from tqdm import tqdm
-
-import jsonlines
-import click
-from datasets import load_dataset
-import datasets
-from transformers import BigBirdTokenizer
 from typing import List, Optional, Tuple
-from collections import defaultdict, Counter
-
+from collections import defaultdict
 from hotpot_evaluate_v1 import normalize_answer
-from masking import mask_random_sentence
 from utils import (
-    make_cache_file_name,
-    get_downsample_dataset_size_str,
     find_sublist_in_list,
     CATEGORY_MAPPING,
 )
@@ -100,18 +88,6 @@ def get_context_and_ans(example, assertion=False):
             },
         }
 
-    # # later, help in removing all no answers
-    # if answer["start_token"] == [-1]:
-    #     return {
-    #         "context": "None",
-    #         "answer": {
-    #             "start_token": -1,
-    #             "end_token": -1,
-    #             "category": "null",
-    #             "span": "None",  # extra
-    #         },
-    #     }
-
     # handling normal samples
 
     cols = ["start_token", "end_token"]
@@ -188,20 +164,6 @@ def get_strided_contexts_and_ans(
         assert (
             len(input_ids) < max_length
         ), "input_ids should be greater than max_length"
-        # inputs = []
-        # category = []
-        # q_indices = input_ids[:q_len]
-        # doc_start_indices = range(q_len, len(input_ids), max_length - doc_stride)
-        # assert (
-        #     len(doc_start_indices) == 1
-        # ), "doc_start_indices should be exactly 1"  # todo: clean up following for loop and range
-        # for i in doc_start_indices:
-        # end_index = i + max_length - q_len
-        # slice = input_ids[i:end_index]
-        # inputs.append(q_indices + slice)
-        # category.append(answer["category"][0])
-        # if slice[-1] == tokenizer.sep_token_id:
-        # break
 
         output = {
             "example_id": example["id"],
@@ -274,51 +236,6 @@ def get_strided_contexts_and_ans(
         else:
             print("LONGER THAN MAX LENGTH")
             raise NotImplementedError
-    #         q_indices = input_ids[:q_len]
-    #         doc_start_indices = range(q_len, len(input_ids), max_length - doc_stride)
-
-    #         inputs = []
-    #         answers_start_token = []
-    #         answers_end_token = []
-    #         answers_category = []  # null, yes, no, long, short
-    #         for i in doc_start_indices:
-    #             end_index = i + max_length - q_len
-    #             slice = input_ids[i:end_index]
-    #             inputs.append(q_indices + slice)
-    #             assert len(inputs[-1]) <= max_length, "Issue in truncating length"
-
-    #             if start_token >= i and end_token <= end_index - 1:
-    #                 start_token = start_token - i + q_len
-    #                 end_token = end_token - i + q_len
-    #                 answers_category.append(
-    #                     answer["category"][0]
-    #                 )  # ["short"] -> "short"
-    #             else:
-    #                 start_token = -100
-    #                 end_token = -100
-    #                 answers_category.append("null")
-    #             new = inputs[-1][start_token : end_token + 1]
-
-    #             answers_start_token.append(start_token)
-    #             answers_end_token.append(end_token)
-    #             if assertion:
-    #                 """checking if above code is working as expected for all the samples"""
-    #                 if new != old and new != [tokenizer.cls_token_id]:
-    #                     print("ISSUE in strided for ID:", example["id"])
-    #                     print("New:", tokenizer.decode(new))
-    #                     print("Old:", tokenizer.decode(old), end="\n\n")
-    #             if slice[-1] == tokenizer.sep_token_id:
-    #                 break
-    #         output = {
-    #             "example_id": example["id"],
-    #             "input_ids": inputs,
-    #             "labels": {
-    #                 "start_token": answers_start_token,
-    #                 "end_token": answers_end_token,
-    #                 "category": answers_category,
-    #             },
-    #         }
-
     return output
 
 
@@ -339,7 +256,6 @@ def prepare_inputs_nq(
 def prepare_inputs_hp(
     example,
     tokenizer,
-    # doc_stride=2048,  # todo: remove entirely, currently set to match downstream defaults. kind of arbitrary
     max_length,
     assertion=False,
     masking_scheme=None,
@@ -350,20 +266,12 @@ def prepare_inputs_hp(
         tokenizer,
         max_length=max_length,
         assertion=assertion,
-        # masking_scheme=masking_scheme,
     )
 
     return tokenized_example
 
 
 def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
-
-    # for i in range(len(context)):
-    #     for j in range(len(answer)):
-    #         if not context[i + j].startswith(answer[j]):
-    #             break
-    #         elif j == len(answer) - 1:
-    #             return i, i + j
     if answer in ["yes", "no"]:
         return -1, -1
     context = " ".join(context.split())  # normalize whitespaces
@@ -372,16 +280,6 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
     start_token_index = find_sublist_in_list(answer_li, context_li)
     end_token_index = start_token_index + len(answer_li)
     return start_token_index, end_token_index
-    # if answer in context:
-    #     start_char_index = context.index(answer)
-    #     num_spaces_before = Counter(context[:start_char_index])[" "]
-    #     start_token_index = num_spaces_before
-    #     end_token_index = start_token_index + len(answer.split())
-    #     assert answer in " ".join(context.split()[start_token_index:end_token_index])
-    #     return start_token_index, end_token_index
-    # else:
-    #     raise ValueError(f"Answer {answer} not found in context {context}")
-
 
 def adapt_example(example, masking_scheme=None):
     masking_scheme = str(masking_scheme)
@@ -391,9 +289,6 @@ def adapt_example(example, masking_scheme=None):
     new_example["question"] = {"text": example["question"]}
     answer = example["answer"]
     new_example["answer"] = {"text": answer}
-    # TODO: Separate paragraphs from different articles with [SEP] token
-    # Warning: this will render the answer token indeices inaccurate
-    # context = " ".join([" ".join(l) for l in example[masking_str]["sentences"]])
     context = example[masking_str]
     # Call join/split an extra time to normalize whitespaces and unicode nonsense
     context = " ".join(context.split())
@@ -422,149 +317,3 @@ def adapt_example(example, masking_scheme=None):
     }
     assert answer in ["yes", "no"] or normalize_answer(example["answer"]) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
     return new_example
-
-
-# def save_to_disk(hf_data, file_name):
-#     with jsonlines.open(file_name, "a") as writer:
-#         for example in tqdm(hf_data, total=len(hf_data), desc="Saving samples ... "):
-#             labels = example["labels"]
-#             for ids, start, end, cat in zip(
-#                 example["input_ids"],
-#                 labels["start_token"],
-#                 labels["end_token"],
-#                 labels["category"],
-#             ):
-#                 if start == -1 and end == -1:
-#                     continue  # leave waste samples with no answer
-#                 if cat == "null" and np.random.rand() < 0.6:
-#                     continue  # removing 50 % samples
-#                 writer.write(
-#                     {
-#                         "input_ids": ids,
-#                         "start_token": start,
-#                         "end_token": end,
-#                         "category": CATEGORY_MAPPING[cat],
-#                     }
-#                 )
-
-
-# @click.command()
-# @click.option("--split", type=str, help="{train | validation | both}")
-# @click.option("--dataset", type=str, help="{natural_questions | hotpot}")
-# @click.option("--masking_scheme", type=str, default=None)
-# @click.option("--downsample_data_size", type=str, default=None)
-# @click.option("--cache_dir", type=str, help="Path to cache directory")
-# @click.option("--load_from_cache", type=bool, default=True)
-# def main(
-#     split,
-#     dataset,
-#     masking_scheme,
-#     downsample_data_size,
-#     cache_dir,
-#     load_from_cache,
-# ):
-#     """Running area"""
-#     assert split in ["train", "validation"], "Invalid split"
-#     assert dataset in ["natural_questions", "hotpot"], "Invalid dataset"
-
-#     tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
-
-#     sets = []
-#     if split == "train":
-#         sets.append("train")
-#     if split == "validation":
-#         sets.append("validation")
-#     if split == "both":
-#         sets.append("train")
-#         sets.append("validation")
-
-#     if dataset == "natural_questions":
-#         raise NotImplementedError
-#         # # data = data["train" if PROCESS_TRAIN == "true" else "validation"]
-#         # for s in sets:
-#         #     data = load_dataset(
-#         #         "natural_questions",
-#         #         split=f"{s}{get_downsample_dataset_size_str(downsample_data_size)}",
-#         #         cache_dir=cache_dir,
-#         #     )
-
-#         #     cache_file_name = (
-#         #         "data/nq-training" if split == "train" else "data/nq-validation"
-#         #     )
-#         #     fn_kwargs = dict(
-#         #         tokenizer=tokenizer,
-#         #         doc_stride=DOC_STRIDE,
-#         #         max_length=MAX_LENGTH,
-#         #         assertion=False,
-#         #     )
-#         #     # testing
-#         #     data = data.map(
-#         #         prepare_inputs_nq,
-#         #         fn_kwargs=fn_kwargs,
-#         #         cache_file_name=cache_file_name,
-#         #         load_from_cache_file=load_from_cache,
-#         #     )
-#         #     data = data.remove_columns(["annotations", "document", "id", "question"])
-#         #     print(data)
-#     elif dataset == "hotpot":
-#         for s in sets:
-#             cache_file_name = os.path.join(
-#                 "data",
-#                 "prepare",
-#                 make_cache_file_name(
-#                     split, dataset, downsample_data_size, masking_scheme
-#                 ),
-#             )
-
-#             data = load_dataset(
-#                 "hotpot_qa",
-#                 "distractor",
-#                 cache_dir=cache_dir,
-#                 split=f"{s}{get_downsample_dataset_size_str(downsample_data_size)}",
-#             )
-#             # drop examples where the answer is not in the context
-#             before = len(data)
-
-#             if masking_scheme is not None:
-#                 if masking_scheme == "random_sentence":
-#                     masking_fn = mask_random_sentence
-#                 else:
-#                     raise ValueError("Masking scheme not supported")
-#                 data = data.map(
-#                     mask_random_sentence,
-#                     cache_file_name=cache_file_name,
-#                     load_from_cache_file=load_from_cache,
-#                 )
-#             data = data.filter(
-#                 lambda x: (
-#                     x["answer"]
-#                     in " [SEP] ".join([" ".join(l) for l in x["context"]["sentences"]])
-#                 )
-#                 or (x["answer"] in ["yes", "no"])
-#             )
-#             after = len(data)
-#             print(f"{before - after} examples dropped for lacking answer in context")
-#             fn_kwargs = dict(
-#                 tokenizer=tokenizer,
-#                 doc_stride=DOC_STRIDE,
-#                 max_length=MAX_LENGTH,
-#                 assertion=False,
-#                 masking_scheme=masking_scheme,
-#             )
-#             data = data.map(
-#                 prepare_inputs_hp,
-#                 fn_kwargs=fn_kwargs,
-#                 cache_file_name=cache_file_name,
-#                 load_from_cache_file=load_from_cache,
-#             )
-#             print(data)
-
-#     np.random.seed(SEED)
-
-#     debug_context = "[SEP]".join([" ".join(x) for x in data[0]["context"]["sentences"]])
-
-#     save_to_disk(data, file_name=cache_file_name + ".jsonl")
-
-
-# if __name__ == "__main__":
-#     main()
