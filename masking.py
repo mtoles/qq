@@ -18,7 +18,8 @@ def mask_random_sentence(example):
     fact_sent_index = example["supporting_facts"]["sent_id"][i]
     fact_sent = example["context_None"]["sentences"][fact_title_index][fact_sent_index]
     len_fact = len(fact_sent.split())
-    replacement = " ".join(["[MASK]"] * len_fact)
+    # replacement = " ".join(["[MASK]"] * len_fact)
+    replacement = ""
 
     example["context_None"]["sentences"][fact_title_index][
         fact_sent_index
