@@ -12,7 +12,7 @@ import datasets
 from typing import List, Optional, Tuple
 from collections import defaultdict, Counter
 
-from masking import mask_random_sentence, drop_distractor
+from masking import mask_random_sentence, split_distractor
 from utils import (
     make_cache_file_name,
     get_downsample_dataset_size_str,
@@ -34,7 +34,7 @@ def flatten_context(example, masking_scheme):
     paragraphs = [" ".join(s) for s in sentences]
     contexts = [f"{t}: {p}" for t, p in zip(titles, paragraphs)]
     context = "\n\n".join(contexts)
-    context = " [SEP] ".join([example["question"] , context])
+    context = " [SEP] ".join([example["question"], context])
     return {f"fc_{masking_scheme}": context}
 
 
@@ -92,8 +92,9 @@ def main(
     # Drop Distractor Content
     print("Dropping distractor sentences...")
     if distract_or_focus == "focus":
+        new_ds = new_ds.add_column("context_distractor", [{} for _ in range(len(new_ds))])
         new_ds = new_ds.map(
-            drop_distractor,
+            split_distractor,
             cache_file_name=cache_file_name,
             load_from_cache_file=load_from_cache,
         )
@@ -130,11 +131,7 @@ def main(
     # Normalize Whitespace
     print("Normalizing whitespace...")
     new_ds = new_ds.map(
-        lambda x: {
-            f"fc_{masking_scheme}": " ".join(
-                x[f"fc_{masking_scheme}"].split()
-            )
-        },
+        lambda x: {f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())},
         cache_file_name=cache_file_name,
         load_from_cache_file=load_from_cache,
     )

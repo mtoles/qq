@@ -1,3 +1,4 @@
+from collections import defaultdict
 from numpy import random
 
 
@@ -32,16 +33,51 @@ def mask_random_sentence(example):
     # return example
 
 
-def drop_distractor(example):
-    """Edit the example IN PLACE to remove distractor content."""
-    supporting_titles = example["supporting_facts"]["title"]
+def split_distractor(example):
+    """Edit the example to remove distractor content. Create a new col containing the distractor content."""
+
+    new_example = example.copy()
+
+    # Sort the titles
     all_titles = example["context_None"]["title"]
-    for i in reversed(
-        range(len(example["context_None"]["title"]))
-    ):  # fix edit while iterating issue
-        if all_titles[i] not in supporting_titles:
-            example["context_None"]["sentences"].pop(i)  # TODO: iterate backwards
-            example["context_None"]["title"].pop(i)
+    supporting_titles = example["supporting_facts"]["title"]
+    new_example["context_None"]["title"] = supporting_titles
+    new_example["context_distractor"]["title"] = [
+        x for x in all_titles if x not in supporting_titles
+    ]
+
+    # Sort the sentences
+    new_example["context_None"]["sentences"] = [
+        [] for _ in range(len(example["context_None"]["sentences"]))
+    ]
+    new_example["context_distractor"]["sentences"] = [
+        [] for _ in range(len(example["context_None"]["sentences"]))
+    ]
+
+    supporting_sentences = defaultdict(set)
+    for title, sent_index in zip(
+        example["supporting_facts"]["title"], example["supporting_facts"]["sent_id"]
+    ):
+        supporting_sentences[title].add(sent_index)
+
+    for j, (title, sentences) in enumerate(
+        zip(example["context_None"]["title"], example["context_None"]["sentences"])
+    ):
+        for i, sent in enumerate(sentences):
+            if i in supporting_sentences[title]:
+                new_example["context_None"]["sentences"][j].append(sent)
+                new_example["context_None"]["title"].append(title)
+            else:
+                new_example["context_distractor"]["sentences"][j].append(sent)
+                new_example["context_distractor"]["title"].append(title)
+    return new_example
+
+    # num_titles = len(example["context_None"]["title"])
+    # for i in reversed(range(num_titles)):
+    #     if all_titles[i] not in supporting_titles:
+    #         example["context_None"]["sentences"].pop(i)
+    #         example["context_None"]["title"].pop(i)
+
     return example
 
 
