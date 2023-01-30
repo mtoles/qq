@@ -17,9 +17,6 @@ PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
 
 
 def _get_single_answer(example):
-    # This function actually does nothing since examples never have more than one
-    # answer in HotpotQA (unlike Natural Questions) -Matt
-    # TODO: remove entirely
     def choose_first(answer, is_long_answer=False):
         assert isinstance(answer, list)
         assert len(answer) == 1  # matt
@@ -51,12 +48,6 @@ def _get_single_answer(example):
             out["text"] = []
         answer.update(out)
 
-    # disregard some samples
-    if len(answer["start_token"]) > 1 or answer["start_token"] == answer["end_token"]:
-        answer["remove_it"] = True
-    else:
-        answer["remove_it"] = False
-
     cols = ["start_token", "end_token", "start_byte", "end_byte", "text"]
     if not all([isinstance(answer[k], list) for k in cols]):
         raise ValueError("Issue in ID", example["id"])
@@ -64,7 +55,7 @@ def _get_single_answer(example):
     return answer
 
 
-def get_context_and_ans(example, assertion=False):
+def get_context_and_ans(example):
     """Gives new context after removing <html> & new answer tokens as per new context"""
     answer = _get_single_answer(example)
     # bytes are of no use
@@ -110,16 +101,7 @@ def get_context_and_ans(example, assertion=False):
                 end_token -= 1
     new = " ".join(context[start_token:end_token])
 
-    # checking above code
-    if assertion:
-        """checking if above code is working as expected for all the samples"""
-        is_html = doc["is_html"][answer["start_token"] : answer["end_token"]]
-        old = doc["token"][answer["start_token"] : answer["end_token"]]
-        old = " ".join([old[i] for i in range(len(old)) if not is_html[i]])
-        if new != old:
-            print("ID:", example["id"])
-            print("New:", new, end="\n")
-            print("Old:", old, end="\n\n")
+
     output = {
         "context": " ".join(context),
         "answer": {
@@ -136,12 +118,10 @@ def get_strided_contexts_and_ans(
     example,
     tokenizer,
     max_length,
-    assertion=True,
-    # masking_scheme=None,
 ):
     # overlap will be of doc_stride - q_len
 
-    out = get_context_and_ans(example, assertion=assertion)
+    out = get_context_and_ans(example)
     answer = out["answer"]
     input_ids = tokenizer(out["context"]).input_ids
 
@@ -213,13 +193,6 @@ def get_strided_contexts_and_ans(
         start_token = answer["start_token"]
         end_token = answer["end_token"]
 
-        if assertion:
-            """This won't match exactly because of extra gaps => visaully inspect everything"""
-            new = tokenizer.decode(old)
-            if answer["span"] != new:
-                print("ISSUE IN TOKENIZATION")
-                print("OLD:", answer["span"])
-                print("NEW:", new, end="\n\n")
 
         # input is short enough to fit inside max_length
         if len(input_ids) <= max_length:
@@ -240,14 +213,13 @@ def get_strided_contexts_and_ans(
 
 
 def prepare_inputs_nq(
-    example, tokenizer, doc_stride=2048, max_length=4096, assertion=False
+    example, tokenizer, doc_stride=2048, max_length=4096
 ):
     example = get_strided_contexts_and_ans(
         example,
         tokenizer,
         doc_stride=doc_stride,
         max_length=max_length,
-        assertion=assertion,
     )
 
     return example
@@ -257,7 +229,6 @@ def prepare_inputs_hp(
     example,
     tokenizer,
     max_length,
-    assertion=False,
     masking_scheme=None,
 ):
     adapted_example = adapt_example(example, masking_scheme=masking_scheme)
@@ -265,7 +236,6 @@ def prepare_inputs_hp(
         adapted_example,
         tokenizer,
         max_length=max_length,
-        assertion=assertion,
     )
 
     return tokenized_example
