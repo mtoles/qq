@@ -120,17 +120,17 @@ def main(
 
     if model_class == "bigbird":
         MODEL_ID = BB_MODEL_ID
-        tokenizer = BigBirdTokenizer.from_pretrained(MODEL_ID)
+        tk = BigBirdTokenizer.from_pretrained(MODEL_ID)
         if model_path is not None:
-            model = BigBirdForNaturalQuestions.from_pretrained(model_path, tokenizer)
+            model = BigBirdForNaturalQuestions.from_pretrained(model_path, tk)
         else:
             model = BigBirdForNaturalQuestions.from_pretrained(
-                MODEL_ID, gradient_checkpointing=True, tk=tokenizer
+                MODEL_ID, gradient_checkpointing=True, tk=tk
             )
     else:
         raise ValueError(f"model {model_class} not supported")
     output_dir = f"bigbird_{base_dataset}_complete_tuning"
-    check_tokenizer(tokenizer)
+    check_tokenizer(tk)
     max_length = model.bert.embeddings.position_embeddings.weight.shape[0]
     # Load Data
     if tr_dataset_path is not None:
@@ -144,7 +144,7 @@ def main(
         tr_dataset = tr_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
-                tokenizer=tokenizer,
+                tk=tk,
                 max_length=max_length,
                 masking_scheme=masking_scheme,
             ),
@@ -161,7 +161,7 @@ def main(
     val_dataset = drop_unanswerable(val_dataset, masking_scheme, load_from_cache)
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
-            x, tokenizer=tokenizer, max_length=max_length, masking_scheme=masking_scheme
+            x, tk=tk, max_length=max_length, masking_scheme=masking_scheme
         ),
         load_from_cache_file=load_from_cache,
     )
@@ -192,7 +192,7 @@ def main(
             "start_positions",
             "end_positions",
             "gt_answers",
-        ],  
+        ],
         evaluation_strategy="epoch",
         eval_steps=0.05,
         save_strategy="epoch",
@@ -210,11 +210,11 @@ def main(
     trainer = Trainer(
         model=model,
         args=args,
-        data_collator=(lambda x: collate_fn(x, tokenizer)),
+        data_collator=(lambda x: collate_fn(x, tk)),
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
-        compute_metrics=lambda x: compute_metrics(x, tokenizer, log_path),
-        tokenizer=tokenizer,  
+        compute_metrics=lambda x: compute_metrics(x, tk, log_path),
+        tokenizer=tk,
     )
     if mode == "eval":
         metrics = trainer.evaluate()
@@ -226,7 +226,6 @@ def main(
             trainer.save_model(f"models/{base_dataset}-final-model-exp-{now}")
         except KeyboardInterrupt:
             trainer.save_model(f"models/{base_dataset}-interrupted-model-exp-{now}")
-
 
 
 if __name__ == "__main__":

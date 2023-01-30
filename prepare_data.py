@@ -101,7 +101,6 @@ def get_context_and_ans(example):
                 end_token -= 1
     new = " ".join(context[start_token:end_token])
 
-
     output = {
         "context": " ".join(context),
         "answer": {
@@ -177,8 +176,8 @@ def get_strided_contexts_and_ans(
             + 1
         )
 
-        answer["start_token"] #+= q_len
-        answer["end_token"] #+= q_len
+        answer["start_token"]  # += q_len
+        answer["end_token"]  # += q_len
 
         # fixing end token
         num_sub_tokens = len(
@@ -192,7 +191,6 @@ def get_strided_contexts_and_ans(
         ]  # right & left are inclusive
         start_token = answer["start_token"]
         end_token = answer["end_token"]
-
 
         # input is short enough to fit inside max_length
         if len(input_ids) <= max_length:
@@ -212,9 +210,7 @@ def get_strided_contexts_and_ans(
     return output
 
 
-def prepare_inputs_nq(
-    example, tokenizer, doc_stride=2048, max_length=4096
-):
+def prepare_inputs_nq(example, tokenizer, doc_stride=2048, max_length=4096):
     example = get_strided_contexts_and_ans(
         example,
         tokenizer,
@@ -227,14 +223,14 @@ def prepare_inputs_nq(
 
 def prepare_inputs_hp(
     example,
-    tokenizer,
+    tk,
     max_length,
     masking_scheme=None,
 ):
     adapted_example = adapt_example(example, masking_scheme=masking_scheme)
     tokenized_example = get_strided_contexts_and_ans(
         adapted_example,
-        tokenizer,
+        tk,
         max_length=max_length,
     )
 
@@ -250,6 +246,7 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
     start_token_index = find_sublist_in_list(answer_li, context_li)
     end_token_index = start_token_index + len(answer_li)
     return start_token_index, end_token_index
+
 
 def adapt_example(example, masking_scheme=None):
     masking_scheme = str(masking_scheme)
@@ -285,5 +282,7 @@ def adapt_example(example, masking_scheme=None):
         ],
         "yes_no_answer": yn_dict[answer],
     }
-    assert answer in ["yes", "no"] or normalize_answer(example["answer"]) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
+    assert answer in ["yes", "no"] or normalize_answer(
+        example["answer"]
+    ) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
     return new_example
