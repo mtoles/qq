@@ -19,6 +19,11 @@ def mask_random_sentence(example):
     rand_keys = fact_keys[rand_index]
     new_example["masked_sentence"] = new_example["context_None"]["sentences"][rand_keys[0]].pop(rand_keys[1]
     )
+
+    # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
+    new_example["context_randomsentence"] = new_example["context_None"]
+    new_example["context_randomsentence"]["sentences"].pop(rand_index)
+
     # debug_context = "[SEP]".join(
     #     [" ".join(x) for x in new_example["context_None"]["sentences"]]
     # )

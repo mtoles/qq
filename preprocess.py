@@ -107,6 +107,7 @@ def main(
         masking_fn = masking_dict[masking_scheme]
         print(f"Applying masking scheme {masking_scheme}...")
         new_ds = new_ds.add_column(name="masked_sentence", column=["" for _ in range(len(new_ds))])
+        new_ds = new_ds.add_column(name="context_randomsentence", column=[{} for _ in range(len(new_ds))])
         # masked_col = new_ds.map(
         #     masking_fn,
         #     cache_file_name=cache_file_name,
