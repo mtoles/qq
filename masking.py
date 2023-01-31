@@ -1,5 +1,6 @@
 from collections import defaultdict
 from numpy import random
+from copy import deepcopy
 
 
 def mask_random_sentence(example):
@@ -10,20 +11,22 @@ def mask_random_sentence(example):
 
     # Locate all the facts
     fact_keys = []
-    for i, sentences in enumerate(example["context_None"]["sentences"]):
+    for i, sentences in enumerate(example["context_supporting"]["sentences"]):
         for j, sentence in enumerate(sentences):
             fact_keys.append((i, j))
 
     # Select one random fact
     rand_index = random.randint(0, len(fact_keys))
     rand_keys = fact_keys[rand_index]
-    new_example["masked_sentence"] = new_example["context_None"]["sentences"][rand_keys[0]].pop(rand_keys[1]
-    )
+    new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
+        rand_keys[0]
+    ][rand_keys[1]]
 
     # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
-    new_example["context_randomsentence"] = new_example["context_None"]
-    new_example["context_randomsentence"]["sentences"].pop(rand_index)
-
+    new_example["context_randomsentence"]["sentences"] = deepcopy(
+        new_example["context_supporting"]["sentences"]
+    )
+    new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
     # debug_context = "[SEP]".join(
     #     [" ".join(x) for x in new_example["context_None"]["sentences"]]
     # )
@@ -39,13 +42,13 @@ def split_distractor(example):
     # Sort the titles
     all_titles = example["context_None"]["title"]
     supporting_titles = example["supporting_facts"]["title"]
-    new_example["context_None"]["title"] = supporting_titles
-    new_example["context_distractor"]["title"] = [
-        x for x in all_titles if x not in supporting_titles
-    ]
+    # new_example["context_supporting"]["title"] = supporting_titles
+    # new_example["context_distractor"]["title"] = [
+    # x for x in all_titles if x not in supporting_titles
+    # ]
 
     # Sort the sentences
-    new_example["context_None"]["sentences"] = [
+    new_example["context_supporting"]["sentences"] = [
         [] for _ in range(len(example["context_None"]["sentences"]))
     ]
     new_example["context_distractor"]["sentences"] = [
@@ -63,11 +66,11 @@ def split_distractor(example):
     ):
         for i, sent in enumerate(sentences):
             if i in supporting_sentences[title]:
-                new_example["context_None"]["sentences"][j].append(sent)
-                new_example["context_None"]["title"].append(title)
+                new_example["context_supporting"]["sentences"][j].append(sent)
+                # new_example["context_supporting"]["title"].append(title)
             else:
                 new_example["context_distractor"]["sentences"][j].append(sent)
-                new_example["context_distractor"]["title"].append(title)
+                # new_example["context_distractor"]["title"].append(title)
     return new_example
 
     # num_titles = len(example["context_None"]["title"])

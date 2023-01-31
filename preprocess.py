@@ -12,7 +12,7 @@ import datasets
 from typing import List, Optional, Tuple
 from collections import defaultdict, Counter
 
-from masking import mask_random_sentence, split_distractor
+from masking import mask_random_sentence, mask_None, split_distractor
 from utils import (
     make_cache_file_name,
     get_downsample_dataset_size_str,
@@ -29,10 +29,10 @@ PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
 def flatten_context(example, masking_scheme):
     masking_str = f"context_{masking_scheme}"
     output = ""
-    titles = example[masking_str]["title"]  # list of str
+    titles = example["context_None"]["title"]  # list of str
     sentences = example[masking_str]["sentences"]  # list of list of str
     paragraphs = [" ".join(s) for s in sentences]
-    contexts = [f"{t}: {p}" for t, p in zip(titles, paragraphs)]
+    contexts = [f"{t}: {p}" for t, p in zip(titles, paragraphs) if p]
     context = "\n\n".join(contexts)
     context = " [SEP] ".join([example["question"], context])
     return {f"fc_{masking_scheme}": context}
@@ -60,7 +60,8 @@ def main(
     assert split in ["train", "validation"], "Invalid split"
     assert dataset in ["hotpot"], "Invalid dataset"
     assert "None" not in masking_schemes, "`None` masking will be included by default."
-    masking_dict = {"randomsentence": mask_random_sentence}
+    # masking_schemes = list(masking_schemes) + ["None"]
+    masking_dict = {"randomsentence": mask_random_sentence, "None": mask_None}
     for masking_scheme in masking_schemes:
         assert (
             masking_scheme in masking_dict.keys()
@@ -92,7 +93,12 @@ def main(
     # Drop Distractor Content
     print("Dropping distractor sentences...")
     if distract_or_focus == "focus":
-        new_ds = new_ds.add_column("context_distractor", [{} for _ in range(len(new_ds))])
+        new_ds = new_ds.add_column(
+            "context_distractor", [{} for _ in range(len(new_ds))]
+        )
+        new_ds = new_ds.add_column(
+            "context_supporting", [{} for _ in range(len(new_ds))]
+        )
         new_ds = new_ds.map(
             split_distractor,
             cache_file_name=cache_file_name,
@@ -106,19 +112,29 @@ def main(
 
         masking_fn = masking_dict[masking_scheme]
         print(f"Applying masking scheme {masking_scheme}...")
-        new_ds = new_ds.add_column(name="masked_sentence", column=["" for _ in range(len(new_ds))])
-        new_ds = new_ds.add_column(name="context_randomsentence", column=[{} for _ in range(len(new_ds))])
+
+        # empty columns to be filled in by the masking function
+        new_ds = new_ds.add_column(
+            name="masked_sentence", column=["" for _ in range(len(new_ds))]
+        )
+        new_ds = new_ds.add_column(
+            name="context_randomsentence", column=[{} for _ in range(len(new_ds))]
+        )
         # masked_col = new_ds.map(
         #     masking_fn,
         #     cache_file_name=cache_file_name,
         #     load_from_cache_file=load_from_cache,
         # )["masked_col"]
         # new_ds = new_ds.add_column(name=masking_str, column=masked_col)
-        new_ds = new_ds.map(masking_fn, cache_file_name=cache_file_name, load_from_cache_file=load_from_cache)
+        new_ds = new_ds.map(
+            masking_fn,
+            cache_file_name=cache_file_name,
+            load_from_cache_file=load_from_cache,
+        )
 
     # Flatten Each Context
 
-    for masking_scheme in list(masking_schemes) + ["None"]:
+    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
         masking_str = f"context_{masking_scheme}"
         print(f"Flattening context {masking_scheme}...")
         flat_col = new_ds.map(
@@ -129,7 +145,7 @@ def main(
             f"fc_{masking_scheme}"
         ]  # fc == flattened context
         new_ds = new_ds.add_column(name=f"fc_{masking_scheme}", column=flat_col)
-        new_ds = new_ds.remove_columns([f"context_{masking_scheme}"])
+        # new_ds = new_ds.remove_columns([f"context_{masking_scheme}"])
 
     # Normalize Whitespace
     print("Normalizing whitespace...")
