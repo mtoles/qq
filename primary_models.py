@@ -24,7 +24,7 @@ class Primary_Model:
         self.prepped_val_dataset = prepped_val_dataset
         self.collate_fn = lambda x: collate_fn(x, self.tk)
         self.args = TrainingArguments(
-            output_dir=None,
+            output_dir="main/outputs/",
             do_train=False,
             do_eval=True,
             per_gpu_eval_batch_size=eval_batch_size,
@@ -95,4 +95,4 @@ class BigBird_PM(Primary_Model):
                 masking_scheme=masking_scheme,
             )
         )
-        super().prepare_data(self.raw_val_dataset)
+        super().prepare_data(self.prepped_val_dataset)

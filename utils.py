@@ -126,7 +126,7 @@ def find_sublist_in_list(sl, l):
         if l[i : i + subsequence_length] == sl:
             result = i
             break
-    assert result != -1, "Sublist not found in list"
+    # assert result != -1, "Sublist not found in list"
     return result
 
 

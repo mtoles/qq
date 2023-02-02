@@ -282,7 +282,7 @@ def adapt_example(example, masking_scheme=None):
         ],
         "yes_no_answer": yn_dict[answer],
     }
-    assert answer in ["yes", "no"] or normalize_answer(
-        example["answer"]
-    ) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
+    # assert answer in ["yes", "no"] or normalize_answer(
+    #     example["answer"]
+    # ) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
     return new_example

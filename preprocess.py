@@ -91,19 +91,20 @@ def main(
     )
 
     # Drop Distractor Content
-    print("Dropping distractor sentences...")
-    if distract_or_focus == "focus":
-        new_ds = new_ds.add_column(
-            "context_distractor", [{} for _ in range(len(new_ds))]
-        )
-        new_ds = new_ds.add_column(
-            "context_supporting", [{} for _ in range(len(new_ds))]
-        )
-        new_ds = new_ds.map(
-            split_distractor,
-            cache_file_name=cache_file_name,
-            load_from_cache_file=load_from_cache,
-        )
+    print("Splitting out distractor sentences...")
+    # if distract_or_focus == "focus":
+    assert distract_or_focus == "focus", "distract not implemented yet"
+    new_ds = new_ds.add_column(
+        "context_distractor", [{} for _ in range(len(new_ds))]
+    )
+    new_ds = new_ds.add_column(
+        "context_supporting", [{} for _ in range(len(new_ds))]
+    )
+    new_ds = new_ds.map(
+        split_distractor,
+        cache_file_name=cache_file_name,
+        load_from_cache_file=load_from_cache,
+    )
 
     # Apply Each Masking Scheme
 
@@ -114,12 +115,14 @@ def main(
         print(f"Applying masking scheme {masking_scheme}...")
 
         # empty columns to be filled in by the masking function
-        new_ds = new_ds.add_column(
-            name="masked_sentence", column=["" for _ in range(len(new_ds))]
-        )
-        new_ds = new_ds.add_column(
-            name="context_randomsentence", column=[{} for _ in range(len(new_ds))]
-        )
+        if "masked_sentence" not in new_ds.column_names:
+            new_ds = new_ds.add_column(
+                name="masked_sentence", column=["" for _ in range(len(new_ds))]
+            )
+        if "context_randomsentence" not in new_ds.column_names:
+            new_ds = new_ds.add_column(
+                name="context_randomsentence", column=[{} for _ in range(len(new_ds))]
+            )
         # masked_col = new_ds.map(
         #     masking_fn,
         #     cache_file_name=cache_file_name,
@@ -144,16 +147,19 @@ def main(
         )[
             f"fc_{masking_scheme}"
         ]  # fc == flattened context
-        new_ds = new_ds.add_column(name=f"fc_{masking_scheme}", column=flat_col)
+        if f"fc_{masking_scheme}" not in new_ds.column_names:
+            new_ds = new_ds.add_column(name=f"fc_{masking_scheme}", column=flat_col)
         # new_ds = new_ds.remove_columns([f"context_{masking_scheme}"])
 
     # Normalize Whitespace
     print("Normalizing whitespace...")
-    new_ds = new_ds.map(
-        lambda x: {f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())},
-        cache_file_name=cache_file_name,
-        load_from_cache_file=load_from_cache,
-    )
+    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
+        # masking_str = f"context_{masking_scheme}"
+        new_ds = new_ds.map(
+            lambda x: {f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())},
+            cache_file_name=cache_file_name,
+            load_from_cache_file=load_from_cache,
+        )
 
     save_path = os.path.join(
         "data",
