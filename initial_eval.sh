@@ -1,4 +1,4 @@
-now=$(date +"%Y%m%d-%H%M%S")
+now=$(date +"%y%m%d-%H%M%S")
 results_filename="bash_initial_eval_"$now
 
 
