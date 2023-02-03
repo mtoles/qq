@@ -16,6 +16,7 @@ from datetime import datetime
 @click.option("--pt_dataset_path", help="path to primary task dataset")
 @click.option("--pm_path", help="path to primary model")
 @click.option("--pm_arch", help="primary model architecture")
+@click.option("--eval_batch_size", default=2, help="batch size for eval")
 @click.option("--masking_scheme", help="{randomsentence | None")
 @click.option(
     "--downsample_pt_size",
@@ -23,7 +24,7 @@ from datetime import datetime
     help="use at most this many examples in validation",
 )
 @click.option("--results_filename", help="path to save results")
-def main(pt_dataset_path, pm_path, pm_arch, masking_scheme, downsample_pt_size, results_filename):
+def main(pt_dataset_path, pm_path, pm_arch, eval_batch_size, masking_scheme, downsample_pt_size, results_filename):
     now = datetime.now().strftime("y%m%d-%H%M%S")
     
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
@@ -41,9 +42,9 @@ def main(pt_dataset_path, pm_path, pm_arch, masking_scheme, downsample_pt_size, 
 
         # Load primary model
         if pm_arch == "bigbird":
-            pm = BigBird_PM(pm_path, raw_val_dataset=pt_dataset)
-        elif pm_path == "gptneox":
-            pm = GPTNeoX_PM(raw_val_dataset=pt_dataset)
+            pm = BigBird_PM(pm_path, eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset)
+        elif pm_arch == "gptneox":
+            pm = GPTNeoX_PM(eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset)
         else:
             raise NotImplementedError
 

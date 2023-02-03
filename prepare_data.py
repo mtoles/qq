@@ -136,7 +136,7 @@ def get_strided_contexts_and_ans(
             },
         }
 
-    q_len = input_ids.index(tokenizer.sep_token_id) + 1
+    # q_len = input_ids.index(tokenizer.sep_token_id) + 1
 
     # return yes/no
     if answer["category"][0] in ["yes", "no"]:  # category is list with one element

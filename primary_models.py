@@ -14,7 +14,7 @@ class Primary_Model:
     def __init__(
         self,
         model_path=None,
-        eval_batch_size=32,
+        eval_batch_size=2,
         raw_val_dataset=None,
         prepped_val_dataset=None,
     ):
@@ -60,7 +60,7 @@ class BigBird_PM(Primary_Model):
     def __init__(
         self,
         model_path=None,
-        eval_batch_size=32,
+        eval_batch_size=2,
         raw_val_dataset=None,
         prepped_val_dataset=None,
     ):
@@ -90,15 +90,16 @@ class BigBird_PM(Primary_Model):
 class GPTNeoX_PM(Primary_Model):
     def __init__(
         self,
-        eval_batch_size=32,
+        eval_batch_size=2,
         raw_val_dataset=None,
         prepped_val_dataset=None,
     ):
         self.tk = GPTNeoXTokenizerFast.from_pretrained(GPT_NEO_X_MODEL_ID)
+        self.tk.pad_token_id = 1 # specific to gpt-neo-x
         self.model = BigBirdForNaturalQuestions.from_pretrained(
             BB_MODEL_ID, self.tk
         )
-        super(BigBird_PM, self).__init__(
+        super(GPTNeoX_PM, self).__init__(
             model_path=None,
             eval_batch_size=eval_batch_size,
             raw_val_dataset=raw_val_dataset,

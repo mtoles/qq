@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from pathlib import PurePath
 
 BB_MODEL_ID = "google/bigbird-base-trivia-itc"
-GPT_NEO_X_MODEL_ID = "EleutherAI/gpt-neo-20B"
+GPT_NEO_X_MODEL_ID = "EleutherAI/gpt-neox-20b"
 CATEGORY_MAPPING = {"null": 0, "short": 1, "long": 2, "yes": 3, "no": 4}
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
 
@@ -54,7 +54,9 @@ def unstack_with_padding(tensor, lengths):
 
 
 def collate_fn(features, tk, threshold=1024):
+
     pad_id = tk.pad_token_id
+    assert pad_id is not None, "Tokenizer has no pad token"
 
     def pad_elems(ls, pad_id, maxlen):
         while len(ls) < maxlen:
