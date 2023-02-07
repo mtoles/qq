@@ -5,7 +5,7 @@ from datasets import load_from_disk
 from prepare_data import prepare_inputs_hp
 from utils import BB_MODEL_ID, collate_fn_bb, check_tokenizer
 from dataset_utils import drop_unanswerable, check_dataset
-from metrics import compute_metrics
+from metrics import compute_metrics_bb
 from bb_model import BigBirdForNaturalQuestions
 
 from transformers import (
@@ -213,7 +213,7 @@ def main(
         data_collator=(lambda x: collate_fn_bb(x, tk)),
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
-        compute_metrics=lambda x: compute_metrics(x, tk, log_path),
+        compute_metrics=lambda x: compute_metrics_bb(x, tk, log_path),
         tokenizer=tk,
     )
     if mode == "eval":

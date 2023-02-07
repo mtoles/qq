@@ -4,7 +4,7 @@
 from utils import BB_MODEL_ID, GPT_NEO_MODEL_ID
 from bb_model import BigBirdForNaturalQuestions
 from utils import collate_fn_bb
-from metrics import compute_metrics
+from metrics import compute_metrics_bb, get_metrics
 from transformers import (
     BigBirdTokenizer,
     AutoTokenizer,
@@ -15,6 +15,7 @@ from transformers import (
 )
 from transformers import Trainer
 from prepare_data import prepare_inputs_hp
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -44,10 +45,17 @@ class Primary_Model:
         return self.model(**inputs)
 
     def prepare_data(self, masking_scheme):
+        print("You should subclass this method")
+        pass
+
+    def evaluate(self):
+        print("You should subclass this method")
         pass
 
 
 class BigBird_PM(Primary_Model):
+    """This is an example of how to wrap a model based on the hugging face trainer."""
+
     def __init__(
         self,
         model_path=None,
@@ -98,12 +106,18 @@ class BigBird_PM(Primary_Model):
             args=self.args,
             data_collator=self.collate_fn,
             eval_dataset=self.prepped_val_dataset,
-            compute_metrics=lambda x: compute_metrics(x, self.tk, None),
+            compute_metrics=lambda x: compute_metrics_bb(x, self.tk, None),
             tokenizer=self.tk,
         )
 
+    def evaluate(self):
+        return self.trainer.evaluate()
+
 
 class GPTNeoX_PM(Primary_Model):
+    """This is an example of how to wrap a model NOT based on the hugging face trainer
+    (Which just happens to be pulled from hugging face hub)"""
+
     def __init__(
         self,
         eval_batch_size=2,
@@ -122,19 +136,11 @@ class GPTNeoX_PM(Primary_Model):
         )
 
     def forward(self, **inputs):
-        """start_logits, end_logits, cls_pred, tokens_pred, input_ids = x[0]
-        cls_gt, start_gt, end_gt, tokens_gt = x[1]"""
-        input_ids = inputs["input_ids"]
-        attention_mask = inputs["attention_mask"]
-        assert attention_mask.sum() != 0, "attention_mask must not be all zeros"
-        generation = self.model.generate(input_ids, attention_mask=attention_mask)
-        loss, outputs = torch.tensor(np.nan), generation
+        """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
+        input_ids = torch.tensor(inputs["input_ids"]).unsqueeze(0)
+        generation = self.model.generate(input_ids)
 
-        start_logits = None
-        end_logits = None
-        cls_pred = None
-
-        return (loss, outputs)
+        return generation
 
     def prepare_data(self, masking_scheme):
         masking_str = f"fc_{masking_scheme}"
@@ -157,4 +163,31 @@ class GPTNeoX_PM(Primary_Model):
             )
         )
 
-        super().prepare_data(self.prepped_val_dataset)
+    def evaluate(self):
+        with torch.no_grad():
+            str_pred = []
+            str_gt = []
+            cls_pred = []
+            cls_gt = []
+            input_ids = []
+
+            for i, x in tqdm(enumerate(self.prepped_val_dataset)):
+                generation = self.forward(input_ids=x["input_ids"])
+                str_pred.append(
+                    self.tk.batch_decode(generation, skip_special_tokens=True)[0]
+                )
+                str_gt.append(x["answer"])
+                cls_pred.append(None)
+                cls_gt.append(None)
+                input_ids.append(x["input_ids"])
+            metrics = get_metrics(
+                str_pred,
+                str_gt,
+                cls_pred,
+                cls_gt,
+                input_ids,
+                self.tk,
+                None,
+            )
+            print(metrics)
+            pass

@@ -6,7 +6,8 @@ from utils import (
 from dataset_utils import expand_to_aliases
 from hotpot_evaluate_v1 import f1_score
 
-def compute_metrics(x, tk, log_path):
+
+def compute_metrics_bb(x, tk, log_path):
     """cls predictions and ground truths are passed as integer categories.
     answers predictions are passed as tokenized sequences.
     however, answer ground truths are passed as start and end indices.
@@ -45,13 +46,13 @@ def get_metrics(
     recalls = []
     for i in range(len(str_pred)):
         m, f, p, r = get_metrics_single(
-            str_pred[i],
-            str_gt[i],
-            cls_pred[i],
-            cls_gt[i],
-            input_ids[i],
-            tk,
-            log_path,
+            str_pred=str_pred[i],
+            str_gt=str_gt[i],
+            tk=tk,
+            cls_pred=cls_pred[i],
+            cls_gt=cls_gt[i],
+            input_ids=input_ids[i],
+            log_path=log_path,
         )
         matches.append(m)
         f1s.append(f)
@@ -68,61 +69,23 @@ def get_metrics(
 def get_metrics_single(
     str_pred,
     str_gt,
-    cls_pred,
-    cls_gt,
-    input_ids,
     tk,
-    log_path,
+    cls_pred=None,
+    cls_gt=None,
+    input_ids=None,
+    log_path=None,
 ):
-    cat_pred = INVERSE_CATEGORY_MAPPING[cls_pred.item()]
-    # get ground truth answers
-    category = INVERSE_CATEGORY_MAPPING[cls_gt]
-    if category in ["yes", "no"]:
-        answer_gt = category
-        answer_gt_expanded = set([category])
-    # else:
-    #     # TODO: needs to take in actual ground truth text and compare rather than use indexing
-    #     # start_idx_gt==-1 indicates answer does not exist in context.
-    #     if start_idx_gt >= 0:
-    #         answer_gt = tk.decode(input_ids[start_idx_gt : end_idx_gt + 1])
-    #         answer_gt_expanded = expand_to_aliases(
-    #             [answer_gt],
-    #             make_sub_answers=True,
-    #         )
-    #     elif start_idx_gt == -1:
-    #         answer_gt = None
-    #     else:
-    #         raise ValueError("start_idx_gt should be -1 or >=0")
+    # if cls_pred is not None:
+    #     cat_pred = INVERSE_CATEGORY_MAPPING[cls_pred.item()]
+    #     # get ground truth answers
+    #     category = INVERSE_CATEGORY_MAPPING[cls_gt]
+    #     if category in ["yes", "no"]:
+    #         answer_gt = category
+    #         answer_gt_expanded = set([category])
+    #     # get predicted answers
+    #     if cat_pred in ["yes", "no"]:
+    #         str_pred = cat_pred
 
-    # get predicted answers
-    if cat_pred in ["yes", "no"]:
-        str_pred = cat_pred
-    # else:
-    #     model_output = unpad_and_tokenize_single(tokenized_answer, tk)
-    #     # model_output = tk.decode(answer_tokens_pred)
-    # answer_gt_expanded = expand_to_aliases([str_gt], make_sub_answers=True)
-
-    # predictions = expand_to_aliases([str_pred])
-
-    # # if there is a common element, it's a match
-    # match = len(list(answer_gt_expanded & predictions)) > 0
-
-    # # f1
-    # tp = sum([word in str_gt for word in str_pred.split(" ")])
-    # fp = sum([word not in str_gt for word in str_pred.split(" ")])
-    # fn = sum([word not in str_pred for word in str_gt.split(" ")])
-    # try:
-    #     precision = tp / (tp + fp)
-    # except ZeroDivisionError:
-    #     precision = 0
-    # try:
-    #     recall = tp / (tp + fn)
-    # except ZeroDivisionError:
-    #     recall = 0
-    # try:
-    #     f1 = 2 * (precision * recall) / (precision + recall)
-    # except ZeroDivisionError:
-        # f1 = 0
     match = 0
     f1, precision, recall = f1_score(str_pred, str_gt)
     if log_path is not None:
@@ -142,7 +105,7 @@ def get_metrics_single(
     return match, f1, precision, recall
 
 
-def log_results( 
+def log_results(
     str_pred,
     str_gt,
     cls_pred,
@@ -169,4 +132,3 @@ recall: {str(recall)[:5]}
 """
     with open(log_path, "a") as f:
         f.write(log_entry)
-

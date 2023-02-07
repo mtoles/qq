@@ -49,7 +49,7 @@ def main(pt_dataset_path, pm_path, pm_arch, eval_batch_size, masking_scheme, dow
             raise NotImplementedError
 
         pm.prepare_data(masking_scheme=masking_scheme)
-        eval_metrics = pm.trainer.evaluate()
+        eval_metrics = pm.evaluate()
         f.write(
             f"""Model:     {pm_path}
 Datetime:  {now}
