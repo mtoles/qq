@@ -26,6 +26,8 @@ from datetime import datetime
 @click.option("--results_filename", help="path to save results")
 def main(pt_dataset_path, pm_path, pm_arch, eval_batch_size, masking_scheme, downsample_pt_size, results_filename):
     now = datetime.now().strftime("y%m%d-%H%M%S")
+    if results_filename is None:
+        results_filename = f"{pm_arch}-{downsample_pt_size}-{masking_scheme}-{now}"
     
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
 

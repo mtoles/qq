@@ -114,7 +114,7 @@ class BigBird_PM(Primary_Model):
         evaluation = self.trainer.evaluate()
         # remove the "eval_" prefix from each dictionary key
         evaluation = {k[5:]: v for k, v in evaluation.items() if k.startswith("eval_")}
-        return 
+        return
 
 
 class GPTNeoX_PM(Primary_Model):
@@ -154,7 +154,9 @@ class GPTNeoX_PM(Primary_Model):
             assert (
                 len(x[masking_str].split("[SEP]")) == 2
             ), "masking_str must contain exactly one [SEP]"
-            x[masking_str] = x[masking_str].replace("[SEP]", "\n\n") # TODO: fix. this is getting stripped out by the split/join
+            x[masking_str] = x[masking_str].replace(
+                "[SEP]", "\n\n"
+            )  # TODO: fix. this is getting stripped out by the split/join
             return x
 
         def _add_prompt(x):
@@ -183,7 +185,9 @@ class GPTNeoX_PM(Primary_Model):
             cls_gt = []
             input_ids = []
 
-            for i, x in tqdm(enumerate(self.prepped_val_dataset)):
+            for i, x in enumerate(tqdm(self.prepped_val_dataset)):
+            # for i, x in enumerate(self.prepped_val_dataset):
+                # print(i)
                 generation = self.forward(input_ids=x["input_ids"])
                 generation_str = self.tk.decode(generation[0])
                 str_pred.append(
@@ -202,5 +206,4 @@ class GPTNeoX_PM(Primary_Model):
                 self.tk,
                 None,
             )
-            print(metrics)
-            pass
+        return metrics
