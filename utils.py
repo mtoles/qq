@@ -53,7 +53,7 @@ def unstack_with_padding(tensor, lengths):
     return [t[:l] for t, l in zip(tensor, lengths)]
 
 
-def collate_fn(features, tk, threshold=1024):
+def collate_fn_bb(features, tk, threshold=1024):
 
     pad_id = tk.pad_token_id
     assert pad_id is not None, "Tokenizer has no pad token"

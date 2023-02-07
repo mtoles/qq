@@ -3,7 +3,7 @@ import click
 from datasets import load_from_disk
 
 from prepare_data import prepare_inputs_hp
-from utils import BB_MODEL_ID, collate_fn, check_tokenizer
+from utils import BB_MODEL_ID, collate_fn_bb, check_tokenizer
 from dataset_utils import drop_unanswerable, check_dataset
 from metrics import compute_metrics
 from bb_model import BigBirdForNaturalQuestions
@@ -210,7 +210,7 @@ def main(
     trainer = Trainer(
         model=model,
         args=args,
-        data_collator=(lambda x: collate_fn(x, tk)),
+        data_collator=(lambda x: collate_fn_bb(x, tk)),
         train_dataset=tr_dataset,
         eval_dataset=val_dataset,
         compute_metrics=lambda x: compute_metrics(x, tk, log_path),

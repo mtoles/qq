@@ -7,7 +7,12 @@ from transformers import BigBirdForQuestionAnswering
 
 
 from dataset_utils import *
-from utils import INVERSE_CATEGORY_MAPPING, CATEGORY_MAPPING, stack_with_padding, collate_fn
+from utils import (
+    INVERSE_CATEGORY_MAPPING,
+    CATEGORY_MAPPING,
+    stack_with_padding,
+    collate_fn_bb,
+)
 
 
 def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100):
@@ -25,9 +30,6 @@ def get_best_valid_start_end_idx(start_scores, end_scores, top_k=1, max_size=100
 # Set logging to log level WARN
 bb_logger = logging.getLogger("transformers.models.big_bird.modeling_big_bird")
 bb_logger.setLevel("WARN")
-
-
-
 
 
 class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
@@ -49,8 +51,12 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
     ):
         # assert (start_positions < 0).sum() == 0, "start positions should be >= 0" # can't use due to yes/no questions
         # assert (end_positions < 0).sum() == 0, "end positions should be >= 0" # can't use due to yes/no questions
-        question_lengths = torch.zeros(input_ids.shape[1]).cuda() # allow super to look for answers in the question. I think this is not actually done in the original BB implementation (or vasadevgupta's), but it might just be an artifact from repurposing the natural questions code. Either way I think it's fine and I don't want to rewrite the whole thing.
-        outputs = super().forward(input_ids, attention_mask=attention_mask, question_lengths=question_lengths)
+        question_lengths = torch.zeros(
+            input_ids.shape[1]
+        ).cuda()  # allow super to look for answers in the question. I think this is not actually done in the original BB implementation (or vasadevgupta's), but it might just be an artifact from repurposing the natural questions code. Either way I think it's fine and I don't want to rewrite the whole thing.
+        outputs = super().forward(
+            input_ids, attention_mask=attention_mask, question_lengths=question_lengths
+        )
 
         cls_out = self.cls(outputs.pooler_output)
 
@@ -97,10 +103,8 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             "end_logits": outputs.end_logits,
             "cls_pred": cls_pred,
             "pred_str": tokens_pred,
-            "input_ids": input_ids, # keep here so we can log them later
+            "input_ids": input_ids,  # keep here so we can log them later
         }
-
-
 
     def get_tokens_pred(self, input_ids, start_logits, end_logits):
         # TODO: vectorize
@@ -117,5 +121,3 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
             answer_tokens_preds.append(answer_tokens_pred)
         preds_as_tensor = stack_with_padding(answer_tokens_preds, self.tk.pad_token_id)
         return preds_as_tensor
-
-
