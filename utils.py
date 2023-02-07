@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from pathlib import PurePath
 
 BB_MODEL_ID = "google/bigbird-base-trivia-itc"
-GPT_NEO_X_MODEL_ID = "EleutherAI/gpt-neox-20b"
+GPT_NEO_MODEL_ID = "EleutherAI/gpt-neo-2.7B"
 CATEGORY_MAPPING = {"null": 0, "short": 1, "long": 2, "yes": 3, "no": 4}
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
 
