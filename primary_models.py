@@ -111,7 +111,10 @@ class BigBird_PM(Primary_Model):
         )
 
     def evaluate(self):
-        return self.trainer.evaluate()
+        evaluation = self.trainer.evaluate()
+        # remove the "eval_" prefix from each dictionary key
+        evaluation = {k[5:]: v for k, v in evaluation.items() if k.startswith("eval_")}
+        return 
 
 
 class GPTNeoX_PM(Primary_Model):
@@ -138,8 +141,10 @@ class GPTNeoX_PM(Primary_Model):
     def forward(self, **inputs):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
         input_ids = torch.tensor(inputs["input_ids"]).unsqueeze(0)
-        generation = self.model.generate(input_ids)
-
+        generation = self.model.generate(
+            input_ids, max_new_tokens=10, pad_token_id=self.tk.pad_token_id
+        )
+        generation_str = self.tk.decode(generation[0])
         return generation
 
     def prepare_data(self, masking_scheme):
@@ -149,11 +154,18 @@ class GPTNeoX_PM(Primary_Model):
             assert (
                 len(x[masking_str].split("[SEP]")) == 2
             ), "masking_str must contain exactly one [SEP]"
-            x[masking_str] = x[masking_str].replace("[SEP]", "\n\n")
+            x[masking_str] = x[masking_str].replace("[SEP]", "\n\n") # TODO: fix. this is getting stripped out by the split/join
+            return x
+
+        def _add_prompt(x):
+            x[masking_str] = x[masking_str] + "\n\nAnswer in as few words as possible: "
             return x
 
         # Prepare the dataset
         self.prepped_val_dataset = self.raw_val_dataset.map(lambda x: _replace_sep(x))
+        self.prepped_val_dataset = self.prepped_val_dataset.map(
+            lambda x: _add_prompt(x)
+        )
         self.prepped_val_dataset = self.prepped_val_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
@@ -173,6 +185,7 @@ class GPTNeoX_PM(Primary_Model):
 
             for i, x in tqdm(enumerate(self.prepped_val_dataset)):
                 generation = self.forward(input_ids=x["input_ids"])
+                generation_str = self.tk.decode(generation[0])
                 str_pred.append(
                     self.tk.batch_decode(generation, skip_special_tokens=True)[0]
                 )

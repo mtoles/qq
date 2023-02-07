@@ -55,9 +55,9 @@ def main(pt_dataset_path, pm_path, pm_arch, eval_batch_size, masking_scheme, dow
 Datetime:  {now}
 Data:      {pt_dataset_path} {original_pt_dataset_size}/{len(pt_dataset)}
 Masking:   {masking_scheme}
-F1:        {eval_metrics["eval_f1"]}
-Precision: {eval_metrics["eval_precision"]}
-Recall:    {eval_metrics["eval_recall"]}\n\n""")
+F1:        {eval_metrics["f1"]}
+Precision: {eval_metrics["precision"]}
+Recall:    {eval_metrics["recall"]}\n\n""")
 
         # example = pt_dataset[masking_str][0]
         # print(example)

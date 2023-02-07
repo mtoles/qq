@@ -3,7 +3,7 @@ import transformers as t
 from datetime import datetime
 from datasets import load_from_disk
 
-ds = load_from_disk("data2/hotpot_train_100_randomsentence")
+ds = load_from_disk("data/preprocess/hotpot-validation-None-randomsentenceNone-focus")
 config = t.AutoConfig.from_pretrained("EleutherAI/gpt-neox-20b")
 config.max_position_embeddings = 3072
 # config.max_position_embedding = 102
