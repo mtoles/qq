@@ -222,6 +222,7 @@ def main(
     elif mode == "train":
         try:
             # trainer.train(resume_from_checkpoint=RESUME_TRAINING)
+            trainer.evaluate()
             trainer.train(model_path)
             trainer.save_model(f"models/{base_dataset}-final-model-exp-{now}")
         except KeyboardInterrupt:

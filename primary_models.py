@@ -5,9 +5,19 @@ from utils import BB_MODEL_ID, GPT_NEO_MODEL_ID
 from bb_model import BigBirdForNaturalQuestions
 from utils import collate_fn
 from metrics import compute_metrics
-from transformers import BigBirdTokenizer, AutoTokenizer, AutoModelForCausalLM
+from transformers import (
+    BigBirdTokenizer,
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    TrainingArguments,
+    # Trainer,
+    PreTrainedModel,
+)
+from transformers import Trainer
 from prepare_data import prepare_inputs_hp
-from transformers import TrainingArguments, Trainer, PreTrainedModel
+
+import numpy as np
+import torch
 
 
 class Primary_Model(PreTrainedModel):
@@ -44,6 +54,10 @@ class Primary_Model(PreTrainedModel):
         return self.forward(**inputs)
 
     def forward(self, **inputs):
+        """Forward pass must return     
+    start_logits, end_logits, cls_pred, tokens_pred, input_ids = x[0]
+    cls_gt, start_gt, end_gt, tokens_gt = x[1]
+Check `compute_metrics` function for actual requirements"""
         return self.model(**inputs)
 
     def prepare_data(self, masking_scheme):
@@ -108,9 +122,19 @@ class GPTNeoX_PM(Primary_Model):
         )
 
     def forward(self, **inputs):
-        batch = inputs["input_ids"]
-        generation = self.model.generate(batch)
-        return generation
+        """    start_logits, end_logits, cls_pred, tokens_pred, input_ids = x[0]
+    cls_gt, start_gt, end_gt, tokens_gt = x[1]"""
+        input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
+        assert attention_mask.sum() != 0, "attention_mask must not be all zeros"
+        generation = self.model.generate(input_ids, attention_mask=attention_mask)
+        loss, outputs = torch.tensor(np.nan), generation
+
+        start_logits=None
+        end_logits=None
+        cls_pred=None
+
+        return (loss, outputs)
 
     def prepare_data(self, masking_scheme):
         masking_str = f"fc_{masking_scheme}"

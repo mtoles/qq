@@ -33,7 +33,7 @@ for i in range(10):
         input_ids,
         do_sample=True,
         temperature=0.9,
-        max_new_tokens=20,
+        max_new_tokens=input_ids.shape[1]+20,
     )
     gen_text = tokenizer.batch_decode(gen_tokens)[0]
     print(gen_text)
