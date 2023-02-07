@@ -10,14 +10,12 @@ from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
     TrainingArguments,
-    # Trainer,
+    Trainer,
     PreTrainedModel,
 )
-from transformers import Trainer
 from prepare_data import prepare_inputs_hp
 from tqdm import tqdm
 
-import numpy as np
 import torch
 
 
@@ -129,8 +127,8 @@ class GPTNeoX_PM(Primary_Model):
     ):
         # super(PreTrainedModel, self).__init__()
         self.tk = AutoTokenizer.from_pretrained(GPT_NEO_MODEL_ID)
-        self.tk.pad_token_id = 1  # specific to gpt-neo-x
-        self.model = AutoModelForCausalLM.from_pretrained(GPT_NEO_MODEL_ID)
+        self.tk.pad_token_id = 1  # this is actually wrong but doesn't matter as long as batch_size==1
+        self.model = AutoModelForCausalLM.from_pretrained(GPT_NEO_MODEL_ID).cuda()
         super(GPTNeoX_PM, self).__init__(
             model_path=None,
             eval_batch_size=eval_batch_size,
@@ -140,7 +138,7 @@ class GPTNeoX_PM(Primary_Model):
 
     def forward(self, **inputs):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
-        input_ids = torch.tensor(inputs["input_ids"]).unsqueeze(0)
+        input_ids = torch.tensor(inputs["input_ids"]).unsqueeze(0).cuda()
         generation = self.model.generate(
             input_ids, max_new_tokens=10, pad_token_id=self.tk.pad_token_id
         )
