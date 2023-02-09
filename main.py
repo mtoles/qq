@@ -7,7 +7,7 @@ import click
 from datasets import load_from_disk
 from oracle import Dummy_oracle
 from secondary_model import Dummy_secondary_model
-from primary_models import BigBird_PM, GPTNeoX_PM
+from primary_models import BigBird_PM, GPTNeoX_PM, T5_PM
 from dataset_utils import drop_unanswerable
 from datetime import datetime
 
@@ -25,7 +25,7 @@ from datetime import datetime
 )
 @click.option("--results_filename", help="path to save results")
 def main(pt_dataset_path, pm_path, pm_arch, eval_batch_size, masking_scheme, downsample_pt_size, results_filename):
-    now = datetime.now().strftime("y%m%d-%H%M%S")
+    now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
         results_filename = f"{pm_arch}-{downsample_pt_size}-{masking_scheme}-{now}"
     
@@ -34,7 +34,7 @@ def main(pt_dataset_path, pm_path, pm_arch, eval_batch_size, masking_scheme, dow
         masking_str = f"fc_{masking_scheme}"
 
         # Unit Tests
-        assert pm_arch in ["bigbird", "gptneox"]
+        assert pm_arch in ["bigbird", "gptneox", "t5-small", "t5-base", "t5-large", "t5-xl", "t5-xxl"]
 
         # Receive and prepare the primary task
         pt_dataset = load_from_disk(pt_dataset_path)
@@ -47,13 +47,15 @@ def main(pt_dataset_path, pm_path, pm_arch, eval_batch_size, masking_scheme, dow
             pm = BigBird_PM(pm_path, eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset)
         elif pm_arch == "gptneox":
             pm = GPTNeoX_PM(eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset)
+        elif pm_arch.startswith("t5"):
+            pm = T5_PM(eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset, model_name=pm_arch)
         else:
             raise NotImplementedError
 
         pm.prepare_data(masking_scheme=masking_scheme)
         eval_metrics = pm.evaluate()
         f.write(
-            f"""Model:     {pm_path}
+            f"""Model:     {pm_path if pm_path else pm_arch}
 Datetime:  {now}
 Data:      {pt_dataset_path} {original_pt_dataset_size}/{len(pt_dataset)}
 Masking:   {masking_scheme}
