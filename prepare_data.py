@@ -256,7 +256,8 @@ def adapt_example(example, masking_scheme=None):
     new_example["question"] = {"text": example["question"]}
     answer = example["answer"]
     new_example["answer"] = {"text": answer}
-    context = example[masking_str]
+    # Add the question to the context
+    context = " ".join((example["question"] + " [SEP] " + example[masking_str]).split())
     # Call join/split an extra time to normalize whitespaces and unicode nonsense
     context = " ".join(context.split())
     answer = " ".join(answer.split())

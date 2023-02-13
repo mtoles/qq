@@ -34,7 +34,7 @@ def flatten_context(example, masking_scheme):
     paragraphs = [" ".join(s) for s in sentences]
     contexts = [f"{t}: {p}" for t, p in zip(titles, paragraphs) if p]
     context = "\n\n".join(contexts)
-    context = " [SEP] ".join([example["question"], context])
+    # context = " [SEP] ".join([example["question"], context])
     return {f"fc_{masking_scheme}": context}
 
 
