@@ -257,7 +257,7 @@ def adapt_example(example, masking_scheme=None):
     answer = example["answer"]
     new_example["answer"] = {"text": answer}
     # Add the question to the context
-    context = " ".join((example["question"] + " [SEP] " + example[masking_str]).split())
+    context = example[masking_str]
     # Call join/split an extra time to normalize whitespaces and unicode nonsense
     context = " ".join(context.split())
     answer = " ".join(answer.split())
@@ -287,3 +287,10 @@ def adapt_example(example, masking_scheme=None):
     #     example["answer"]
     # ) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
     return new_example
+
+def prepend_question(example, masking_scheme, sep_token):
+    masking_str = f"fc_{masking_scheme}"
+    context = example[masking_str]
+    question = example["question"]
+    example[masking_str] = " ".join(" ".join([question, sep_token, context]).split())
+    return example

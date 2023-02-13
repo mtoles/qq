@@ -14,7 +14,7 @@ from transformers import (
     Trainer,
     PreTrainedModel,
 )
-from prepare_data import prepare_inputs_hp
+from prepare_data import prepare_inputs_hp, prepend_question
 from tqdm import tqdm
 
 import torch
@@ -91,6 +91,9 @@ class BigBird_PM(Primary_Model):
 
     def prepare_data(self, masking_scheme):
         self.prepped_val_dataset = self.raw_val_dataset.map(
+            lambda x: prepend_question(x, masking_scheme, self.tk.sep_token)
+        )
+        self.prepped_val_dataset = self.raw_val_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
                 tk=self.tk,
@@ -165,7 +168,9 @@ class GPTNeoX_PM(Primary_Model):
             return x
 
         # Prepare the dataset
-        self.prepped_val_dataset = self.raw_val_dataset.map(lambda x: _replace_sep(x))
+        self.prepped_val_dataset = self.raw_val_dataset.map(
+            lambda x: prepend_question(x, masking_scheme, "\n\n")
+        )
         self.prepped_val_dataset = self.prepped_val_dataset.map(
             lambda x: _add_prompt(x)
         )
@@ -252,7 +257,10 @@ class T5_PM(Primary_Model):
             return x
 
         # Prepare the dataset
-        self.prepped_val_dataset = self.raw_val_dataset.map(lambda x: _replace_sep(x))
+        # self.prepped_val_dataset = self.raw_val_dataset.map(lambda x: _replace_sep(x))
+        self.prepped_val_dataset = self.raw_val_dataset.map(
+            lambda x: prepend_question(x, masking_scheme, "\n\n")
+        )
         self.prepped_val_dataset = self.prepped_val_dataset.map(
             lambda x: _add_prompt(x)
         )

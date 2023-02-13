@@ -2,7 +2,7 @@ import datetime
 import click
 from datasets import load_from_disk
 
-from prepare_data import prepare_inputs_hp
+from prepare_data import prepare_inputs_hp, prepend_question
 from utils import BB_MODEL_ID, collate_fn_bb, check_tokenizer
 from dataset_utils import drop_unanswerable, check_dataset
 from metrics import compute_metrics_bb
@@ -43,7 +43,7 @@ SCHEDULER = "linear"
     "--val_dataset_path", help="path to validation {natural_questions | hotpot} dataset"
 )
 @click.option("--tr_batch_size", default=1, type=int, help="batch size")
-@click.option("--eval_batch_size", default=64, type=int, help="eval batch size")
+@click.option("--eval_batch_size", default=16, type=int, help="eval batch size")
 @click.option(
     "--downsample_data_size_val",
     default=None,
@@ -140,6 +140,14 @@ def main(
         # Drop examples that do not have answer in the context
         tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
 
+        print("Prepending questions")
+        tr_dataset = tr_dataset.map(
+            lambda x: prepend_question(
+                x, masking_scheme=masking_scheme, sep_token=tk.sep_token
+            ),
+            load_from_cache_file=load_from_cache,
+        )
+
         print("Preparing train inputs hotpot...")
         tr_dataset = tr_dataset.map(
             lambda x: prepare_inputs_hp(
@@ -157,8 +165,16 @@ def main(
     val_dataset = load_from_disk(val_dataset_path)
     if downsample_data_size_val is not None:
         val_dataset = val_dataset.select(range(downsample_data_size_val))
-    print("Preparing validation inputs hotpot...")
+    print("Dropping val unanswerable...")
     val_dataset = drop_unanswerable(val_dataset, masking_scheme, load_from_cache)
+    print("Prepending val questions...")
+    val_dataset = val_dataset.map(
+        lambda x: prepend_question(
+            x, masking_scheme=masking_scheme, sep_token=tk.sep_token
+        ),
+        load_from_cache_file=load_from_cache,
+    )
+    print("Preparing val inputs...")
     val_dataset = val_dataset.map(
         lambda x: prepare_inputs_hp(
             x, tk=tk, max_length=max_length, masking_scheme=masking_scheme
