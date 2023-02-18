@@ -1,7 +1,7 @@
 from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model
 
 
-class Dummy_Secondary_Model():
+class Dummy_Secondary_Model:
     def __init__(
         self,
         eval_batch_size=2,
@@ -21,5 +21,20 @@ class Dummy_Secondary_Model():
     def prepare_data(self, masking_scheme):
         pass
 
-    def forward(self, input_ids):
+    def forward(self, example, question_col, context_col):
         return "What is six times seven?"
+
+    def ask_question(self, dataset, question_col, context_col):
+        """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'secondary_question'."""
+
+        def _answer_question(example):
+            example["secondary_question"] = self.forward(
+                example, question_col, context_col
+            )
+            return example
+
+        dataset = dataset.add_column(name="secondary_question", column=[""]*len(dataset))
+        dataset = dataset.map(
+            lambda x: _answer_question(x),
+        )
+        return dataset
