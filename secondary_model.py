@@ -38,6 +38,6 @@ class Dummy_Secondary_Model:
             name="secondary_question", column=[""] * len(dataset)
         )
         dataset = dataset.map(
-            lambda x: _add_secondary_question(x),
+            lambda x: _add_secondary_question(x), load_from_cache_file=False
         )
         return dataset

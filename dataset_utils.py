@@ -107,4 +107,4 @@ def check_example(ex, tk):
 def check_dataset(dataset, tk):
     """Check that answers are actually at their identified position in the context and other sanity checks"""
     print("Checking dataset...")
-    dataset.map(lambda x: check_example(x, tk), batched=False)
+    dataset.map(lambda x: check_example(x, tk), batched=False, load_from_cache_file=False)

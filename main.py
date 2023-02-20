@@ -44,7 +44,6 @@ def main(
         # Unit Tests
         assert pm_arch in [
             "bigbird",
-            "gptneox",
             "t5-small",
             "t5-base",
             "t5-large",
@@ -63,8 +62,7 @@ def main(
             pm = BigBird_PM(
                 pm_path, eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset
             )
-        elif pm_arch == "gptneox":
-            pm = GPTNeoX_PM(eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset)
+
         elif pm_arch.startswith("t5"):
             pm = T5_PM(
                 eval_batch_size=eval_batch_size,
