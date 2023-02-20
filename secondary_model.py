@@ -22,19 +22,22 @@ class Dummy_Secondary_Model:
         pass
 
     def forward(self, example, question_col, context_col):
-        return "What is six times seven?"
+        # return "What is six times seven?"
+        return example["masked_sentence"]
 
-    def ask_question(self, dataset, question_col, context_col):
+    def process(self, dataset, primary_question_col, context_col):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'secondary_question'."""
 
-        def _answer_question(example):
+        def _add_secondary_question(example):
             example["secondary_question"] = self.forward(
-                example, question_col, context_col
+                example, primary_question_col, context_col
             )
             return example
 
-        dataset = dataset.add_column(name="secondary_question", column=[""]*len(dataset))
+        dataset = dataset.add_column(
+            name="secondary_question", column=[""] * len(dataset)
+        )
         dataset = dataset.map(
-            lambda x: _answer_question(x),
+            lambda x: _add_secondary_question(x),
         )
         return dataset
