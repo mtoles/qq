@@ -5,7 +5,7 @@
 
 import click
 from datasets import load_from_disk
-from oracles import Dummy_Oracle
+from oracles import Dummy_Oracle, T5_Oracle
 from secondary_model import Dummy_Secondary_Model
 from primary_models import BigBird_PM, T5_PM
 from dataset_utils import drop_unanswerable
@@ -72,7 +72,31 @@ def main(
             raise NotImplementedError
 
         pm.prepare_data(masking_scheme=masking_scheme)
-        eval_metrics = pm.evaluate()
+
+        sm = Dummy_Secondary_Model()
+
+        pm.prepped_val_dataset = sm.process(
+            pm.prepped_val_dataset,
+            primary_question_col="question",
+            context_col=masking_str,
+        )
+
+        oracle = T5_Oracle(model_name="t5-small")
+
+        pm.prepped_val_dataset = oracle.process(
+            pm.prepped_val_dataset, secondary_question_col="secondary_question"
+        )
+        # oracle.forward(
+        #     pm.prepped_val_dataset[0], secondary_question_col="secondary_question"
+        # )
+
+        # eval_metrics = pm.evaluate(masking_scheme="randomsentence")
+        none_metrics = pm.evaluate(masking_scheme="supporting")
+        print(none_metrics)
+        rs_metrics = pm.evaluate(masking_scheme="randomsentence")
+        print(rs_metrics)
+
+
         f.write(
             f"""Model:     {pm_path if pm_path else pm_arch}
 Datetime:  {now}
@@ -99,3 +123,7 @@ Recall:    {eval_metrics["recall"]}\n\n"""
         # TODO: Insert answer into the primary task
 
     pass
+
+
+if __name__ == "__main__":
+    main()
