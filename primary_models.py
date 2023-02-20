@@ -89,7 +89,17 @@ class BigBird_PM(Primary_Model):
             prepped_val_dataset=prepped_val_dataset,
         )
 
-    def prepare_data(self, masking_scheme):
+    def prepare_data(self, masking_scheme, save_input_ids=False):
+        """
+        Method for preparing the validation dataset for evaluation.
+
+        Args:
+            masking_scheme (str):
+                The masking scheme to use. Usually "randomsentence"
+            save_as_input_ids (bool, optional):
+                Whether to save the dataset as input_ids or not.
+                Some functions assume the dataset has only one "input_ids" column, so be
+        """
         self.prepped_val_dataset = self.raw_val_dataset.map(
             lambda x: prepend_question(x, masking_scheme, self.tk.sep_token)
         )
@@ -112,105 +122,15 @@ class BigBird_PM(Primary_Model):
             tokenizer=self.tk,
         )
 
-    def evaluate(self):
+    def evaluate(self, masking_scheme):
+        # Prep the dataset again so that the input_ids are generated from the masking_scheme column
+        self.prepare_data(masking_scheme, save_input_ids=True)
         evaluation = self.trainer.evaluate()
+        # Drop the input_ids so they aren't used by mistake later
+        self.prepped_val_dataset = self.prepped_val_dataset.remove_columns("input_ids")
         # remove the "eval_" prefix from each dictionary key
         evaluation = {k[5:]: v for k, v in evaluation.items() if k.startswith("eval_")}
-        return
-
-
-class GPTNeoX_PM(Primary_Model):
-    """This is an example of how to wrap a model NOT based on the hugging face trainer
-    (Which just happens to be pulled from hugging face hub)"""
-
-    def __init__(
-        self,
-        eval_batch_size=2,
-        raw_val_dataset=None,
-        prepped_val_dataset=None,
-    ):
-        # super(PreTrainedModel, self).__init__()
-        self.tk = AutoTokenizer.from_pretrained(GPT_NEO_MODEL_ID)
-        self.tk.pad_token_id = (
-            1  # this is actually wrong but doesn't matter as long as batch_size==1
-        )
-        self.model = AutoModelForCausalLM.from_pretrained(GPT_NEO_MODEL_ID).cuda()
-        super(GPTNeoX_PM, self).__init__(
-            model_path=None,
-            eval_batch_size=eval_batch_size,
-            raw_val_dataset=raw_val_dataset,
-            prepped_val_dataset=prepped_val_dataset,
-        )
-
-    def forward(self, **inputs):
-        """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
-        input_ids = torch.tensor(inputs["input_ids"]).unsqueeze(0).cuda()
-        generation = self.model.generate(
-            input_ids, max_new_tokens=10, pad_token_id=self.tk.pad_token_id
-        )[:, input_ids.shape[1] :]
-        generation_str = self.tk.decode(generation[0])
-        return generation
-
-    def prepare_data(self, masking_scheme):
-        masking_str = f"fc_{masking_scheme}"
-        # replace [SEP] with :
-        def _replace_sep(x):
-            assert (
-                len(x[masking_str].split("[SEP]")) == 2
-            ), "masking_str must contain exactly one [SEP]"
-            x[masking_str] = x[masking_str].replace(
-                "[SEP]", "\n\n"
-            )  # TODO: fix. this is getting stripped out by the split/join
-            return x
-
-        def _add_prompt(x):
-            x[masking_str] = x[masking_str] + "\n\nAnswer in as few words as possible: "
-            return x
-
-        # Prepare the dataset
-        self.prepped_val_dataset = self.raw_val_dataset.map(
-            lambda x: prepend_question(x, masking_scheme, "\n\n")
-        )
-        self.prepped_val_dataset = self.prepped_val_dataset.map(
-            lambda x: _add_prompt(x)
-        )
-        self.prepped_val_dataset = self.prepped_val_dataset.map(
-            lambda x: prepare_inputs_hp(
-                x,
-                tk=self.tk,
-                max_length=2048,
-                masking_scheme=masking_scheme,
-            )
-        )
-
-    def evaluate(self):
-        with torch.no_grad():
-            str_pred = []
-            str_gt = []
-            cls_pred = []
-            cls_gt = []
-            input_ids = []
-
-            for i, x in enumerate(tqdm(self.prepped_val_dataset)):
-                generation = self.forward(input_ids=x["input_ids"])
-                generation_str = self.tk.decode(generation[0])
-                str_pred.append(
-                    self.tk.batch_decode(generation, skip_special_tokens=True)[0]
-                )
-                str_gt.append(x["answer"])
-                cls_pred.append(None)
-                cls_gt.append(None)
-                input_ids.append(x["input_ids"])
-            metrics = get_metrics(
-                str_pred,
-                str_gt,
-                cls_pred,
-                cls_gt,
-                input_ids,
-                self.tk,
-                None,
-            )
-        return metrics
+        return evaluation
 
 
 class T5_PM(Primary_Model):
@@ -219,11 +139,13 @@ class T5_PM(Primary_Model):
         eval_batch_size=2,
         raw_val_dataset=None,
         prepped_val_dataset=None,
-        model_name=None
+        model_name=None,
     ):
         model_name = f"google/flan-{model_name}"
         self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
-        self.model = T5ForConditionalGeneration.from_pretrained(model_name, cache_dir="./.model_cache").cuda()
+        self.model = T5ForConditionalGeneration.from_pretrained(
+            model_name, cache_dir="./.model_cache"
+        ).cuda()
         super(T5_PM, self).__init__(
             model_path=None,
             eval_batch_size=eval_batch_size,
@@ -236,7 +158,7 @@ class T5_PM(Primary_Model):
         input_ids = torch.tensor(inputs["input_ids"]).unsqueeze(0).cuda()
         generation = self.model.generate(
             input_ids, max_new_tokens=10, pad_token_id=self.tk.pad_token_id
-        )[:,1:-1]
+        )[:, 1:-1]
         generation_str = self.tk.decode(generation[0])
         return generation
 
@@ -273,7 +195,8 @@ class T5_PM(Primary_Model):
             )
         )
 
-    def evaluate(self):
+    def evaluate(self, masking_scheme):
+        masking_str = f"fc_{masking_scheme}"
         with torch.no_grad():
             str_pred = []
             str_gt = []
@@ -282,7 +205,10 @@ class T5_PM(Primary_Model):
             input_ids = []
 
             for i, x in enumerate(tqdm(self.prepped_val_dataset)):
-                generation = self.forward(input_ids=x["input_ids"])
+                input_tokens = self.tk(self.prepped_val_dataset[i][masking_str])[
+                    "input_ids"
+                ]
+                generation = self.forward(input_ids=input_tokens)
                 generation_str = self.tk.decode(generation[0])
                 str_pred.append(
                     self.tk.batch_decode(generation, skip_special_tokens=True)[0]
@@ -290,12 +216,7 @@ class T5_PM(Primary_Model):
                 str_gt.append(x["answer"])
                 cls_pred.append(None)
                 cls_gt.append(None)
-                input_ids.append(x["input_ids"])
-                # print("")
-                # print(self.tk.decode(input_ids[-1]))
-                # print(str_pred[-1])
-                # print(str_gt[-1])
-                # print("")
+                input_ids.append(input_tokens)
 
             metrics = get_metrics(
                 str_pred,
