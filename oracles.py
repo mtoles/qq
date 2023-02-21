@@ -1,5 +1,6 @@
 from transformers import AutoTokenizer, T5ForConditionalGeneration
 import torch
+import math
 
 from metrics import get_metrics
 from prepare_data import prepare_inputs_hp
@@ -18,10 +19,11 @@ class Dummy_Oracle:
 class T5_Oracle:
     def __init__(
         self,
-        eval_batch_size=1,
+        eval_batch_size=4,
         # raw_val_dataset=None,
         model_name=None,
     ):
+        self.eval_batch_size = eval_batch_size
         model_name = f"google/flan-{model_name}"
         self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
         self.model = T5ForConditionalGeneration.from_pretrained(
@@ -43,7 +45,7 @@ class T5_Oracle:
         masked_sentence = example["masked_sentence"]
         # Build the corpus
         # First answer is correct. The rest are distractor.
-        corpus_strs = [masked_sentence] + [
+        corpus_strs = masked_sentence + [
             distractor
             for sublist in example["context_distractor"][0]["sentences"]
             for distractor in sublist
@@ -72,7 +74,18 @@ class T5_Oracle:
             label_encoding.attention_mask.cuda(),
         )
 
-        logits = self.model(input_ids=input_ids, labels=label_ids).logits
+        # process logits in batches
+        num_batches = math.ceil(c / self.eval_batch_size)
+        for i in tqdm(range(num_batches)):
+            start = i * self.eval_batch_size
+            end = min((i + 1) * self.eval_batch_size, c)
+            batch_logits = self.model(
+                input_ids=input_ids[start:end], labels=label_ids[start:end]
+            ).logits
+            if i == 0:
+                logits = batch_logits
+            else:
+                logits = torch.cat([logits, batch_logits], dim=0)
 
         # since all logits are negative, does this not make short answers artificially more likely?
         probs = (
@@ -91,8 +104,8 @@ class T5_Oracle:
         # TODO: find the max probability answer in probs
         oracle_answer = corpus_strs[best_index]
         oracle_answer_is_correct = bool(best_index == 0)
-        example["oracle_answer"] = oracle_answer
-        example["oracle_answer_is_correct"] = oracle_answer_is_correct
+        example["oracle_answer"] = [oracle_answer]
+        example["oracle_answer_is_correct"] = [oracle_answer_is_correct]
         return example
 
     def prepare_data(self, masking_scheme):
