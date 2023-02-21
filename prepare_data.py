@@ -250,7 +250,7 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
 
 def adapt_example(example, masking_scheme=None):
     masking_scheme = str(masking_scheme)
-    masking_str = f"fc_{masking_scheme}"
+    masking_str = f"prepped_{masking_scheme}" # operate on the prepped text, not the fc text, 
     """Convert the HP example to look like an NQ example"""
     new_example = {}
     new_example["question"] = {"text": example["question"]}
@@ -289,8 +289,8 @@ def adapt_example(example, masking_scheme=None):
     return new_example
 
 def prepend_question(example, masking_scheme, sep_token):
-    masking_str = f"fc_{masking_scheme}"
-    context = example[masking_str]
+    # masking_str = f"fc_{masking_scheme}"
+    context = example[f"prepped_{masking_scheme}"]
     question = example["question"]
-    example[masking_str] = " ".join(" ".join([question, sep_token, context]).split())
+    example[f"prepped_{masking_scheme}"] = " ".join(" ".join([question, sep_token, context]).split())
     return example

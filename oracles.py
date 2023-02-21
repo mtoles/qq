@@ -76,7 +76,7 @@ class T5_Oracle:
 
         # process logits in batches
         num_batches = math.ceil(c / self.eval_batch_size)
-        for i in tqdm(range(num_batches)):
+        for i in range(num_batches):
             start = i * self.eval_batch_size
             end = min((i + 1) * self.eval_batch_size, c)
             batch_logits = self.model(

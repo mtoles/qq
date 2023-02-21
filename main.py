@@ -60,41 +60,42 @@ def main(
         # Load primary model
         if pm_arch == "bigbird":
             pm = BigBird_PM(
-                pm_path, eval_batch_size=eval_batch_size, raw_val_dataset=pt_dataset
+                pm_path, eval_batch_size=eval_batch_size#, raw_val_dataset=pt_dataset
             )
         elif pm_arch.startswith("t5"):
             pm = T5_PM(
                 eval_batch_size=eval_batch_size,
-                raw_val_dataset=pt_dataset,
+                # raw_val_dataset=pt_dataset,
                 model_name=pm_arch,
             )
         else:
             raise NotImplementedError
 
-        pm.prepare_data(masking_scheme=masking_scheme)
+        # pm.prepare_data(masking_scheme=masking_scheme)
+        prepped_val_dataset = pm.prepare_data(masking_scheme=masking_scheme, raw_val_dataset=pt_dataset)
 
         sm = Dummy_Secondary_Model()
 
-        pm.prepped_val_dataset = sm.process(
-            pm.prepped_val_dataset,
+        prepped_val_dataset = sm.process(
+            prepped_val_dataset,
             primary_question_col="question",
             context_col=masking_str,
         )
 
         oracle = T5_Oracle(model_name="t5-small")
 
-        pm.prepped_val_dataset = oracle.process(
-            pm.prepped_val_dataset, secondary_question_col="secondary_question"
+        prepped_val_dataset = oracle.process(
+            prepped_val_dataset, secondary_question_col="secondary_question"
         )
         # oracle.forward(
         #     pm.prepped_val_dataset[0], secondary_question_col="secondary_question"
         # )
 
         # eval_metrics = pm.evaluate(masking_scheme="randomsentence")
-        none_metrics = pm.evaluate(masking_scheme="supporting")
+        none_metrics = pm.evaluate(masking_scheme="supporting", prepped_val_dataset=prepped_val_dataset)
         print(none_metrics)
-        rs_metrics = pm.evaluate(masking_scheme="randomsentence")
-        print(rs_metrics)
+        # rs_metrics = pm.evaluate(masking_scheme="randomsentence", prepped_val_dataset=prepped_val_dataset)
+        # print(rs_metrics)
 
 
         f.write(
