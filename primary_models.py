@@ -48,7 +48,7 @@ class Primary_Model:
         # TODO: add column for masking_scheme
         prepped_val_dataset = prepped_val_dataset.add_column(
             column=raw_val_dataset[f"fc_{masking_scheme}"],
-            name=f"prepped_{masking_scheme}"
+            name=f"prepped_{masking_scheme}",
         )
         return prepped_val_dataset
 
@@ -107,10 +107,13 @@ class BigBird_PM(Primary_Model):
                 Whether to save the dataset as input_ids or not.
                 Some functions assume the dataset has only one "input_ids" column, so be
         """
-        prepped_val_dataset = raw_val_dataset.map(
+        prepped_val_dataset = super(BigBird_PM, self).prepare_data(
+            masking_scheme=masking_scheme, raw_val_dataset=raw_val_dataset
+        )
+        prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepend_question(x, masking_scheme, self.tk.sep_token)
         )
-        prepped_val_dataset = raw_val_dataset.map(
+        prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
                 tk=self.tk,
@@ -178,7 +181,10 @@ class T5_PM(Primary_Model):
         return generation
 
     def prepare_data(self, masking_scheme, raw_val_dataset):
-        # fc_str = f"fc_{masking_scheme}"
+        # Call the parent class's prepare_data method to get the prepped_val_dataset
+        prepped_val_dataset = super(T5_PM, self).prepare_data(
+            masking_scheme=masking_scheme, raw_val_dataset=raw_val_dataset
+        )
 
         def _add_prompt(x, masking_scheme):
             x[f"prepped_{masking_scheme}"] = (
@@ -187,17 +193,12 @@ class T5_PM(Primary_Model):
             )
             return x
 
-        # Prepare the dataset
-        # self.prepped_val_dataset = self.raw_val_dataset.map(lambda x: _replace_sep(x))
-        # Call the parent class's prepare_data method to get the prepped_val_dataset
-        prepped_val_dataset = super(T5_PM, self).prepare_data(
-            masking_scheme=masking_scheme, raw_val_dataset=raw_val_dataset
-        )
-
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepend_question(x, masking_scheme, "\n\n")
         )
-        prepped_val_dataset = prepped_val_dataset.map(lambda x: _add_prompt(x, masking_scheme))
+        prepped_val_dataset = prepped_val_dataset.map(
+            lambda x: _add_prompt(x, masking_scheme)
+        )
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
