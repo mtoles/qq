@@ -16,7 +16,6 @@ from transformers import (
 
 
 RESUME_TRAINING = None
-SEED = 42
 GROUP_BY_LENGTH = True
 FP16 = False
 SCHEDULER = "linear"

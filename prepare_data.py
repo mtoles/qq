@@ -10,10 +10,6 @@ from utils import (
     CATEGORY_MAPPING,
 )
 
-DOC_STRIDE = 2048
-MAX_LENGTH = 4096
-SEED = 42
-PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
 
 
 def _get_single_answer_data(example):
@@ -23,12 +19,6 @@ def _get_single_answer_data(example):
         if len(answer) == 1:
             answer = answer[0]
             return {k: [answer[k]] for k in answer} if is_long_answer else answer
-        for a in answer:
-            if is_long_answer:
-                a = {k: [a[k]] for k in a}
-            if len(a["start_token"]) > 0:
-                break
-        return a
 
     answer = {"id": example["id"]}
     annotation = example["annotations"]
@@ -184,12 +174,6 @@ def get_strided_contexts_and_ans(
         num_sub_tokens = len(tk(complete_end_token, add_special_tokens=False).input_ids)
         if num_sub_tokens > 1:
             answer["end_token"] += num_sub_tokens - 1
-
-        old = input_ids[
-            answer["start_token"] : answer["end_token"] + 1
-        ]  # right & left are inclusive
-        start_token = answer["start_token"]
-        end_token = answer["end_token"]
 
         # input is short enough to fit inside max_length
         if len(input_ids) <= max_length:

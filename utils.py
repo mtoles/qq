@@ -7,7 +7,6 @@ from pathlib import PurePath
 
 BB_MODEL_ID = "google/bigbird-base-trivia-itc"
 GPT_NEO_MODEL_ID = "EleutherAI/gpt-neo-2.7B"
-# T5_MODEL_ID = "google/flan-t5-xxl"
 CATEGORY_MAPPING = {"null": 0, "short": 1, "long": 2, "yes": 3, "no": 4}
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
 
@@ -23,10 +22,6 @@ def get_downsample_dataset_size_str(downsample_data_size):
 def make_cache_file_name(
     dataset, split, downsample_data_size, masking_schemes, distract_or_focus
 ):
-    # masking_scheme = "".join(masking_schemes)
-    # cache_file_name = (
-    #     PurePath("data") / f"{dataset}-{split}-{downsample_data_size}-{masking_scheme}"
-    # )
     cache_file_name = f"{dataset}-{split}-{downsample_data_size}-{''.join(list(masking_schemes)+['None'])}-{distract_or_focus}"
     return cache_file_name
 
@@ -129,7 +124,6 @@ def find_sublist_in_list(sl, l):
         if l[i : i + subsequence_length] == sl:
             result = i
             break
-    # assert result != -1, "Sublist not found in list"
     return result
 
 

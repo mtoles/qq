@@ -60,19 +60,16 @@ def main(
         # Load primary model
         if pm_arch == "bigbird":
             pm = BigBird_PM(
-                pm_path, eval_batch_size=eval_batch_size  # , raw_val_dataset=pt_dataset
+                pm_path, eval_batch_size=eval_batch_size  
             )
         elif pm_arch.startswith("t5"):
             pm = T5_PM(
                 eval_batch_size=eval_batch_size,
-                # raw_val_dataset=pt_dataset,
                 model_name=pm_arch,
             )
         else:
             raise NotImplementedError
 
-        # pm.prepare_data(masking_scheme=masking_scheme)
-        # prepped_val_dataset = pm.prepare_data(masking_scheme=masking_scheme, raw_val_dataset=pt_dataset)
         prepped_val_dataset = pt_dataset
 
         sm = Dummy_Secondary_Model()
@@ -88,28 +85,19 @@ def main(
         prepped_val_dataset = oracle.process(
             prepped_val_dataset, secondary_question_col="secondary_question"
         )
-        # oracle.forward(
-        #     pm.prepped_val_dataset[0], secondary_question_col="secondary_question"
-        # )
-
-        # eval_metrics = pm.evaluate(masking_scheme="randomsentence")
-        none_metrics = pm.evaluate(
-            masking_scheme="supporting", prepped_val_dataset=prepped_val_dataset
+        metrics = pm.evaluate(
+            masking_scheme=masking_scheme, prepped_val_dataset=prepped_val_dataset
         )
-        print(none_metrics)
-        rs_metrics = pm.evaluate(
-            masking_scheme="randomsentence", prepped_val_dataset=prepped_val_dataset
-        )
-        print(rs_metrics)
+        print(metrics)
 
         f.write(
             f"""Model:     {pm_path if pm_path else pm_arch}
 Datetime:  {now}
 Data:      {pt_dataset_path} {original_pt_dataset_size}/{len(pt_dataset)}
 Masking:   {masking_scheme}
-F1:        {eval_metrics["f1"]}
-Precision: {eval_metrics["precision"]}
-Recall:    {eval_metrics["recall"]}\n\n"""
+F1:        {metrics["f1"]}
+Precision: {metrics["precision"]}
+Recall:    {metrics["recall"]}\n\n"""
         )
 
         # example = pt_dataset[masking_str][0]

@@ -49,8 +49,6 @@ class BigBirdForNaturalQuestions(BigBirdForQuestionAnswering):
         pooler_label=None,
         gt_answers=None,
     ):
-        # assert (start_positions < 0).sum() == 0, "start positions should be >= 0" # can't use due to yes/no questions
-        # assert (end_positions < 0).sum() == 0, "end positions should be >= 0" # can't use due to yes/no questions
         question_lengths = torch.zeros(
             input_ids.shape[1]
         ).cuda()  # allow super to look for answers in the question. I think this is not actually done in the original BB implementation (or vasadevgupta's), but it might just be an artifact from repurposing the natural questions code. Either way I think it's fine and I don't want to rewrite the whole thing.

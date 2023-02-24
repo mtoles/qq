@@ -36,8 +36,6 @@ def format_dataset_hotpot(example):
     example["context"] = "\n".join(
         [x for y in example["context"]["sentences"] for x in y]
     )
-    # example["targets"] = example["answer"]["aliases"]
-    # example["norm_target"] = example["answer"]["normalized_value"]
     example["targets"] = [example["answer"]]
     return example
 
@@ -53,8 +51,6 @@ def format_dataset_trivia(example):
 
 
 def has_answer(example, masking_str):
-    # answer = example["answer"]
-    # context = example["fc_None"]
     answer = [normalize_answer(x) for x in example["answer"].split()]
     context = [normalize_answer(x) for x in example[masking_str].split()]
     if answer[0] in ["yes", "no"]:

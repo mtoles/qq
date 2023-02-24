@@ -8,16 +8,13 @@ from metrics import compute_metrics_bb, get_metrics
 from transformers import (
     BigBirdTokenizer,
     AutoTokenizer,
-    AutoModelForCausalLM,
     T5ForConditionalGeneration,
     TrainingArguments,
     Trainer,
-    PreTrainedModel,
 )
 from prepare_data import (
     prepare_inputs_hp,
     prepend_question,
-    get_strided_contexts_and_ans,
 )
 from tqdm import tqdm
 
@@ -29,13 +26,9 @@ class Primary_Model:
         self,
         model_path=None,
         eval_batch_size=2,
-        # raw_val_dataset=None,
-        # prepped_val_dataset=None,
     ):
         self.model_path = model_path
         self.eval_batch_size = eval_batch_size
-        # self.raw_val_dataset = raw_val_dataset
-        # self.prepped_val_dataset = prepped_val_dataset
 
     def __call__(self, **inputs):
         return self.forward(**inputs)
@@ -68,10 +61,7 @@ class BigBird_PM(Primary_Model):
         self,
         model_path=None,
         eval_batch_size=2,
-        # raw_val_dataset=None,
-        # prepped_val_dataset=None,
     ):
-        # super(PreTrainedModel, self).__init__()
         self.collate_fn = lambda x: collate_fn_bb(x, self.tk)
         # don't compute the loss
         self.args = TrainingArguments(
@@ -96,8 +86,6 @@ class BigBird_PM(Primary_Model):
         super(BigBird_PM, self).__init__(
             model_path=model_path,
             eval_batch_size=eval_batch_size,
-            # raw_val_dataset=raw_val_dataset,
-            # prepped_val_dataset=prepped_val_dataset,
         )
         self.max_length = self.model.bert.embeddings.position_embeddings.weight.shape[0]
 
@@ -129,29 +117,9 @@ class BigBird_PM(Primary_Model):
             load_from_cache_file=False,
         )
         return prepped_val_dataset
-        # self.trainer = Trainer(
-        #     model=self.model,
-        #     args=self.args,
-        #     data_collator=self.collate_fn,
-        #     eval_dataset=self.prepped_val_dataset,
-        #     compute_metrics=lambda x: compute_metrics_bb(x, self.tk, None),
-        #     tokenizer=self.tk,
-        # )
 
     def evaluate(self, masking_scheme, prepped_val_dataset):
-        # # Prep the dataset again so that the input_ids are generated from the masking_scheme column
-        # self.prepare_data(masking_scheme, save_input_ids=True)
-        # evaluation = self.trainer.evaluate()
-        # # Drop the input_ids so they aren't used by mistake later
-        # self.prepped_val_dataset = self.prepped_val_dataset.remove_columns("input_ids")
-        # # remove the "eval_" prefix from each dictionary key
-        # evaluation = {k[5:]: v for k, v in evaluation.items() if k.startswith("eval_")}
-
-        # input_ids = self.tk(
-        #     prepped_val_dataset[f"prepped_{masking_scheme}"],
-        #     return_tensors="pt",
-        #     padding=True,
-        # )["input_ids"].cuda()
+        # Prep the dataset again so that the input_ids are generated from the masking_scheme column
         prepped_dataset = self.prepare_data(
             masking_scheme=masking_scheme,
             raw_val_dataset=prepped_val_dataset,
@@ -170,8 +138,6 @@ class BigBird_PM(Primary_Model):
         )
 
         evaluation = trainer.evaluate()
-
-        # model_output = self.model(input_ids)  # missing fields
         return evaluation
 
 
@@ -179,8 +145,6 @@ class T5_PM(Primary_Model):
     def __init__(
         self,
         eval_batch_size=2,
-        # raw_val_dataset=None,
-        # prepped_val_dataset=None,
         model_name=None,
     ):
         model_name = f"google/flan-{model_name}"
@@ -191,8 +155,6 @@ class T5_PM(Primary_Model):
         super(T5_PM, self).__init__(
             model_path=None,
             eval_batch_size=eval_batch_size,
-            # raw_val_dataset=raw_val_dataset,
-            # prepped_val_dataset=prepped_val_dataset,
         )
 
     def forward(self, **inputs):
@@ -231,13 +193,14 @@ class T5_PM(Primary_Model):
                 tk=self.tk,
                 max_length=2048,
                 masking_scheme=masking_scheme,
-                load_from_cache_file=False,
-            )
+            ),
+            load_from_cache_file=False,
         )
         return prepped_val_dataset
 
     def evaluate(self, masking_scheme, prepped_val_dataset):
         masking_str = f"prepped_{masking_scheme}"
+        prepped_val_dataset = self.prepare_data(masking_scheme, prepped_val_dataset)
         with torch.no_grad():
             str_pred = []
             str_gt = []

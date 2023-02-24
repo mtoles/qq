@@ -1,16 +1,8 @@
 """Preprocess the dataset storing formatted examples with masking in text form"""
 
 import os
-import pandas as pd
-
-import numpy as np
-from tqdm import tqdm
-
 import click
 from datasets import load_dataset
-import datasets
-from typing import List, Optional, Tuple
-from collections import defaultdict, Counter
 
 from masking import mask_random_sentence, mask_None, split_distractor
 from utils import (
@@ -20,15 +12,8 @@ from utils import (
 )
 
 
-DOC_STRIDE = 2048
-MAX_LENGTH = 4096
-SEED = 42
-PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
-
-
 def flatten_context(example, masking_scheme):
     masking_str = f"context_{masking_scheme}"
-    output = ""
     titles = example["context_None"]["title"]  # list of str
     sentences = example[masking_str]["sentences"]  # list of list of str
     paragraphs = [" ".join(s) for s in sentences]
@@ -92,7 +77,6 @@ def main(
 
     # Drop Distractor Content
     print("Splitting out distractor sentences...")
-    # if distract_or_focus == "focus":
     assert distract_or_focus == "focus", "distract not implemented yet"
     new_ds = new_ds.add_column(
         "context_distractor", [{} for _ in range(len(new_ds))]

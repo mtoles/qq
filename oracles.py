@@ -56,11 +56,6 @@ class T5_Oracle:
         max_answer_len = max([len(x) for x in corpus_ids])
         c = len(corpus_strs)
 
-        # question_input_ids = self.tk.encode(
-        #     example[question_col], return_tensors="pt"
-        # ).cuda()
-
-        # input_strs = ["\n\n".join([example[question_col], x]) for x in self.corpus_strs]
         prompt_encoding = self.tk(secondary_question, return_tensors="pt", padding=True)
         input_ids, input_attention_masks = (
             prompt_encoding.input_ids.cuda().repeat(c, 1),
@@ -110,22 +105,12 @@ class T5_Oracle:
 
     def prepare_data(self, masking_scheme):
         masking_str = f"fc_{masking_scheme}"
-        # replace [SEP] with :
-        # def _replace_sep(x):
-        #     assert (
-        #         len(x[masking_str].split("[SEP]")) == 2
-        #     ), "masking_str must contain exactly one [SEP]"
-        #     x[masking_str] = x[masking_str].replace(
-        #         "[SEP]", "\n\n"
-        #     )  # TODO: fix. this is getting stripped out by the split/join
-        #     return x
 
         def _add_prompt(x):
             x[masking_str] = x[masking_str] + " Answer in as few words as possible: "
             return x
 
         # Prepare the dataset
-        # self.prepped_val_dataset = self.raw_val_dataset.map(lambda x: _replace_sep(x))
         self.prepped_val_dataset = self.prepped_val_dataset.map(
             lambda x: _add_prompt(x),
             load_from_cache_file=False,
@@ -158,11 +143,6 @@ class T5_Oracle:
                 cls_pred.append(None)
                 cls_gt.append(None)
                 input_ids.append(x["input_ids"])
-                # print("")
-                # print(self.tk.decode(input_ids[-1]))
-                # print(str_pred[-1])
-                # print(str_gt[-1])
-                # print("")
 
             metrics = get_metrics(
                 str_pred,
