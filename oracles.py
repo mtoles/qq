@@ -127,7 +127,8 @@ class T5_Oracle:
         # Prepare the dataset
         # self.prepped_val_dataset = self.raw_val_dataset.map(lambda x: _replace_sep(x))
         self.prepped_val_dataset = self.prepped_val_dataset.map(
-            lambda x: _add_prompt(x)
+            lambda x: _add_prompt(x),
+            load_from_cache_file=False,
         )
         self.prepped_val_dataset = self.prepped_val_dataset.map(
             lambda x: prepare_inputs_hp(
@@ -135,7 +136,8 @@ class T5_Oracle:
                 tk=self.tk,
                 max_length=2048,
                 masking_scheme=masking_scheme,
-            )
+            ),
+            load_from_cache_file=False,
         )
 
     def evaluate(self):

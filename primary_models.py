@@ -14,7 +14,11 @@ from transformers import (
     Trainer,
     PreTrainedModel,
 )
-from prepare_data import prepare_inputs_hp, prepend_question
+from prepare_data import (
+    prepare_inputs_hp,
+    prepend_question,
+    get_strided_contexts_and_ans,
+)
 from tqdm import tqdm
 
 import torch
@@ -95,6 +99,7 @@ class BigBird_PM(Primary_Model):
             # raw_val_dataset=raw_val_dataset,
             # prepped_val_dataset=prepped_val_dataset,
         )
+        self.max_length = self.model.bert.embeddings.position_embeddings.weight.shape[0]
 
     def prepare_data(self, masking_scheme, raw_val_dataset, save_input_ids=False):
         """
@@ -111,17 +116,17 @@ class BigBird_PM(Primary_Model):
             masking_scheme=masking_scheme, raw_val_dataset=raw_val_dataset
         )
         prepped_val_dataset = prepped_val_dataset.map(
-            lambda x: prepend_question(x, masking_scheme, self.tk.sep_token)
+            lambda x: prepend_question(x, masking_scheme, self.tk.sep_token),
+            load_from_cache_file=False,
         )
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
                 tk=self.tk,
-                max_length=self.model.bert.embeddings.position_embeddings.weight.shape[
-                    0
-                ],
+                max_length=self.max_length,
                 masking_scheme=masking_scheme,
-            )
+            ),
+            load_from_cache_file=False,
         )
         return prepped_val_dataset
         # self.trainer = Trainer(
@@ -142,12 +147,31 @@ class BigBird_PM(Primary_Model):
         # # remove the "eval_" prefix from each dictionary key
         # evaluation = {k[5:]: v for k, v in evaluation.items() if k.startswith("eval_")}
 
-        input_ids = self.tk(
-            prepped_val_dataset[f"prepped_{masking_scheme}"],
-            return_tensors="pt",
-            padding=True,
-        )["input_ids"].cuda()
-        model_output = self.model(input_ids)
+        # input_ids = self.tk(
+        #     prepped_val_dataset[f"prepped_{masking_scheme}"],
+        #     return_tensors="pt",
+        #     padding=True,
+        # )["input_ids"].cuda()
+        prepped_dataset = self.prepare_data(
+            masking_scheme=masking_scheme,
+            raw_val_dataset=prepped_val_dataset,
+        )
+        et = prepped_dataset["labels"][1]["end_token"][0]
+        st = prepped_dataset["labels"][1]["start_token"][0]
+        tokens = prepped_dataset["input_ids"][1]
+
+        trainer = Trainer(
+            model=self.model,
+            args=self.args,
+            data_collator=self.collate_fn,
+            eval_dataset=prepped_dataset,
+            compute_metrics=lambda x: compute_metrics_bb(x, self.tk, None),
+            tokenizer=self.tk,
+        )
+
+        evaluation = trainer.evaluate()
+
+        # model_output = self.model(input_ids)  # missing fields
         return evaluation
 
 
@@ -194,10 +218,12 @@ class T5_PM(Primary_Model):
             return x
 
         prepped_val_dataset = prepped_val_dataset.map(
-            lambda x: prepend_question(x, masking_scheme, "\n\n")
+            lambda x: prepend_question(x, masking_scheme, "\n\n"),
+            load_from_cache_file=False,
         )
         prepped_val_dataset = prepped_val_dataset.map(
-            lambda x: _add_prompt(x, masking_scheme)
+            lambda x: _add_prompt(x, masking_scheme),
+            load_from_cache_file=False,
         )
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepare_inputs_hp(
@@ -205,6 +231,7 @@ class T5_PM(Primary_Model):
                 tk=self.tk,
                 max_length=2048,
                 masking_scheme=masking_scheme,
+                load_from_cache_file=False,
             )
         )
         return prepped_val_dataset

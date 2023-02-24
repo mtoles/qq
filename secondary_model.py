@@ -39,5 +39,6 @@ class Dummy_Secondary_Model:
         )
         dataset = dataset.map(
             lambda x: _add_secondary_question(x),
+            load_from_cache_file=False,
         )
         return dataset

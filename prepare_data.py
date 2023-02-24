@@ -16,7 +16,7 @@ SEED = 42
 PROCESS_TRAIN = os.environ.pop("PROCESS_TRAIN", "false")
 
 
-def _get_single_answer(example):
+def _get_single_answer_data(example):
     def choose_first(answer, is_long_answer=False):
         assert isinstance(answer, list)
         assert len(answer) == 1  # matt
@@ -55,9 +55,9 @@ def _get_single_answer(example):
     return answer
 
 
-def get_context_and_ans(example):
+def get_context_and_ans(example, masking_scheme):
     """Gives new context after removing <html> & new answer tokens as per new context"""
-    answer = _get_single_answer(example)
+    answer = _get_single_answer_data(example)
     # bytes are of no use
     del answer["start_byte"]
     del answer["end_byte"]
@@ -115,14 +115,15 @@ def get_context_and_ans(example):
 
 def get_strided_contexts_and_ans(
     example,
-    tokenizer,
+    tk,
     max_length,
+    masking_scheme,
 ):
     # overlap will be of doc_stride - q_len
 
-    out = get_context_and_ans(example)
+    out = get_context_and_ans(example, masking_scheme)
     answer = out["answer"]
-    input_ids = tokenizer(out["context"]).input_ids
+    input_ids = tk(out["context"]).input_ids
 
     # later, removing these samples
     if answer["start_token"] == -1:
@@ -159,7 +160,7 @@ def get_strided_contexts_and_ans(
         complete_end_token = splitted_context[answer["end_token"]]
         answer["start_token"] = (
             len(
-                tokenizer(
+                tk(
                     " ".join(splitted_context[: answer["start_token"]]),
                     add_special_tokens=False,
                 ).input_ids
@@ -168,7 +169,7 @@ def get_strided_contexts_and_ans(
         )
         answer["end_token"] = (
             len(
-                tokenizer(
+                tk(
                     " ".join(splitted_context[: answer["end_token"]]),
                     add_special_tokens=False,
                 ).input_ids
@@ -180,9 +181,7 @@ def get_strided_contexts_and_ans(
         answer["end_token"]  # += q_len
 
         # fixing end token
-        num_sub_tokens = len(
-            tokenizer(complete_end_token, add_special_tokens=False).input_ids
-        )
+        num_sub_tokens = len(tk(complete_end_token, add_special_tokens=False).input_ids)
         if num_sub_tokens > 1:
             answer["end_token"] += num_sub_tokens - 1
 
@@ -210,30 +209,31 @@ def get_strided_contexts_and_ans(
     return output
 
 
-def prepare_inputs_nq(example, tokenizer, doc_stride=2048, max_length=4096):
-    example = get_strided_contexts_and_ans(
-        example,
-        tokenizer,
-        doc_stride=doc_stride,
-        max_length=max_length,
-    )
+# def prepare_inputs_nq(example, tokenizer, doc_stride=2048, max_length=4096):
+#     example = get_strided_contexts_and_ans(
+#         example,
+#         tokenizer,
+#         doc_stride=doc_stride,
+#         max_length=max_length,
+#     )
 
-    return example
+#     return example
 
 
 def prepare_inputs_hp(
     example,
     tk,
     max_length,
-    masking_scheme=None,
+    masking_scheme,
 ):
     adapted_example = adapt_example(example, masking_scheme=masking_scheme)
     tokenized_example = get_strided_contexts_and_ans(
         adapted_example,
         tk,
         max_length=max_length,
+        masking_scheme=masking_scheme,
     )
-    
+
     return tokenized_example
 
 
@@ -250,7 +250,9 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
 
 def adapt_example(example, masking_scheme=None):
     masking_scheme = str(masking_scheme)
-    masking_str = f"prepped_{masking_scheme}" # operate on the prepped text, not the fc text, 
+    masking_str = (
+        f"prepped_{masking_scheme}"  # operate on the prepped text, not the fc text,
+    )
     """Convert the HP example to look like an NQ example"""
     new_example = {}
     new_example["question"] = {"text": example["question"]}
@@ -288,9 +290,12 @@ def adapt_example(example, masking_scheme=None):
     # ) == normalize_answer(" ".join(tokens[start_token_index:end_token_index]))
     return new_example
 
+
 def prepend_question(example, masking_scheme, sep_token):
     # masking_str = f"fc_{masking_scheme}"
     context = example[f"prepped_{masking_scheme}"]
     question = example["question"]
-    example[f"prepped_{masking_scheme}"] = " ".join(" ".join([question, sep_token, context]).split())
+    example[f"prepped_{masking_scheme}"] = " ".join(
+        " ".join([question, sep_token, context]).split()
+    )
     return example
