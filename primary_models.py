@@ -80,9 +80,15 @@ class BigBird_PM(Primary_Model):
             ],
         )
         self.tk = BigBirdTokenizer.from_pretrained(BB_MODEL_ID)
-        self.model = BigBirdForNaturalQuestions.from_pretrained(
-            model_path, self.tk
-        ).cuda()
+        if model_path is not None:
+            self.model = BigBirdForNaturalQuestions.from_pretrained(
+                model_path, self.tk
+            ).cuda()
+        else:
+            print("You're loading an untrained model. Are you sure?")
+            self.model = BigBirdForNaturalQuestions.from_pretrained(
+                BB_MODEL_ID, self.tk
+            ).cuda()
         super(BigBird_PM, self).__init__(
             model_path=model_path,
             eval_batch_size=eval_batch_size,

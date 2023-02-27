@@ -14,6 +14,8 @@ from transformers import (
     TrainingArguments,
 )
 
+from primary_models import BigBird_PM
+
 
 RESUME_TRAINING = None
 GROUP_BY_LENGTH = True
@@ -140,24 +142,10 @@ def main(
         tr_dataset = drop_unanswerable(tr_dataset, masking_scheme, load_from_cache)
 
         print("Prepending questions")
-        tr_dataset = tr_dataset.map(
-            lambda x: prepend_question(
-                x, masking_scheme=masking_scheme, sep_token=tk.sep_token
-            ),
-            load_from_cache_file=load_from_cache,
-        )
+        dummy_pm = BigBird_PM()
+        # dumb hack to call the primary model functions because I'm lazy
+        tr_dataset = dummy_pm.prepare_data(masking_scheme=masking_scheme, raw_val_dataset=tr_dataset)
 
-        print("Preparing train inputs hotpot...")
-        tr_dataset = tr_dataset.map(
-            lambda x: prepare_inputs_hp(
-                x,
-                tk=tk,
-                max_length=max_length,
-                masking_scheme=masking_scheme,
-            ),
-            load_from_cache_file=load_from_cache,
-        )
-        # check_dataset(tr_dataset, tokenizer)
     else:
         tr_dataset = None
 
@@ -167,20 +155,9 @@ def main(
     print("Dropping val unanswerable...")
     val_dataset = drop_unanswerable(val_dataset, masking_scheme, load_from_cache)
     print("Prepending val questions...")
-    val_dataset = val_dataset.map(
-        lambda x: prepend_question(
-            x, masking_scheme=masking_scheme, sep_token=tk.sep_token
-        ),
-        load_from_cache_file=load_from_cache,
-    )
-    print("Preparing val inputs...")
-    val_dataset = val_dataset.map(
-        lambda x: prepare_inputs_hp(
-            x, tk=tk, max_length=max_length, masking_scheme=masking_scheme
-        ),
-        load_from_cache_file=load_from_cache,
-    )
-    # check_dataset(val_dataset, tokenizer)
+
+    # another dumb hack to process the data
+    val_dataset = dummy_pm.prepare_data(masking_scheme=masking_scheme, raw_val_dataset=val_dataset)
 
     now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     args = TrainingArguments(
