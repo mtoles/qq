@@ -118,16 +118,12 @@ class BigBird_PM(Primary_Model):
         )
         return prepped_val_dataset
 
-    def evaluate(self, masking_scheme, prepped_val_dataset):
+    def evaluate(self, masking_scheme, ds):
         # Prep the dataset again so that the input_ids are generated from the masking_scheme column
         prepped_dataset = self.prepare_data(
             masking_scheme=masking_scheme,
-            raw_val_dataset=prepped_val_dataset,
+            raw_val_dataset=ds,
         )
-        et = prepped_dataset["labels"][1]["end_token"][0]
-        st = prepped_dataset["labels"][1]["start_token"][0]
-        tokens = prepped_dataset["input_ids"][1]
-
         trainer = Trainer(
             model=self.model,
             args=self.args,
@@ -198,9 +194,9 @@ class T5_PM(Primary_Model):
         )
         return prepped_val_dataset
 
-    def evaluate(self, masking_scheme, prepped_val_dataset):
+    def evaluate(self, masking_scheme, ds):
         masking_str = f"prepped_{masking_scheme}"
-        prepped_val_dataset = self.prepare_data(masking_scheme, prepped_val_dataset)
+        ds = self.prepare_data(masking_scheme, ds)
         with torch.no_grad():
             str_pred = []
             str_gt = []
@@ -208,8 +204,8 @@ class T5_PM(Primary_Model):
             cls_gt = []
             input_ids = []
 
-            for i, x in enumerate(tqdm(prepped_val_dataset)):
-                input_tokens = self.tk(prepped_val_dataset[i][masking_str])["input_ids"]
+            for i, x in enumerate(tqdm(ds)):
+                input_tokens = self.tk(ds[i][masking_str])["input_ids"]
                 generation = self.forward(input_ids=input_tokens)
                 generation_str = self.tk.decode(generation[0])
                 str_pred.append(

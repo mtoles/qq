@@ -25,7 +25,7 @@ class Dummy_Secondary_Model:
         # return "What is six times seven?"
         return example["masked_sentence"]
 
-    def process(self, dataset, primary_question_col, context_col):
+    def process(self, ds, primary_question_col, context_col):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'secondary_question'."""
 
         def _add_secondary_question(example):
@@ -34,11 +34,11 @@ class Dummy_Secondary_Model:
             )
             return example
 
-        dataset = dataset.add_column(
-            name="secondary_question", column=[""] * len(dataset)
+        ds = ds.add_column(
+            name="secondary_question", column=[""] * len(ds)
         )
-        dataset = dataset.map(
+        ds = ds.map(
             lambda x: _add_secondary_question(x),
             load_from_cache_file=False,
         )
-        return dataset
+        return ds

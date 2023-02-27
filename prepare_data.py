@@ -1,7 +1,5 @@
 """Process and tokenize the data from preprocess.py at training and validation time"""
 
-import os
-
 from typing import List, Optional, Tuple
 from collections import defaultdict
 from hotpot_evaluate_v1 import normalize_answer
@@ -10,15 +8,12 @@ from utils import (
     CATEGORY_MAPPING,
 )
 
-
-
 def _get_single_answer_data(example):
-    def choose_first(answer, is_long_answer=False):
-        assert isinstance(answer, list)
-        assert len(answer) == 1  # matt
-        if len(answer) == 1:
-            answer = answer[0]
-            return {k: [answer[k]] for k in answer} if is_long_answer else answer
+    # def choose_first(answer, is_long_answer=False):
+    #     assert isinstance(answer, list)
+    #     assert len(answer) == 1  # matt
+    #     answer = answer[0]
+    #     return {k: [answer[k]] for k in answer} if is_long_answer else answer
 
     answer = {"id": example["id"]}
     annotation = example["annotations"]
@@ -30,12 +25,14 @@ def _get_single_answer_data(example):
         answer["text"] = ["<cls>"]
     else:
         answer["category"] = ["short"]
-        out = choose_first(annotation["short_answers"])
-        if len(out["start_token"]) == 0:
-            # answer will be long if short is not available
-            answer["category"] = ["long"]
-            out = choose_first(annotation["long_answer"], is_long_answer=True)
-            out["text"] = []
+        # out = choose_first(annotation["short_answers"])
+        out = annotation["short_answers"][0]
+        assert len(out["start_token"])==1
+        # if len(out["start_token"]) == 0:
+        #     # answer will be long if short is not available
+        #     answer["category"] = ["long"]
+        #     out = choose_first(annotation["long_answer"], is_long_answer=True)
+        #     out["text"] = []
         answer.update(out)
 
     cols = ["start_token", "end_token", "start_byte", "end_byte", "text"]

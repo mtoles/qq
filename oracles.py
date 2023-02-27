@@ -15,7 +15,6 @@ class Dummy_Oracle:
         # return the first sentence of the corpus
         return self.corpus[0]
 
-
 class T5_Oracle:
     def __init__(
         self,
@@ -30,14 +29,14 @@ class T5_Oracle:
             model_name, cache_dir="./.model_cache"
         ).cuda()
 
-    def process(self, dataset, secondary_question_col):
-        new_dataset = dataset.map(
+    def process(self, ds, secondary_question_col):
+        new_ds = ds.map(
             lambda x: self.forward(x, secondary_question_col),
             load_from_cache_file=False,
             batched=True,
             batch_size=1,
         )
-        return new_dataset
+        return new_ds
 
     def forward(self, example, secondary_question_col):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
@@ -102,55 +101,3 @@ class T5_Oracle:
         example["oracle_answer"] = [oracle_answer]
         example["oracle_answer_is_correct"] = [oracle_answer_is_correct]
         return example
-
-    def prepare_data(self, masking_scheme):
-        masking_str = f"fc_{masking_scheme}"
-
-        def _add_prompt(x):
-            x[masking_str] = x[masking_str] + " Answer in as few words as possible: "
-            return x
-
-        # Prepare the dataset
-        self.prepped_val_dataset = self.prepped_val_dataset.map(
-            lambda x: _add_prompt(x),
-            load_from_cache_file=False,
-        )
-        self.prepped_val_dataset = self.prepped_val_dataset.map(
-            lambda x: prepare_inputs_hp(
-                x,
-                tk=self.tk,
-                max_length=2048,
-                masking_scheme=masking_scheme,
-            ),
-            load_from_cache_file=False,
-        )
-
-    def evaluate(self):
-        with torch.no_grad():
-            str_pred = []
-            str_gt = []
-            cls_pred = []
-            cls_gt = []
-            input_ids = []
-
-            for i, x in enumerate(tqdm(self.prepped_val_dataset)):
-                generation = self.forward(input_ids=x["input_ids"])
-                generation_str = self.tk.decode(generation[0])
-                str_pred.append(
-                    self.tk.batch_decode(generation, skip_special_tokens=True)[0]
-                )
-                str_gt.append(x["answer"])
-                cls_pred.append(None)
-                cls_gt.append(None)
-                input_ids.append(x["input_ids"])
-
-            metrics = get_metrics(
-                str_pred,
-                str_gt,
-                cls_pred,
-                cls_gt,
-                input_ids,
-                self.tk,
-                None,
-            )
-        return metrics
