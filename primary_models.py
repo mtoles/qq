@@ -134,6 +134,8 @@ class BigBird_PM(Primary_Model):
         )
 
         evaluation = trainer.evaluate()
+        # drop the "eval_" prefix
+        evaluation = {k[5:]: v for k, v in evaluation.items()}
         return evaluation
 
 
