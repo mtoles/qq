@@ -205,32 +205,53 @@ class T5_PM(Primary_Model):
     def evaluate(self, masking_scheme, ds):
         masking_str = f"prepped_{masking_scheme}"
         ds = self.prepare_data(masking_scheme, ds)
+
         with torch.no_grad():
-            str_pred = []
-            str_gt = []
-            cls_pred = []
-            cls_gt = []
-            input_ids = []
+            # Data used for computing aggregate metrics
+            str_preds = []
+            str_gts = []
+            cls_preds = []
+            cls_gts = []
+            input_idss = []
+
+            # Data recorded into the dataset under ['m1_{masking_scheme}_gen', 'm1_{masking_scheme}_f1']
+            gen_strs = [] # generated strings
+            f1s = [] # f1 scores
 
             for i, x in enumerate(tqdm(ds)):
                 input_tokens = self.tk(ds[i][masking_str])["input_ids"]
                 generation = self.forward(input_ids=input_tokens)
-                generation_str = self.tk.decode(generation[0])
-                str_pred.append(
+                str_preds.append(
                     self.tk.batch_decode(generation, skip_special_tokens=True)[0]
                 )
-                str_gt.append(x["answer"])
-                cls_pred.append(None)
-                cls_gt.append(None)
-                input_ids.append(input_tokens)
+                generation_str = str_preds[-1]
+                str_gts.append(x["answer"])
+                cls_preds.append(None)
+                cls_gts.append(None)
+                input_idss.append(input_tokens)
+                single_metrics = get_metrics(
+                    str_preds[-1:],
+                    str_gts[-1:],
+                    cls_preds[-1:],
+                    cls_gts[-1:],
+                    input_idss[-1:],
+                    self.tk,
+                    None,
+                )
+                gen_strs.append(generation_str)
+                f1s.append(single_metrics["f1"])
 
+            ds = ds.add_column(f"m1_{masking_scheme}_gen", gen_strs)
+            ds = ds.add_column(f"m1_{masking_scheme}_f1", f1s)
+
+            # Get aggregate metrics
             metrics = get_metrics(
-                str_pred,
-                str_gt,
-                cls_pred,
-                cls_gt,
-                input_ids,
+                str_preds,
+                str_gts,
+                cls_preds,
+                cls_gts,
+                input_idss,
                 self.tk,
                 None,
             )
-        return metrics
+        return ds, metrics
