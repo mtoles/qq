@@ -36,7 +36,7 @@ def format_dataset_hotpot(example):
     example["context"] = "\n".join(
         [x for y in example["context"]["sentences"] for x in y]
     )
-    example["targets"] = [example["answer"]]
+    example["targets"] = [example["a1"]]
     return example
 
 
@@ -45,13 +45,13 @@ def format_dataset_trivia(example):
     example["context"] = " ".join(
         ("\n".join(example["entity_pages"]["wiki_context"])).split("\n")
     )
-    example["targets"] = example["answer"]["aliases"]
-    example["norm_target"] = example["answer"]["normalized_value"]
+    example["targets"] = example["a1"]["aliases"]
+    example["norm_target"] = example["a1"]["normalized_value"]
     return example
 
 
 def has_answer(example, masking_str):
-    answer = [normalize_answer(x) for x in example["answer"].split()]
+    answer = [normalize_answer(x) for x in example["a1"].split()]
     context = [normalize_answer(x) for x in example[masking_str].split()]
     if answer[0] in ["yes", "no"]:
         return True
@@ -74,7 +74,7 @@ def drop_unanswerable(dataset, masking_scheme, load_from_cache_file):
 
 
 def clean_answer(ex, tk):
-    ex["answer"] = tk.decode(tk.encode(ex["answer"]))
+    ex["a1"] = tk.decode(tk.encode(ex["a1"]))
     return ex
 
 
@@ -82,7 +82,7 @@ def check_example(ex, tk):
     st = ex["labels"]["start_token"][0]
     et = ex["labels"]["end_token"][0]
     input_ids = ex["input_ids"]
-    answer = ex["answer"]
+    answer = ex["a1"]
     answer_tokens = input_ids[st : et + 1]
     answer_indexed = tk.decode(answer_tokens)
     # assert (

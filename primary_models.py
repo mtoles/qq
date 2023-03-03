@@ -225,7 +225,7 @@ class T5_PM(Primary_Model):
                     self.tk.batch_decode(generation, skip_special_tokens=True)[0]
                 )
                 generation_str = str_preds[-1]
-                str_gts.append(x["answer"])
+                str_gts.append(x["a1"])
                 cls_preds.append(None)
                 cls_gts.append(None)
                 input_idss.append(input_tokens)

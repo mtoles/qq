@@ -75,7 +75,7 @@ def collate_fn_bb(features, tk, threshold=1024):
 
     # tokenize answers
     tokenized_answers_int = tk.batch_encode_plus(
-        [x["answer"] for x in features], add_special_tokens=False
+        [x["a1"] for x in features], add_special_tokens=False
     )["input_ids"]
     tokenized_answers_tensor = [torch.Tensor(x) for x in tokenized_answers_int]
     tokenized_answers = stack_with_padding(tokenized_answers_tensor, pad_id)

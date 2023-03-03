@@ -144,6 +144,10 @@ def main(
             cache_file_name=cache_file_name,
             load_from_cache_file=load_from_cache,
         )
+    
+    # Rename Columns
+    new_ds = new_ds.rename_column("question", "q1")
+    new_ds = new_ds.rename_column("answer", "a1")
 
     save_path = os.path.join(
         "data",

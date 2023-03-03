@@ -58,7 +58,7 @@ def get_context_and_ans(example, masking_scheme):
                 context.append(doc["token"][i])
         return {
             "context": " ".join(context),
-            "answer": {
+            "a1": {
                 "start_token": -100,  # ignore index in cross-entropy # TODO: Why not -1 like elsewhere?
                 "end_token": -100,  # ignore index in cross-entropy
                 "category": answer["category"],
@@ -90,7 +90,7 @@ def get_context_and_ans(example, masking_scheme):
 
     output = {
         "context": " ".join(context),
-        "answer": {
+        "a1": {
             "start_token": start_token,
             "end_token": end_token - 1,  # this makes it inclusive
             "category": answer["category"],  # either long or short
@@ -109,7 +109,7 @@ def get_strided_contexts_and_ans(
     # overlap will be of doc_stride - q_len
 
     out = get_context_and_ans(example, masking_scheme)
-    answer = out["answer"]
+    answer = out["a1"]
     input_ids = tk(out["context"]).input_ids
 
     # later, removing these samples
@@ -236,9 +236,9 @@ def adapt_example(example, masking_scheme=None):
     )
     """Convert the HP example to look like an NQ example"""
     new_example = {}
-    new_example["question"] = {"text": example["question"]}
-    answer = example["answer"]
-    new_example["answer"] = {"text": answer}
+    new_example["q1"] = {"text": example["q1"]}
+    answer = example["a1"]
+    new_example["a1"] = {"text": answer}
     # Add the question to the context
     context = example[masking_str]
     # Call join/split an extra time to normalize whitespaces and unicode nonsense
@@ -275,7 +275,7 @@ def adapt_example(example, masking_scheme=None):
 def prepend_question(example, masking_scheme, sep_token):
     # masking_str = f"fc_{masking_scheme}"
     context = example[f"prepped_{masking_scheme}"]
-    question = example["question"]
+    question = example["q1"]
     example[f"prepped_{masking_scheme}"] = " ".join(
         " ".join([question, sep_token, context]).split()
     )

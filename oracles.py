@@ -15,6 +15,7 @@ class Dummy_Oracle:
         # return the first sentence of the corpus
         return self.corpus[0]
 
+
 class T5_Oracle:
     def __init__(
         self,
@@ -29,18 +30,18 @@ class T5_Oracle:
             model_name, cache_dir="./.model_cache"
         ).cuda()
 
-    def process(self, ds, secondary_question_col):
+    def process(self, ds, q2_col):
         new_ds = ds.map(
-            lambda x: self.forward(x, secondary_question_col),
+            lambda x: self.forward(x, q2_col),
             load_from_cache_file=False,
             batched=True,
             batch_size=1,
         )
         return new_ds
 
-    def forward(self, example, secondary_question_col):
+    def forward(self, example, q2_col):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
-        secondary_question = example[secondary_question_col]
+        q2 = example[q2_col]
         masked_sentence = example["masked_sentence"]
         # Build the corpus
         # First answer is correct. The rest are distractor.
@@ -55,7 +56,7 @@ class T5_Oracle:
         max_answer_len = max([len(x) for x in corpus_ids])
         c = len(corpus_strs)
 
-        prompt_encoding = self.tk(secondary_question, return_tensors="pt", padding=True)
+        prompt_encoding = self.tk(q2, return_tensors="pt", padding=True)
         input_ids, input_attention_masks = (
             prompt_encoding.input_ids.cuda().repeat(c, 1),
             prompt_encoding.attention_mask.cuda().repeat(c, 1),

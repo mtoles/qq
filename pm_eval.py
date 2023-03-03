@@ -88,27 +88,7 @@ def main(
         dataset = load_dataset("json", data_files="data/hotpot-validation.jsonl")[
             "train"
         ]
-    # elif dataset_name == "trivia":
-    #     dataset = datasets.load_dataset(
-    #         "trivia_qa", "rc", split=f"validation{downsample_str}"
-    #     ).map(
-    #         format_dataset_trivia,
-    #         load_from_cache_file=load_from_cache,
-    #         remove_columns=[
-    #             "search_results",
-    #             "question_source",
-    #             "entity_pages",
-    #             "question_id",
-    #         ],
-    #     )
-    #     # filter examples with no context
-    #     dataset = dataset.filter(lambda x: len(x["context"]) > 0)
-    #     # filter examples that are too long
-    #     dataset = dataset.filter(
-    #         lambda x: (len(x["question"]) + len(x["context"])) < 4 * 4096
-    #     )
-    #     # filter examples where the answer is not contained in the context
-    #     # dataset = dataset.filter(lambda x: x["answer"]["value"] in x["context"])
+
 
     else:
         raise ValueError("Dataset not implemented")

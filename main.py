@@ -7,7 +7,7 @@ import click
 import configparser
 from datasets import load_from_disk
 from oracles import Dummy_Oracle, T5_Oracle
-from secondary_model import Dummy_Secondary_Model
+from secondary_model import Dummy_Secondary_Model, Repeater_Secondary_Model
 from primary_models import BigBird_PM, T5_PM
 from dataset_utils import drop_unanswerable
 from datetime import datetime
@@ -36,11 +36,11 @@ def main(
     downsample_pt_size,
     results_filename,
 ):
-    
+
     # testing chatgpt
     # read the chatgpt api key from config.ini
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read("config.ini")
     openai_api_key = config.get("API_KEYS", "openai_api_key")
 
     now = datetime.now().strftime("Y%m%d-%H%M%S")
@@ -83,22 +83,22 @@ def main(
         # Evaluate the primary model
         ds, metrics = m1.evaluate(masking_scheme=masking_scheme, ds=ds)
         # Create the secondary model
-        m2 = Dummy_Secondary_Model()
+        m2 = Repeater_Secondary_Model()
         # Apply the secondary model
         ds = m2.process(
             ds,
-            primary_question_col="question",
+            q1_col="q1",
             context_col=masking_str,
         )
         # Create the oracle
         oracle = T5_Oracle(model_name="t5-small")
         # benchmark the oracle's ability to answer the questions
-        df = pd.DataFrame(columns=["question", "masked_sentence"])
+        df = pd.DataFrame(columns=["q1", "masked_sentence"])
         for i in range(100):
-            q = ds["question"][i]
-            ms = ds['masked_sentence'][i]
+            q = ds["q1"][i]
+            ms = ds["masked_sentence"][i]
         # Answer questions with the oracle
-        ds = oracle.process(ds, secondary_question_col="secondary_question")
+        ds = oracle.process(ds, q2_col="q2")
         print(metrics)
 
         f.write(
