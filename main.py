@@ -4,6 +4,7 @@
 #  pt: primary task
 
 import click
+import configparser
 from datasets import load_from_disk
 from oracles import Dummy_Oracle, T5_Oracle
 from secondary_model import Dummy_Secondary_Model
@@ -35,6 +36,13 @@ def main(
     downsample_pt_size,
     results_filename,
 ):
+    
+    # testing chatgpt
+    # read the chatgpt api key from config.ini
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    openai_api_key = config.get("API_KEYS", "openai_api_key")
+
     now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
         results_filename = f"{m1_arch}-{downsample_pt_size}-{masking_scheme}-{now}"
