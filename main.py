@@ -81,7 +81,13 @@ def main(
         ds = raw_dataset
 
         # Evaluate the primary model
-        ds, metrics = m1.evaluate(masking_scheme=masking_scheme, ds=ds)
+        metrics = {}
+        ds, metrics[masking_scheme] = m1.evaluate(
+            masking_scheme=masking_scheme, ds=ds, a2_col=None
+        )
+        ds, metrics["supporting"] = m1.evaluate(
+            masking_scheme="supporting", ds=ds, a2_col=None
+        )
         # Create the secondary model
         m2 = Repeater_Secondary_Model()
         # Apply the secondary model
@@ -92,13 +98,15 @@ def main(
         )
         # Create the oracle
         oracle = T5_Oracle(model_name="t5-small")
-        # benchmark the oracle's ability to answer the questions
-        df = pd.DataFrame(columns=["q1", "masked_sentence"])
-        for i in range(100):
-            q = ds["q1"][i]
-            ms = ds["masked_sentence"][i]
         # Answer questions with the oracle
         ds = oracle.process(ds, q2_col="q2")
+
+        ds, metrics["answered"] = m1.evaluate(masking_scheme=masking_scheme, ds=ds, a2_col="a2")
+
+
+        # Analysis
+        df = pd.DataFrame(ds)
+        percent_oracle_correct = df["a2_is_correct"].mean()
         print(metrics)
 
         f.write(

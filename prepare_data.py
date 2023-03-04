@@ -272,11 +272,22 @@ def adapt_example(example, masking_scheme=None):
     return new_example
 
 
-def prepend_question(example, masking_scheme, sep_token):
+def prepend_question(example, masking_scheme, a2_col, sep_str):
+    assert sep_str is not None
     # masking_str = f"fc_{masking_scheme}"
-    context = example[f"prepped_{masking_scheme}"]
+    context = example[f"prepped_{masking_scheme}_{str(a2_col)}"]
     question = example["q1"]
-    example[f"prepped_{masking_scheme}"] = " ".join(
-        " ".join([question, sep_token, context]).split()
+    example[f"prepped_{masking_scheme}_{str(a2_col)}"] = " ".join(
+        " ".join([question, sep_str, context]).split()
+    )
+    return example
+
+def append_a2(example, masking_scheme, a2_col, sep_str):
+    assert sep_str is not None
+    # masking_str = f"fc_{masking_scheme}"
+    context = example[f"prepped_{masking_scheme}_{str(a2_col)}"]
+    a2 = example["a2"]
+    example[f"prepped_{masking_scheme}_{str(a2_col)}"] = " ".join(
+        " ".join([context, sep_str, a2]).split()
     )
     return example

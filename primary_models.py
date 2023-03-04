@@ -15,6 +15,7 @@ from transformers import (
 from prepare_data import (
     prepare_inputs_hp,
     prepend_question,
+    append_a2,
 )
 from tqdm import tqdm
 
@@ -40,18 +41,18 @@ class Primary_Model:
         Check `compute_metrics` function for actual requirements"""
         return self.model(**inputs)
 
-    def prepare_data(self, masking_scheme, raw_val_dataset):
+    def prepare_data(self, masking_scheme, a2_col, raw_val_dataset):
         prepped_val_dataset = raw_val_dataset
         # TODO: add column for masking_scheme
         prepped_val_dataset = prepped_val_dataset.add_column(
             column=raw_val_dataset[f"fc_{masking_scheme}"],
-            name=f"prepped_{masking_scheme}",
+            name=f"prepped_{masking_scheme}_{str(a2_col)}",
         )
+
         return prepped_val_dataset
 
     def evaluate(self):
-        print("You should subclass this method")
-        pass
+        raise NotImplementedError("You should subclass this method")
 
 
 class BigBird_PM(Primary_Model):
@@ -95,24 +96,29 @@ class BigBird_PM(Primary_Model):
         )
         self.max_length = self.model.bert.embeddings.position_embeddings.weight.shape[0]
 
-    def prepare_data(self, masking_scheme, raw_val_dataset, save_input_ids=False):
+    def prepare_data(self, masking_scheme, raw_val_dataset, a2_col):
         """
         Method for preparing the validation dataset for evaluation.
 
         Args:
             masking_scheme (str):
                 The masking scheme to use. Usually "randomsentence"
-            save_as_input_ids (bool, optional):
-                Whether to save the dataset as input_ids or not.
-                Some functions assume the dataset has only one "input_ids" column, so be
         """
         prepped_val_dataset = super(BigBird_PM, self).prepare_data(
-            masking_scheme=masking_scheme, raw_val_dataset=raw_val_dataset
+            masking_scheme=masking_scheme,
+            a2_col=a2_col,
+            raw_val_dataset=raw_val_dataset,
         )
+        sep_str = "\n\n" if self.tk.sep_token is None else self.tk.sep_token
         prepped_val_dataset = prepped_val_dataset.map(
-            lambda x: prepend_question(x, masking_scheme, self.tk.sep_token),
+            lambda x: prepend_question(x, masking_scheme, sep_str),
             load_from_cache_file=False,
         )
+        if a2_col is not None:
+            prepped_val_dataset = prepped_val_dataset.map(
+                lambda x: append_a2(x, masking_scheme, sep_str),
+                load_from_cache_file=False,
+            )
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepare_inputs_hp(
                 x,
@@ -124,11 +130,12 @@ class BigBird_PM(Primary_Model):
         )
         return prepped_val_dataset
 
-    def evaluate(self, masking_scheme, ds):
+    def evaluate(self, masking_scheme, a2_col, ds):
         # Prep the dataset again so that the input_ids are generated from the masking_scheme column
         prepped_dataset = self.prepare_data(
             masking_scheme=masking_scheme,
             raw_val_dataset=ds,
+            a2_col=a2_col,
         )
         trainer = Trainer(
             model=self.model,
@@ -170,23 +177,30 @@ class T5_PM(Primary_Model):
         generation_str = self.tk.decode(generation[0])
         return generation
 
-    def prepare_data(self, masking_scheme, raw_val_dataset):
+    def prepare_data(self, masking_scheme, raw_val_dataset, a2_col):
         # Call the parent class's prepare_data method to get the prepped_val_dataset
         prepped_val_dataset = super(T5_PM, self).prepare_data(
-            masking_scheme=masking_scheme, raw_val_dataset=raw_val_dataset
+            masking_scheme=masking_scheme,
+            a2_col=a2_col,
+            raw_val_dataset=raw_val_dataset,
         )
 
         def _add_prompt(x, masking_scheme):
             x[f"prepped_{masking_scheme}"] = (
-                x[f"prepped_{masking_scheme}"]
+                x[f"prepped_{masking_scheme}_{str(a2_col)}"]
                 + "\n\nAnswer in as few words as possible: "
             )
             return x
 
         prepped_val_dataset = prepped_val_dataset.map(
-            lambda x: prepend_question(x, masking_scheme, "\n\n"),
+            lambda x: prepend_question(x, masking_scheme, a2_col, "\n\n"),
             load_from_cache_file=False,
         )
+        if a2_col is not None:
+            prepped_val_dataset = prepped_val_dataset.map(
+                lambda x: append_a2(x, masking_scheme, a2_col, "\n\n"),
+                load_from_cache_file=False,
+            )
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: _add_prompt(x, masking_scheme),
             load_from_cache_file=False,
@@ -202,9 +216,9 @@ class T5_PM(Primary_Model):
         )
         return prepped_val_dataset
 
-    def evaluate(self, masking_scheme, ds):
+    def evaluate(self, masking_scheme, ds, a2_col):
         masking_str = f"prepped_{masking_scheme}"
-        ds = self.prepare_data(masking_scheme, ds)
+        ds = self.prepare_data(masking_scheme, ds, a2_col)
 
         with torch.no_grad():
             # Data used for computing aggregate metrics
@@ -215,8 +229,8 @@ class T5_PM(Primary_Model):
             input_idss = []
 
             # Data recorded into the dataset under ['m1_{masking_scheme}_gen', 'm1_{masking_scheme}_f1']
-            gen_strs = [] # generated strings
-            f1s = [] # f1 scores
+            gen_strs = []  # generated strings
+            f1s = []  # f1 scores
 
             for i, x in enumerate(tqdm(ds)):
                 input_tokens = self.tk(ds[i][masking_str])["input_ids"]
@@ -241,8 +255,8 @@ class T5_PM(Primary_Model):
                 gen_strs.append(generation_str)
                 f1s.append(single_metrics["f1"])
 
-            ds = ds.add_column(f"m1_{masking_scheme}_gen", gen_strs)
-            ds = ds.add_column(f"m1_{masking_scheme}_f1", f1s)
+            ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_gen", gen_strs)
+            ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_f1", f1s)
 
             # Get aggregate metrics
             metrics = get_metrics(
