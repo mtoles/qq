@@ -186,7 +186,7 @@ class T5_PM(Primary_Model):
         )
 
         def _add_prompt(x, masking_scheme):
-            x[f"prepped_{masking_scheme}"] = (
+            x[f"prepped_{masking_scheme}_{str(a2_col)}"] = (
                 x[f"prepped_{masking_scheme}_{str(a2_col)}"]
                 + "\n\nAnswer in as few words as possible: "
             )
@@ -217,7 +217,7 @@ class T5_PM(Primary_Model):
         return prepped_val_dataset
 
     def evaluate(self, masking_scheme, ds, a2_col):
-        masking_str = f"prepped_{masking_scheme}"
+        masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
         ds = self.prepare_data(masking_scheme, ds, a2_col)
 
         with torch.no_grad():

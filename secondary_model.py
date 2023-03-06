@@ -1,11 +1,16 @@
 from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model
+import openai
+import configparser
 
+# Set up the API once for all models
+config = configparser.ConfigParser()
+config.read("config.ini")
+openai.api_key = config.get("API_KEYS", "openai_api_key")
 
-class Dummy_Secondary_Model:
+# Abstract class for secondary models
+class Secondary_Model:
     def __init__(
         self,
-        eval_batch_size=2,
-        model_name="gpt2",
     ):
         self.model_name = "dummy"
 
@@ -14,16 +19,15 @@ class Dummy_Secondary_Model:
 
     def forward(self, example, question_col, context_col):
         return "What is six times seven?"
-        # return example["masked_sentence"]
 
-    def process(self, ds, q1_col, context_col):
+    def process(self, ds, q1_col, masking_scheme):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
 
         def _add_q2(example):
-            example["q2"] = self.forward(example, q1_col, context_col)
+            example[f"q2_{masking_scheme}"] = self.forward(example, q1_col, f"fc_{masking_scheme}")
             return example
 
-        ds = ds.add_column(name="q2", column=[""] * len(ds))
+        ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
         ds = ds.map(
             lambda x: _add_q2(x),
             load_from_cache_file=False,
@@ -31,17 +35,11 @@ class Dummy_Secondary_Model:
         return ds
 
 
-class Repeater_Secondary_Model:
+class Repeater_Secondary_Model(Secondary_Model):
     def __init__(
         self,
-        eval_batch_size=2,
-        model_name="gpt2",
     ):
-        self.model_name = "dummy"
-        # self.tk = GPT2Tokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
-        # self.model = GPT2Model.from_pretrained(
-        #     model_name, cache_dir="./.model_cache"
-        # ).cuda()
+        self.model_name = "repeater"
 
     def prepare_data(self, masking_scheme):
         pass
@@ -50,16 +48,31 @@ class Repeater_Secondary_Model:
         # Always return the original question q1
         return example[question_col]
 
-    def process(self, ds, q1_col, context_col):
-        """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
 
-        def _add_q2(example):
-            example["q2"] = self.forward(example, q1_col, context_col)
-            return example
+class OpenAI_Secondary_Model(Secondary_Model):
+    def __init__(
+        self,
+    ):
+        self.model_name = "chatGPT"
+        self.model = "gpt-3.5-turbo"
+        # call the openai api with a test prompt
 
-        ds = ds.add_column(name="q2", column=[""] * len(ds))
-        ds = ds.map(
-            lambda x: _add_q2(x),
-            load_from_cache_file=False,
+    def prepare_data(self, masking_scheme):
+        pass
+
+    def forward(self, example, question_col, context_col):
+        # Always return the original question q1
+        q1 = example[question_col]
+        context = example[context_col]
+        prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
+
+        response = openai.ChatCompletion.create(
+            model=self.model,
+            messages=[
+                {"role": "user", "content": prompt},
+            ],
         )
-        return ds
+        q2 = response["choices"][0]["message"]["content"]
+        return q2
+
+

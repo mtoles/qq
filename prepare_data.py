@@ -8,6 +8,7 @@ from utils import (
     CATEGORY_MAPPING,
 )
 
+
 def _get_single_answer_data(example):
     # def choose_first(answer, is_long_answer=False):
     #     assert isinstance(answer, list)
@@ -27,7 +28,7 @@ def _get_single_answer_data(example):
         answer["category"] = ["short"]
         # out = choose_first(annotation["short_answers"])
         out = annotation["short_answers"][0]
-        assert len(out["start_token"])==1
+        assert len(out["start_token"]) == 1
         # if len(out["start_token"]) == 0:
         #     # answer will be long if short is not available
         #     answer["category"] = ["long"]
@@ -282,11 +283,12 @@ def prepend_question(example, masking_scheme, a2_col, sep_str):
     )
     return example
 
+
 def append_a2(example, masking_scheme, a2_col, sep_str):
     assert sep_str is not None
     # masking_str = f"fc_{masking_scheme}"
     context = example[f"prepped_{masking_scheme}_{str(a2_col)}"]
-    a2 = example["a2"]
+    a2 = example[f"{str(a2_col)}_{masking_scheme}"]
     example[f"prepped_{masking_scheme}_{str(a2_col)}"] = " ".join(
         " ".join([context, sep_str, a2]).split()
     )

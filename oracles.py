@@ -10,6 +10,7 @@ from tqdm import tqdm
 class Dummy_Oracle:
     def __init__(self, corpus):
         self.corpus = corpus.split(". ")
+        self.model_name = "dummy"
 
     def consult(self, query):
         # return the first sentence of the corpus
@@ -19,31 +20,32 @@ class Dummy_Oracle:
 class T5_Oracle:
     def __init__(
         self,
+        model_name,
         eval_batch_size=1,
         # raw_val_dataset=None,
-        model_name=None,
     ):
+        self.model_name = model_name
         self.eval_batch_size = eval_batch_size
-        model_name = f"google/flan-{model_name}"
-        self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
+        self.model_name = f"google/flan-{self.model_name}"
+        self.tk = AutoTokenizer.from_pretrained(self.model_name, cache_dir="./.model_cache")
         self.model = T5ForConditionalGeneration.from_pretrained(
-            model_name, cache_dir="./.model_cache"
+            self.model_name, cache_dir="./.model_cache"
         ).cuda()
         self.model.eval()
 
-    def process(self, ds, q2_col):
+    def process(self, ds, q2_masking_scheme):
         new_ds = ds.map(
-            lambda x: self.forward(x, q2_col),
+            lambda x: self.forward(x, q2_masking_scheme),
             load_from_cache_file=False,
             batched=True,
             batch_size=1,
         )
         return new_ds
 
-    def forward(self, example, q2_col):
+    def forward(self, example, q2_masking_scheme):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
         with torch.no_grad():
-            q2 = example[q2_col]
+            q2 = example[f"q2_{q2_masking_scheme}"]
             masked_sentence = example["masked_sentence"]
             # Build the corpus
             # First answer is correct. The rest are distractor.
@@ -101,6 +103,6 @@ class T5_Oracle:
             # TODO: find the max probability answer in probs
             oracle_answer = corpus_strs[best_index]
             oracle_answer_is_correct = bool(best_index == 0)
-            example["a2"] = [oracle_answer]
-            example["a2_is_correct"] = [oracle_answer_is_correct]
+            example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
+            example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
             return example
