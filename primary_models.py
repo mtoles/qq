@@ -205,15 +205,16 @@ class T5_PM(Primary_Model):
             lambda x: _add_prompt(x, masking_scheme),
             load_from_cache_file=False,
         )
-        prepped_val_dataset = prepped_val_dataset.map(
-            lambda x: prepare_inputs_hp(
-                x,
-                tk=self.tk,
-                max_length=2048,
-                masking_scheme=masking_scheme,
-            ),
-            load_from_cache_file=False,
-        )
+        # prepped_val_dataset = prepped_val_dataset.map(
+        #     lambda x: prepare_inputs_hp(
+        #         x,
+        #         tk=self.tk,
+        #         max_length=2048,
+        #         masking_scheme=masking_scheme,
+        #         a2_col=a2_col,
+        #     ),
+        #     load_from_cache_file=False,
+        # )
         return prepped_val_dataset
 
     def evaluate(self, masking_scheme, ds, a2_col):

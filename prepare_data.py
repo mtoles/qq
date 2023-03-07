@@ -207,8 +207,9 @@ def prepare_inputs_hp(
     tk,
     max_length,
     masking_scheme,
+    a2_col
 ):
-    adapted_example = adapt_example(example, masking_scheme=masking_scheme)
+    adapted_example = adapt_example(example, masking_scheme=masking_scheme, a2_col=a2_col)
     tokenized_example = get_strided_contexts_and_ans(
         adapted_example,
         tk,
@@ -230,10 +231,10 @@ def get_answer_token_indices(context: str, answer: str) -> Tuple[int, int]:
     return start_token_index, end_token_index
 
 
-def adapt_example(example, masking_scheme=None):
+def adapt_example(example, masking_scheme=None, a2_col=None):
     masking_scheme = str(masking_scheme)
     masking_str = (
-        f"prepped_{masking_scheme}"  # operate on the prepped text, not the fc text,
+        f"prepped_{masking_scheme}_{a2_col}"  # operate on the prepped text, not the fc text,
     )
     """Convert the HP example to look like an NQ example"""
     new_example = {}

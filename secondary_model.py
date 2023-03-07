@@ -72,7 +72,7 @@ class OpenAI_Secondary_Model(Secondary_Model):
                 {"role": "user", "content": prompt},
             ],
         )
-        q2 = response["choices"][0]["message"]["content"]
+        q2 = response["choices"][0]["message"]["content"].strip()
         return q2
 
 

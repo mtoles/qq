@@ -32,6 +32,12 @@ import pandas as pd
     help="use at most this many examples in validation",
 )
 @click.option("--results_filename", help="path to save results")
+@click.option(
+    "--profile_only",
+    is_flag=True,
+    default=False,
+    help="only profile the primary model on dataset, then exit",
+)
 def main(
     pt_dataset_path,
     m1_path,
@@ -42,7 +48,22 @@ def main(
     masking_scheme,
     downsample_pt_size,
     results_filename,
+    profile_only,
 ):
+    # df = pd.read_csv("None_profile.csv")
+    # df = df[
+    #     [
+    #         "q1",
+    #         "a1",
+    #         "masked_sentence",
+    #         "fc_randomsentence",
+    #         "m1_randomsentence_None_gen",
+    #         "m1_randomsentence_None_f1",
+    #         "m1_supporting_None_gen",
+    #         "m1_supporting_None_f1",
+    #     ]
+    # ]
+    # df.to_csv("None_profile_trimmed.csv", index=False)
     now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
         results_filename = f"{m1_arch}-{downsample_pt_size}-{masking_scheme}-{now}"
@@ -61,8 +82,7 @@ def main(
             "t5-xxl",
         ]
         assert m2_arch in ["repeater", "openai"]
-        assert oracle_arch in ["dummy", "t5"]
-
+        assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
         # Receive and prepare the primary task
         raw_dataset = load_from_disk(pt_dataset_path)
@@ -91,6 +111,10 @@ def main(
         ds, metrics["supporting"] = m1.evaluate(
             masking_scheme="supporting", ds=ds, a2_col=None
         )
+        if profile_only:
+            df = pd.DataFrame(ds)
+            df.to_csv(f"{downsample_pt_size}_profile.csv")
+            quit()
         # Create the secondary model
         if m2_arch == "repeater":
             m2 = Repeater_Secondary_Model()
@@ -107,7 +131,7 @@ def main(
         # Save memory by moving m1 to CPU
         m1.model.cpu()
         # Create the oracle
-        oracle = T5_Oracle(model_name="t5-xxl")
+        oracle = T5_Oracle(model_name=oracle_arch)
         # Answer questions with the oracle
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         oracle.model.cpu()
