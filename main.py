@@ -7,9 +7,9 @@ import click
 from datasets import load_from_disk
 from oracles import Dummy_Oracle, T5_Oracle
 from secondary_model import (
-    Secondary_Model,
     Repeater_Secondary_Model,
     OpenAI_Secondary_Model,
+    Gt_Secondary_Model,
 )
 from primary_models import BigBird_PM, T5_PM
 from dataset_utils import drop_unanswerable
@@ -81,7 +81,7 @@ def main(
             "t5-xl",
             "t5-xxl",
         ]
-        assert m2_arch in ["repeater", "openai"]
+        assert m2_arch in ["repeater", "openai", "gt"]
         assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
         # Receive and prepare the primary task
@@ -120,6 +120,8 @@ def main(
             m2 = Repeater_Secondary_Model()
         elif m2_arch == "openai":
             m2 = OpenAI_Secondary_Model()
+        elif m2_arch == "gt":
+            m2 = Gt_Secondary_Model()
         else:
             raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
         # Apply the secondary model
