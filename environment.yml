@@ -5,7 +5,8 @@ channels:
   - anaconda
 dependencies:
   - python=3.8
-  - datasets=2.8.0
+  - datasets=2.10.1
+  # - datasets=2.8.0
   # - datasets=1.5.0
   - pytorch-gpu=1.12.1
   - cudatoolkit=11.5
@@ -28,6 +29,7 @@ dependencies:
   - tensorboard
   - scikit-learn>=1.2.0
   - openai
+  - nltk
   - pip:
     - transformers==4.21.3 # Later versions fail during distributed training
     # BigBird (vasudevgupta)

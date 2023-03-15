@@ -82,7 +82,7 @@ class Gt_Secondary_Model(Secondary_Model):
         self,
     ):
         self.model_name = "groundtruth"
-        self.gt_q2_path = "gt_q2.csv"
+        self.gt_q2_path = "q2_gt_dataset.csv"
         self.df = pd.read_csv(self.gt_q2_path)
 
     def forward(self, example, question_col, context_col):

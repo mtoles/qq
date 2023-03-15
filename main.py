@@ -5,7 +5,7 @@
 
 import click
 from datasets import load_from_disk
-from oracles import Dummy_Oracle, T5_Oracle
+from oracles import T5_Bool_Oracle
 from secondary_model import (
     Repeater_Secondary_Model,
     OpenAI_Secondary_Model,
@@ -133,7 +133,7 @@ def main(
         # Save memory by moving m1 to CPU
         m1.model.cpu()
         # Create the oracle
-        oracle = T5_Oracle(model_name=oracle_arch)
+        oracle = T5_Bool_Oracle(model_name=oracle_arch)
         # Answer questions with the oracle
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         oracle.model.cpu()
