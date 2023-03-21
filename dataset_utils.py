@@ -3,6 +3,7 @@ Utilities for processing datasets
 """
 from hotpot_evaluate_v1 import f1_score, normalize_answer
 from utils import sublist_is_in_list
+from datasets import Dataset
 
 PUNCTUATION_SET_TO_EXCLUDE = set("".join(["‘", "’", "´", "`", ".", ",", "-", '"']))
 
@@ -108,3 +109,10 @@ def check_dataset(dataset, tk):
         batched=False,
         load_from_cache_file=False,
     )
+
+def bf_filtering(ds):
+    df = ds.to_pandas()
+    df["was_damaged"] = (df["m1_supporting_None_f1"] > 0) & (df["m1_bfsentence_None_f1"] == 0)
+    df = df[df["was_damaged"]]
+    ds = Dataset.from_pandas(df)
+    return ds

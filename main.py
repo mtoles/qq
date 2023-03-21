@@ -12,6 +12,7 @@ from secondary_model import (
     OpenAI_Secondary_Model,
     Gt_Secondary_Model,
 )
+from dataset_utils import bf_filtering
 from datetime import datetime
 
 import pandas as pd
@@ -24,7 +25,7 @@ import pandas as pd
 @click.option("--m2_arch", help="secondary model architecture")
 @click.option("--oracle_arch", help="oracle architecture")
 @click.option("--eval_batch_size", default=2, help="batch size for eval")
-@click.option("--masking_scheme", help="{randomsentence | None")
+@click.option("--masking_scheme", help="{randomsentence | bfsentence | None")
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -62,12 +63,11 @@ def main(
         m1 = get_m1(m1_path, m1_arch, eval_batch_size)
         # Receive and prepare the primary task
 
+        raw_dataset = load_from_disk(pt_dataset_path)
         if str(downsample_pt_size) != "None":
             raw_dataset = raw_dataset.select(range(int(downsample_pt_size)))
-        raw_dataset = load_from_disk(pt_dataset_path)
         original_raw_dataset_len = len(raw_dataset)
         ds = raw_dataset
-
         # Evaluate the primary model
         metrics = {}
         ds, metrics[masking_scheme] = m1.evaluate(
@@ -76,6 +76,10 @@ def main(
         ds, metrics["supporting"] = m1.evaluate(
             masking_scheme="supporting", ds=ds, a2_col=None
         )
+        
+        if masking_scheme == "bfsentence":
+            ds = bf_filtering(ds)
+
         if profile_only:
             df = pd.DataFrame(ds)
             df.to_csv(f"{downsample_pt_size}_profile.csv")
