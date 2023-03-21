@@ -27,7 +27,9 @@ def mask_random_sentence(example):
     new_example["context_randomsentence"]["sentences"] = deepcopy(
         new_example["context_supporting"]["sentences"]
     )
-    new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
+    new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(
+        rand_keys[1]
+    )  # wrong?
     # debug_context = "[SEP]".join(
     #     [" ".join(x) for x in new_example["context_None"]["sentences"]]
     # )
@@ -45,7 +47,9 @@ def mask_bf_sentence(example):
     # # Locate all the facts
     fact_keys = []
     for i, sentences in enumerate(example["context_supporting"]["sentences"]):
-        for j, sentence in enumerate(sentences):
+        for j, sentence in enumerate(
+            sentences
+        ):  # actually len(sentences) = 1 so j is always 0
             fact_keys.append((i, j))
 
     # # Select one random fact
@@ -56,7 +60,7 @@ def mask_bf_sentence(example):
     # ][rand_keys[1]]
 
     for i in range(len(fact_keys)):
-        new_example = example.copy()
+        new_example = deepcopy(example)
         rand_keys = fact_keys[i]
         new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
             rand_keys[0]

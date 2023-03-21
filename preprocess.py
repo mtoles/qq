@@ -18,7 +18,7 @@ from utils import (
     get_downsample_dataset_size_str,
     CATEGORY_MAPPING,
 )
-from primary_models import get_m1
+from tqdm import tqdm
 
 
 def flatten_context(example, masking_scheme):
@@ -101,17 +101,34 @@ def main(
         cache_file_name=cache_file_name,
         load_from_cache_file=load_from_cache,
     )
+    # drop new_ds[i] if new_ds[i]["context_distractor"]["sentences"] consists only of empty lists, e.g. [[], []]
+    before_len = len(new_ds)
+    new_ds = new_ds.filter(
+        lambda example: any(
+            [len(s) > 0 for s in example["context_distractor"]["sentences"]]
+        )
+    )
+    after_len = len(new_ds)
+    print(
+        f"Filtered out {before_len - after_len} of {before_len} examples with no distractor sentences."
+    )
 
     # empty columns to be filled in by the masking function
     if "masked_sentence" not in new_ds.column_names:
         new_ds = new_ds.add_column(
             name="masked_sentence", column=["" for _ in range(len(new_ds))]
         )
-    if "context_randomsentence" not in new_ds.column_names:
+    if (
+        "context_randomsentence" not in new_ds.column_names
+        and "randomsentence" in masking_schemes
+    ):
         new_ds = new_ds.add_column(
             name="context_randomsentence", column=[{} for _ in range(len(new_ds))]
         )
-    if "context_bfsentence" not in new_ds.column_names:
+    if (
+        "context_bfsentence" not in new_ds.column_names
+        and "bfsentence" in masking_schemes
+    ):
         new_ds = new_ds.add_column(
             name="context_bfsentence", column=[{} for _ in range(len(new_ds))]
         )
@@ -120,9 +137,11 @@ def main(
     if do_bf:
         # TODO: speed up
         print("Applying bruteforce masking...")
-        new_ds = concatenate_datasets(
-            [masking_dict[masking_scheme](example) for example in new_ds]
-        )
+        bf_mini_datasets = [
+            masking_dict[masking_scheme](example) for example in tqdm(new_ds)
+        ]
+
+        new_ds = concatenate_datasets(bf_mini_datasets)
     else:
         for masking_scheme in masking_schemes:
             masking_str = f"context_{masking_scheme}"
