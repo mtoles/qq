@@ -1,15 +1,24 @@
-"""Preprocess the dataset storing formatted examples with masking in text form"""
+"""
+Preprocess the dataset storing formatted examples with masking in text form
+
+Masking types:
+    - None: No masking
+    - randomsentence: Mask a random sentence. Sentence is saved in the `masked_sentence` column.
+    - bfsentence: Mask every sentence. Note that this increased the length of the dataset by a factor of (num supporting sentences). Sentence is saved in the `masked_sentence` column.
+
+"""
 
 import os
 import click
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets
 
-from masking import mask_random_sentence, mask_None, split_distractor
+from masking import mask_random_sentence, mask_bf_sentence, mask_None, split_distractor
 from utils import (
     make_cache_file_name,
     get_downsample_dataset_size_str,
     CATEGORY_MAPPING,
 )
+from primary_models import get_m1
 
 
 def flatten_context(example, masking_scheme):
@@ -25,12 +34,15 @@ def flatten_context(example, masking_scheme):
 
 @click.command()
 @click.option("--split", type=str, help="{train | validation | both}")
-@click.option("--dataset", type=str, help="{natural_questions | hotpot}")
+@click.option("--dataset", type=str, help="{ hotpot }")
 @click.option("--masking_schemes", type=str, multiple=True, default=None)
 @click.option("--distract_or_focus", type=str, help="{distract | focus}")
 @click.option("--downsample_data_size", type=str, default=None)
 @click.option("--cache_dir", type=str, help="Path to cache directory")
 @click.option("--load_from_cache", type=bool, default=True)
+# @click.option("--m1_arch", type=str, default=None, help="which model architecture to use for brute force masking")
+# @click.option("--m1_path", type=str, default=None, help="path to primary model")
+# @click.option("--eval_batch_size", type=int, default=2, help="batch size for m1")
 def main(
     split,
     dataset,
@@ -45,13 +57,24 @@ def main(
     assert split in ["train", "validation"], "Invalid split"
     assert dataset in ["hotpot"], "Invalid dataset"
     assert "None" not in masking_schemes, "`None` masking will be included by default."
-    # masking_schemes = list(masking_schemes) + ["None"]
-    masking_dict = {"randomsentence": mask_random_sentence, "None": mask_None}
+    assert distract_or_focus in ["distract", "focus"], "Invalid distract_or_focus"
+    if "bfsentence" in masking_schemes:
+        # m1 = get_m1(m1_path, m1_arch, eval_batch_size)
+        assert (
+            len(masking_schemes) == 1
+        ), "Cannot use other masking schemes with bruteforce since bruteforce changes the length of the dataset"
+        do_bf = True
+    else:
+        do_bf = False
+    masking_dict = {
+        "randomsentence": mask_random_sentence,
+        "None": mask_None,
+        "bfsentence": mask_bf_sentence,
+    }
     for masking_scheme in masking_schemes:
         assert (
             masking_scheme in masking_dict.keys()
         ), f"Invalid masking scheme {masking_scheme}"
-    assert distract_or_focus in ["distract", "focus"], "Invalid distract_or_focus"
 
     # Prep data dir
     if not os.path.exists("data/preprocess"):
@@ -78,46 +101,47 @@ def main(
     # Drop Distractor Content
     print("Splitting out distractor sentences...")
     assert distract_or_focus == "focus", "distract not implemented yet"
-    new_ds = new_ds.add_column(
-        "context_distractor", [{} for _ in range(len(new_ds))]
-    )
-    new_ds = new_ds.add_column(
-        "context_supporting", [{} for _ in range(len(new_ds))]
-    )
+    new_ds = new_ds.add_column("context_distractor", [{} for _ in range(len(new_ds))])
+    new_ds = new_ds.add_column("context_supporting", [{} for _ in range(len(new_ds))])
     new_ds = new_ds.map(
         split_distractor,
         cache_file_name=cache_file_name,
         load_from_cache_file=load_from_cache,
     )
 
-    # Apply Each Masking Scheme
-
-    for masking_scheme in masking_schemes:
-        masking_str = f"context_{masking_scheme}"
-
-        masking_fn = masking_dict[masking_scheme]
-        print(f"Applying masking scheme {masking_scheme}...")
-
-        # empty columns to be filled in by the masking function
-        if "masked_sentence" not in new_ds.column_names:
-            new_ds = new_ds.add_column(
-                name="masked_sentence", column=["" for _ in range(len(new_ds))]
-            )
-        if "context_randomsentence" not in new_ds.column_names:
-            new_ds = new_ds.add_column(
-                name="context_randomsentence", column=[{} for _ in range(len(new_ds))]
-            )
-        # masked_col = new_ds.map(
-        #     masking_fn,
-        #     cache_file_name=cache_file_name,
-        #     load_from_cache_file=load_from_cache,
-        # )["masked_col"]
-        # new_ds = new_ds.add_column(name=masking_str, column=masked_col)
-        new_ds = new_ds.map(
-            masking_fn,
-            cache_file_name=cache_file_name,
-            load_from_cache_file=load_from_cache,
+    # empty columns to be filled in by the masking function
+    if "masked_sentence" not in new_ds.column_names:
+        new_ds = new_ds.add_column(
+            name="masked_sentence", column=["" for _ in range(len(new_ds))]
         )
+    if "context_randomsentence" not in new_ds.column_names:
+        new_ds = new_ds.add_column(
+            name="context_randomsentence", column=[{} for _ in range(len(new_ds))]
+        )
+    if "context_bfsentence" not in new_ds.column_names:
+        new_ds = new_ds.add_column(
+            name="context_bfsentence", column=[{} for _ in range(len(new_ds))]
+        )
+
+    # Apply Each Masking Scheme
+    if do_bf:
+        # TODO: speed up
+        print("Applying bruteforce masking...")
+        new_ds = concatenate_datasets(
+            [masking_dict[masking_scheme](example) for example in new_ds]
+        )
+    else:
+        for masking_scheme in masking_schemes:
+            masking_str = f"context_{masking_scheme}"
+
+            masking_fn = masking_dict[masking_scheme]
+            print(f"Applying masking scheme {masking_scheme}...")
+
+            new_ds = new_ds.map(
+                masking_fn,
+                cache_file_name=cache_file_name,
+                load_from_cache_file=load_from_cache,
+            )
 
     # Flatten Each Context
 
@@ -140,11 +164,13 @@ def main(
     for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
         # masking_str = f"context_{masking_scheme}"
         new_ds = new_ds.map(
-            lambda x: {f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())},
+            lambda x: {
+                f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())
+            },
             cache_file_name=cache_file_name,
             load_from_cache_file=load_from_cache,
         )
-    
+
     # Rename Columns
     new_ds = new_ds.rename_column("question", "q1")
     new_ds = new_ds.rename_column("answer", "a1")
@@ -156,6 +182,7 @@ def main(
             dataset, split, downsample_data_size, masking_schemes, distract_or_focus
         ),
     )
+    print("saving dataset to", save_path)
     new_ds.save_to_disk(save_path)
 
 

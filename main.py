@@ -6,13 +6,12 @@
 import click
 from datasets import load_from_disk
 from oracles import T5_Bool_Oracle
+from primary_models import get_m1
 from secondary_model import (
     Repeater_Secondary_Model,
     OpenAI_Secondary_Model,
     Gt_Secondary_Model,
 )
-from primary_models import BigBird_PM, T5_PM
-from dataset_utils import drop_unanswerable
 from datetime import datetime
 
 import pandas as pd
@@ -50,57 +49,23 @@ def main(
     results_filename,
     profile_only,
 ):
-    # df = pd.read_csv("None_profile.csv")
-    # df = df[
-    #     [
-    #         "q1",
-    #         "a1",
-    #         "masked_sentence",
-    #         "fc_randomsentence",
-    #         "m1_randomsentence_None_gen",
-    #         "m1_randomsentence_None_f1",
-    #         "m1_supporting_None_gen",
-    #         "m1_supporting_None_f1",
-    #     ]
-    # ]
-    # df.to_csv("None_profile_trimmed.csv", index=False)
     now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
         results_filename = f"{m1_arch}-{downsample_pt_size}-{masking_scheme}-{now}"
 
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
-
-        masking_str = f"fc_{masking_scheme}"
-
-        # Unit Tests
-        assert m1_arch in [
-            "bigbird",
-            "t5-small",
-            "t5-base",
-            "t5-large",
-            "t5-xl",
-            "t5-xxl",
-        ]
         assert m2_arch in ["repeater", "openai", "gt"]
         assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
+        masking_str = f"fc_{masking_scheme}"
+
+        m1 = get_m1(m1_path, m1_arch, eval_batch_size)
         # Receive and prepare the primary task
-        raw_dataset = load_from_disk(pt_dataset_path)
-        original_raw_dataset_len = len(raw_dataset)
+
         if str(downsample_pt_size) != "None":
             raw_dataset = raw_dataset.select(range(int(downsample_pt_size)))
-
-        # Load primary model
-        if m1_arch == "bigbird":
-            m1 = BigBird_PM(m1_path, eval_batch_size=eval_batch_size)
-        elif m1_arch.startswith("t5"):
-            m1 = T5_PM(
-                eval_batch_size=eval_batch_size,
-                model_name=m1_arch,
-            )
-        else:
-            raise NotImplementedError
-
+        raw_dataset = load_from_disk(pt_dataset_path)
+        original_raw_dataset_len = len(raw_dataset)
         ds = raw_dataset
 
         # Evaluate the primary model

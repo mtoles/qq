@@ -1,6 +1,7 @@
 from collections import defaultdict
 from numpy import random
 from copy import deepcopy
+from datasets import Dataset
 
 
 def mask_random_sentence(example):
@@ -32,6 +33,52 @@ def mask_random_sentence(example):
     # )
     return new_example
     # return {"masked_col": new_example["context_None"]}
+
+
+def mask_bf_sentence(example):
+    # new_example = example.copy()
+    new_examples = []
+    # """Mask random useful sentence in example."""
+    n_supporting_facts = len(example["supporting_facts"])
+    assert n_supporting_facts > 0, "No supporting facts found"
+
+    # # Locate all the facts
+    fact_keys = []
+    for i, sentences in enumerate(example["context_supporting"]["sentences"]):
+        for j, sentence in enumerate(sentences):
+            fact_keys.append((i, j))
+
+    # # Select one random fact
+    # rand_index = random.randint(0, len(fact_keys))
+    # rand_keys = fact_keys[rand_index]
+    # new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
+    #     rand_keys[0]
+    # ][rand_keys[1]]
+
+    for i in range(len(fact_keys)):
+        new_example = example.copy()
+        rand_keys = fact_keys[i]
+        new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
+            rand_keys[0]
+        ][rand_keys[1]]
+        # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
+        new_example["context_bfsentence"]["sentences"] = deepcopy(
+            new_example["context_supporting"]["sentences"]
+        )
+        new_example["context_bfsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
+        new_examples.append(new_example)
+
+    bf_mini_dataset = Dataset.from_list(new_examples)
+
+    # Run M1 on the dataset
+    # m1.evaluate("bfsentence", bf_mini_dataset, None)
+
+    # # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
+    # new_example["context_randomsentence"]["sentences"] = deepcopy(
+    #     new_example["context_supporting"]["sentences"]
+    # )
+    # new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
+    return bf_mini_dataset
 
 
 def split_distractor(example):
@@ -72,14 +119,6 @@ def split_distractor(example):
                 new_example["context_distractor"]["sentences"][j].append(sent)
                 # new_example["context_distractor"]["title"].append(title)
     return new_example
-
-    # num_titles = len(example["context_None"]["title"])
-    # for i in reversed(range(num_titles)):
-    #     if all_titles[i] not in supporting_titles:
-    #         example["context_None"]["sentences"].pop(i)
-    #         example["context_None"]["title"].pop(i)
-
-    return example
 
 
 def mask_None(example):

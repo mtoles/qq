@@ -1,9 +1,6 @@
 import torch
-import torch.nn.functional as F
-
-from transformers import BigBirdTokenizer
 from sklearn.model_selection import train_test_split
-from pathlib import PurePath
+
 
 BB_MODEL_ID = "google/bigbird-base-trivia-itc"
 GPT_NEO_MODEL_ID = "EleutherAI/gpt-neo-2.7B"
@@ -125,7 +122,6 @@ def find_sublist_in_list(sl, l):
             result = i
             break
     return result
-
 
 def sublist_is_in_list(sl, l):
     """Return whether the sublist `sl` is in the list `l`"""

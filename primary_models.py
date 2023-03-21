@@ -270,3 +270,26 @@ class T5_PM(Primary_Model):
                 None,
             )
         return ds, metrics
+
+
+def get_m1(m1_path, m1_arch, eval_batch_size):
+    # Unit Tests
+    assert m1_arch in [
+        "bigbird",
+        "t5-small",
+        "t5-base",
+        "t5-large",
+        "t5-xl",
+        "t5-xxl",
+    ]
+    # Load primary model
+    if m1_arch == "bigbird":
+        m1 = BigBird_PM(m1_path, eval_batch_size=eval_batch_size)
+    elif m1_arch.startswith("t5"):
+        m1 = T5_PM(
+            eval_batch_size=eval_batch_size,
+            model_name=m1_arch,
+        )
+    else:
+        raise NotImplementedError
+    return m1
