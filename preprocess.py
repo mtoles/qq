@@ -28,7 +28,6 @@ def flatten_context(example, masking_scheme):
     paragraphs = [" ".join(s) for s in sentences]
     contexts = [f"{t}: {p}" for t, p in zip(titles, paragraphs) if p]
     context = "\n\n".join(contexts)
-    # context = " [SEP] ".join([example["question"], context])
     return {f"fc_{masking_scheme}": context}
 
 
@@ -40,9 +39,6 @@ def flatten_context(example, masking_scheme):
 @click.option("--downsample_data_size", type=str, default=None)
 @click.option("--cache_dir", type=str, help="Path to cache directory")
 @click.option("--load_from_cache", type=bool, default=True)
-# @click.option("--m1_arch", type=str, default=None, help="which model architecture to use for brute force masking")
-# @click.option("--m1_path", type=str, default=None, help="path to primary model")
-# @click.option("--eval_batch_size", type=int, default=2, help="batch size for m1")
 def main(
     split,
     dataset,
@@ -53,13 +49,11 @@ def main(
     load_from_cache,
 ):
     # Unit Tests
-
     assert split in ["train", "validation"], "Invalid split"
     assert dataset in ["hotpot"], "Invalid dataset"
     assert "None" not in masking_schemes, "`None` masking will be included by default."
     assert distract_or_focus in ["distract", "focus"], "Invalid distract_or_focus"
     if "bfsentence" in masking_schemes:
-        # m1 = get_m1(m1_path, m1_arch, eval_batch_size)
         assert (
             len(masking_schemes) == 1
         ), "Cannot use other masking schemes with bruteforce since bruteforce changes the length of the dataset"
@@ -81,7 +75,6 @@ def main(
         os.makedirs("data/preprocess")
 
     # Load the Dataset
-
     raw_dataset = load_dataset(
         "hotpot_qa",
         "distractor",
