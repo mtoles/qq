@@ -59,6 +59,7 @@ def mask_bf_sentence(example):
     #     rand_keys[0]
     # ][rand_keys[1]]
 
+    # create an example for each masked fact
     for i in range(len(fact_keys)):
         new_example = deepcopy(example)
         rand_keys = fact_keys[i]
@@ -72,6 +73,11 @@ def mask_bf_sentence(example):
         new_example["context_bfsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
         new_examples.append(new_example)
 
+    # create an example for each added distractor
+    for i in range(len(example["context_distractor"]["sentences"])):
+        new_example = deepcopy(example)
+        
+
     bf_mini_dataset = Dataset.from_list(new_examples)
 
     # Run M1 on the dataset
@@ -84,6 +90,8 @@ def mask_bf_sentence(example):
     # new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
     return bf_mini_dataset
 
+def mask_bf_sentences(ds):
+    
 
 def split_distractor(example):
     """Edit the example to remove distractor content. Create a new col containing the distractor content."""

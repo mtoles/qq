@@ -14,7 +14,7 @@ from secondary_model import (
 )
 from dataset_utils import bf_filtering
 from datetime import datetime
-
+from masking import mask_bf_sentences
 import pandas as pd
 
 
@@ -49,10 +49,11 @@ def main(
     downsample_pt_size,
     results_filename,
     profile_only,
-):
+):  
+    ds_masking_scheme = "None" if masking_scheme == "bfsentence" else "masking_scheme"
     now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
-        results_filename = f"{m1_arch}-{downsample_pt_size}-{masking_scheme}-{now}"
+        results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
 
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
         assert m2_arch in ["repeater", "openai", "gt"]
@@ -70,11 +71,19 @@ def main(
         ds = raw_dataset
         # Evaluate the primary model
         metrics = {}
-        ds, metrics[masking_scheme] = m1.evaluate(
-            masking_scheme=masking_scheme, ds=ds, a2_col=None
-        )
+
+        # first pass
         ds, metrics["supporting"] = m1.evaluate(
             masking_scheme="supporting", ds=ds, a2_col=None
+        )
+
+        # select examples needing brute force adversarial masking
+        if masking_scheme == "bfsentence":
+            ds_bf_masked = bf_filtering(ds)
+        
+
+        ds, metrics[masking_scheme] = m1.evaluate(
+            masking_scheme=masking_scheme, ds=ds, a2_col=None
         )
         
         if masking_scheme == "bfsentence":
