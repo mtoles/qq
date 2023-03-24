@@ -1,7 +1,8 @@
 from collections import defaultdict
 from numpy import random
 from copy import deepcopy
-from datasets import Dataset
+from datasets import Dataset, concatenate_datasets
+from tqdm import tqdm
 
 
 def mask_random_sentence(example):
@@ -52,13 +53,6 @@ def mask_bf_sentence(example):
         ):  # actually len(sentences) = 1 so j is always 0
             fact_keys.append((i, j))
 
-    # # Select one random fact
-    # rand_index = random.randint(0, len(fact_keys))
-    # rand_keys = fact_keys[rand_index]
-    # new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
-    #     rand_keys[0]
-    # ][rand_keys[1]]
-
     # create an example for each masked fact
     for i in range(len(fact_keys)):
         new_example = deepcopy(example)
@@ -76,22 +70,58 @@ def mask_bf_sentence(example):
     # create an example for each added distractor
     for i in range(len(example["context_distractor"]["sentences"])):
         new_example = deepcopy(example)
-        
-
     bf_mini_dataset = Dataset.from_list(new_examples)
-
-    # Run M1 on the dataset
-    # m1.evaluate("bfsentence", bf_mini_dataset, None)
-
-    # # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
-    # new_example["context_randomsentence"]["sentences"] = deepcopy(
-    #     new_example["context_supporting"]["sentences"]
-    # )
-    # new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
     return bf_mini_dataset
 
 def mask_bf_sentences(ds):
-    
+    bf_mini_datasets = [
+        mask_bf_sentence(example) for example in tqdm(ds)
+    ]
+    new_ds = concatenate_datasets(bf_mini_datasets)
+    return new_ds
+
+def distract_bf_sentence(example):
+    # new_example = example.copy()
+    new_examples = []
+    # """Mask random useful sentence in example."""
+    n_distractors_sentences = len(example["context_distractor"]["sentences"])
+    assert n_distractors_sentences > 0, "No distractor sentences found"
+
+    # # Locate all the facts
+    distractor_keys = []
+    for i, sentences in enumerate(example["context_distractor"]["sentences"]):
+        for j, sentence in enumerate(
+            sentences
+        ):  # actually len(sentences) = 1 so j is always 0
+            distractor_keys.append((i, j))
+
+    # create an example for each masked fact
+    for i in range(len(distractor_keys)):
+        new_example = deepcopy(example)
+        rand_keys = distractor_keys[i]
+        new_example["distractor_sentence"] = new_example["context_distractor"]["sentences"][
+            rand_keys[0]
+        ][rand_keys[1]]
+        # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
+        new_example["context_bfsentence"]["sentences"] = deepcopy(
+            new_example["context_supporting"]["sentences"]
+        )
+        new_example["context_bfsentence"]["sentences"][rand_keys[0]].insert(new_example["distractor_sentence"], rand_keys[1])
+        new_example["is_distracted"] = True
+        new_examples.append(new_example)
+
+    # create an example for each added distractor
+    for i in range(len(example["context_distractor"]["sentences"])):
+        new_example = deepcopy(example)
+    bf_mini_dataset = Dataset.from_list(new_examples)
+    return bf_mini_dataset
+
+def distract_bf_sentences(ds):
+    bf_mini_datasets = [
+        distract_bf_sentence(example) for example in tqdm(ds)
+    ]
+    new_ds = concatenate_datasets(bf_mini_datasets)
+    return new_ds
 
 def split_distractor(example):
     """Edit the example to remove distractor content. Create a new col containing the distractor content."""
