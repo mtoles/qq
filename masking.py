@@ -20,9 +20,9 @@ def add_flat_contexts(
     new_ds, masking_schemes, cache_file_name=None, load_from_cache=False
 ):
     """Convert lists of sentences into single strings under the prefix "fc_. Used both here and in preprocess.py"""
-    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
+    for masking_scheme in list(masking_schemes):
         masking_str = f"context_{masking_scheme}"
-        print(f"Flattening context {masking_scheme}...")
+        # print(f"Flattening context {masking_scheme}...")
         flat_col = new_ds.map(
             lambda x: flatten_context(x, masking_scheme),
             cache_file_name=cache_file_name,
@@ -35,9 +35,9 @@ def add_flat_contexts(
         # new_ds = new_ds.remove_columns([f"context_{masking_scheme}"])
 
     # Normalize Whitespace
-    print("Normalizing whitespace...")
+    # print("Normalizing whitespace...")
     # TODO: the list of three should be removed and sent in the call
-    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
+    for masking_scheme in list(masking_schemes):
         # masking_str = f"context_{masking_scheme}"
         new_ds = new_ds.map(
             lambda x: {
@@ -116,10 +116,12 @@ def mask_bf_sentence(example):
             rand_keys[0]
         ][rand_keys[1]]
         # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
-        new_example["context_bfsentence"]["sentences"] = deepcopy(
+        new_example["context_bfdelsentence"]["sentences"] = deepcopy(
             new_example["context_supporting"]["sentences"]
         )
-        new_example["context_bfsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
+        new_example["context_bfdelsentence"]["sentences"][rand_keys[0]].pop(
+            rand_keys[1]
+        )
         new_examples.append(new_example)
 
     # create an example for each added distractor
@@ -129,17 +131,16 @@ def mask_bf_sentence(example):
     return bf_mini_dataset
 
 
-def mask_bf_sentences(ds):
+def bf_del_sentences(ds):
     bf_mini_datasets = [mask_bf_sentence(example) for example in tqdm(ds)]
     new_ds = concatenate_datasets(bf_mini_datasets)
-    new_ds = add_flat_contexts(new_ds, ["bfsentence"], load_from_cache=False)
+    new_ds = add_flat_contexts(new_ds, ["bfdelsentence"], load_from_cache=False)
     return new_ds
 
 
 def distract_bf_sentence(example):
     # new_example = example.copy()
     new_examples = []
-    # """Mask random useful sentence in example."""
     n_distractors_sentences = len(example["context_distractor"]["sentences"])
     assert n_distractors_sentences > 0, "No distractor sentences found"
 
@@ -154,18 +155,18 @@ def distract_bf_sentence(example):
     # create an example for each masked fact
     for i in range(len(distractor_keys)):
         new_example = deepcopy(example)
-        # delete the "fc_bfsentence" field since it will be out of date.
+        # delete the "fc_bfdelsentence" field since it will be out of date.
         # it will be added back byt he add_flat_contexts function
-        del new_example["fc_bfsentence"]
+        # del new_example["fc_bfdelsentence"]
         rand_keys = distractor_keys[i]
         new_example["distractor_sentence"] = new_example["context_distractor"][
             "sentences"
         ][rand_keys[0]][rand_keys[1]]
         # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
-        new_example["context_bfsentence"]["sentences"] = deepcopy(
+        new_example["context_bfaddsentence"]["sentences"] = deepcopy(
             new_example["context_supporting"]["sentences"]
         )
-        new_example["context_bfsentence"]["sentences"][rand_keys[0]].insert(
+        new_example["context_bfaddsentence"]["sentences"][rand_keys[0]].insert(
             rand_keys[1], new_example["distractor_sentence"]
         )
         new_example["is_distracted"] = True
@@ -174,11 +175,13 @@ def distract_bf_sentence(example):
     # create an example for each added distractor
     for i in range(len(example["context_distractor"]["sentences"])):
         new_example = deepcopy(example)
-    bf_mini_dataset = add_flat_contexts(Dataset.from_list(new_examples), ["bfsentence"])
+    bf_mini_dataset = add_flat_contexts(
+        Dataset.from_list(new_examples), ["bfaddsentence"]
+    )
     return bf_mini_dataset
 
 
-def distract_bf_sentences(ds):
+def bf_add_sentences(ds):
     bf_mini_datasets = [distract_bf_sentence(example) for example in tqdm(ds)]
     new_ds = concatenate_datasets(bf_mini_datasets)
     return new_ds

@@ -114,7 +114,7 @@ def check_dataset(dataset, tk):
 def bf_filtering(ds):
     df = ds.to_pandas()
     df["was_damaged"] = (df["m1_supporting_None_f1"] > 0) & (
-        df["m1_bfsentence_None_f1"] == 0
+        df["m1_bfdelsentence_None_f1"] == 0
     )
     df = df[df["was_damaged"]]
     ds = Dataset.from_pandas(df)

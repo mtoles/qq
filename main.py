@@ -14,7 +14,7 @@ from secondary_model import (
 )
 from dataset_utils import bf_filtering
 from datetime import datetime
-from masking import mask_bf_sentences, distract_bf_sentences
+from masking import bf_del_sentences, bf_add_sentences
 import pandas as pd
 
 
@@ -25,7 +25,7 @@ import pandas as pd
 @click.option("--m2_arch", help="secondary model architecture")
 @click.option("--oracle_arch", help="oracle architecture")
 @click.option("--eval_batch_size", default=2, help="batch size for eval")
-@click.option("--masking_scheme", help="{randomsentence | bfsentence | None")
+@click.option("--masking_scheme", help="{randomsentence | bfdelsentence | None")
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -50,7 +50,9 @@ def main(
     results_filename,
     profile_only,
 ):
-    ds_masking_scheme = "None" if masking_scheme == "bfsentence" else "masking_scheme"
+    ds_masking_scheme = (
+        "None" if masking_scheme == "bfdelsentence" else "masking_scheme"
+    )
     now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
         results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
@@ -79,33 +81,36 @@ def main(
 
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
-            ds = ds.add_column("context_bfsentence", [{} for _ in range(len(ds))])
+            ds = ds.add_column("context_bfdelsentence", [{} for _ in range(len(ds))])
+            ds = ds.add_column("context_bfaddsentence", [{} for _ in range(len(ds))])
 
+            # masking
             ds_got_right_None = ds.filter(lambda x: x["m1_supporting_None_f1"] > 0.0)
-            ds_bfsentence = mask_bf_sentences(ds_got_right_None)  # filtering is wrong
+            ds_bfdelsentence = bf_del_sentences(ds_got_right_None)  # filtering is wrong
 
-            ds_bfsentence, metrics["bfsentence"] = m1.evaluate(
-                masking_scheme="bfsentence", ds=ds_bfsentence, a2_col=None
+            ds_bfdelsentence, metrics["bfdelsentence"] = m1.evaluate(
+                masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
+            )
+            ds_got_wrong_with_bfdelsentence = ds_bfdelsentence.filter(
+                lambda x: x["m1_bfdelsentence_None_f1"] == 0.0
             )
 
-            ds_got_right_with_bfsentence = ds_bfsentence.filter(
-                lambda x: x["m1_bfsentence_None_f1"] > 0.0
-            )
-            ds_got_wrong_with_bfsentence = ds_bfsentence.filter(
-                lambda x: x["m1_bfsentence_None_f1"] == 0.0
+            # distracting
+            ds_got_right_with_supporting = ds.filter(
+                lambda x: x["m1_supporting_None_f1"] > 0.0
             )
 
-
-
-            ds_bfsentence_distracted = distract_bf_sentences(ds_got_right_with_bfsentence)
+            ds_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
+            ds_bfaddsentence, metrics["bfaddsentence"] = m1.evaluate(
+                masking_scheme="bfaddsentence",
+                ds=ds_bfaddsentence,
+                a2_col=None,
+            )
             print
 
         ds, metrics[masking_scheme] = m1.evaluate(
             masking_scheme=masking_scheme, ds=ds, a2_col=None
         )
-
-        # if masking_scheme == "bfsentence":
-        #     ds = bf_filtering(ds)
 
         if profile_only:
             df = pd.DataFrame(ds)

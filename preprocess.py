@@ -107,7 +107,7 @@ def main(
     # Flatten Each Context
 
     new_ds = add_flat_contexts(
-        new_ds, masking_schemes, cache_file_name, load_from_cache
+        new_ds, masking_schemes + ["None", "supporting", "distractor"], cache_file_name, load_from_cache
     )
 
     save_path = os.path.join(
