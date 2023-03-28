@@ -5,6 +5,61 @@ from datasets import Dataset, concatenate_datasets
 from tqdm import tqdm
 
 
+def flatten_context(example, masking_scheme):
+    masking_str = f"context_{masking_scheme}"
+    titles = example["context_None"]["title"]  # list of str
+    sentences = example[masking_str]["sentences"]  # list of list of str
+    paragraphs = [" ".join(s) for s in sentences]
+    contexts = [f"{t}: {p}" for t, p in zip(titles, paragraphs) if p]
+    context = "\n\n".join(contexts)
+    # context = " [SEP] ".join([example["question"], context])
+    return {f"fc_{masking_scheme}": context}
+
+
+def add_flat_contexts(
+    new_ds, masking_schemes, cache_file_name=None, load_from_cache=False
+):
+    """Convert lists of sentences into single strings under the prefix "fc_. Used both here and in preprocess.py"""
+    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
+        masking_str = f"context_{masking_scheme}"
+        print(f"Flattening context {masking_scheme}...")
+        flat_col = new_ds.map(
+            lambda x: flatten_context(x, masking_scheme),
+            cache_file_name=cache_file_name,
+            load_from_cache_file=load_from_cache,
+        )[
+            f"fc_{masking_scheme}"
+        ]  # fc == flattened context
+        if f"fc_{masking_scheme}" not in new_ds.column_names:
+            new_ds = new_ds.add_column(name=f"fc_{masking_scheme}", column=flat_col)
+        # new_ds = new_ds.remove_columns([f"context_{masking_scheme}"])
+
+    # Normalize Whitespace
+    print("Normalizing whitespace...")
+    # TODO: the list of three should be removed and sent in the call
+    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
+        # masking_str = f"context_{masking_scheme}"
+        new_ds = new_ds.map(
+            lambda x: {
+                f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())
+            },
+            cache_file_name=cache_file_name,
+            load_from_cache_file=load_from_cache,
+        )
+    # Rename Columns
+    if "question" in new_ds.column_names:
+        assert (
+            "q1" not in new_ds.column_names
+        ), "q1 already exists. You probably ran this twice."
+        new_ds = new_ds.rename_column("question", "q1")
+    if "answer" in new_ds.column_names:
+        assert (
+            "a1" not in new_ds.column_names
+        ), "a1 already exists. You probably ran this twice."
+        new_ds = new_ds.rename_column("answer", "a1")
+    return new_ds
+
+
 def mask_random_sentence(example):
     new_example = example.copy()
     """Mask random useful sentence in example."""
@@ -73,12 +128,13 @@ def mask_bf_sentence(example):
     bf_mini_dataset = Dataset.from_list(new_examples)
     return bf_mini_dataset
 
+
 def mask_bf_sentences(ds):
-    bf_mini_datasets = [
-        mask_bf_sentence(example) for example in tqdm(ds)
-    ]
+    bf_mini_datasets = [mask_bf_sentence(example) for example in tqdm(ds)]
     new_ds = concatenate_datasets(bf_mini_datasets)
+    new_ds = add_flat_contexts(new_ds, ["bfsentence"], load_from_cache=False)
     return new_ds
+
 
 def distract_bf_sentence(example):
     # new_example = example.copy()
@@ -98,30 +154,35 @@ def distract_bf_sentence(example):
     # create an example for each masked fact
     for i in range(len(distractor_keys)):
         new_example = deepcopy(example)
+        # delete the "fc_bfsentence" field since it will be out of date.
+        # it will be added back byt he add_flat_contexts function
+        del new_example["fc_bfsentence"]
         rand_keys = distractor_keys[i]
-        new_example["distractor_sentence"] = new_example["context_distractor"]["sentences"][
-            rand_keys[0]
-        ][rand_keys[1]]
+        new_example["distractor_sentence"] = new_example["context_distractor"][
+            "sentences"
+        ][rand_keys[0]][rand_keys[1]]
         # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
         new_example["context_bfsentence"]["sentences"] = deepcopy(
             new_example["context_supporting"]["sentences"]
         )
-        new_example["context_bfsentence"]["sentences"][rand_keys[0]].insert(new_example["distractor_sentence"], rand_keys[1])
+        new_example["context_bfsentence"]["sentences"][rand_keys[0]].insert(
+            rand_keys[1], new_example["distractor_sentence"]
+        )
         new_example["is_distracted"] = True
         new_examples.append(new_example)
 
     # create an example for each added distractor
     for i in range(len(example["context_distractor"]["sentences"])):
         new_example = deepcopy(example)
-    bf_mini_dataset = Dataset.from_list(new_examples)
+    bf_mini_dataset = add_flat_contexts(Dataset.from_list(new_examples), ["bfsentence"])
     return bf_mini_dataset
 
+
 def distract_bf_sentences(ds):
-    bf_mini_datasets = [
-        distract_bf_sentence(example) for example in tqdm(ds)
-    ]
+    bf_mini_datasets = [distract_bf_sentence(example) for example in tqdm(ds)]
     new_ds = concatenate_datasets(bf_mini_datasets)
     return new_ds
+
 
 def split_distractor(example):
     """Edit the example to remove distractor content. Create a new col containing the distractor content."""

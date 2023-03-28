@@ -80,6 +80,7 @@ def main(
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
             ds = ds.add_column("context_bfsentence", [{} for _ in range(len(ds))])
+
             ds_got_right_None = ds.filter(lambda x: x["m1_supporting_None_f1"] > 0.0)
             ds_bfsentence = mask_bf_sentences(ds_got_right_None)  # filtering is wrong
 
@@ -94,7 +95,10 @@ def main(
                 lambda x: x["m1_bfsentence_None_f1"] == 0.0
             )
 
-            ds_bfsentence_distracted = ds_got_right_with_bfsentence
+
+
+            ds_bfsentence_distracted = distract_bf_sentences(ds_got_right_with_bfsentence)
+            print
 
         ds, metrics[masking_scheme] = m1.evaluate(
             masking_scheme=masking_scheme, ds=ds, a2_col=None

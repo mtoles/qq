@@ -4,23 +4,12 @@ import os
 import click
 from datasets import load_dataset
 
-from masking import mask_random_sentence, mask_None, split_distractor
+from masking import mask_random_sentence, mask_None, split_distractor, add_flat_contexts
 from utils import (
     make_cache_file_name,
     get_downsample_dataset_size_str,
     CATEGORY_MAPPING,
 )
-
-
-def flatten_context(example, masking_scheme):
-    masking_str = f"context_{masking_scheme}"
-    titles = example["context_None"]["title"]  # list of str
-    sentences = example[masking_str]["sentences"]  # list of list of str
-    paragraphs = [" ".join(s) for s in sentences]
-    contexts = [f"{t}: {p}" for t, p in zip(titles, paragraphs) if p]
-    context = "\n\n".join(contexts)
-    # context = " [SEP] ".join([example["question"], context])
-    return {f"fc_{masking_scheme}": context}
 
 
 @click.command()
@@ -78,12 +67,8 @@ def main(
     # Drop Distractor Content
     print("Splitting out distractor sentences...")
     assert distract_or_focus == "focus", "distract not implemented yet"
-    new_ds = new_ds.add_column(
-        "context_distractor", [{} for _ in range(len(new_ds))]
-    )
-    new_ds = new_ds.add_column(
-        "context_supporting", [{} for _ in range(len(new_ds))]
-    )
+    new_ds = new_ds.add_column("context_distractor", [{} for _ in range(len(new_ds))])
+    new_ds = new_ds.add_column("context_supporting", [{} for _ in range(len(new_ds))])
     new_ds = new_ds.map(
         split_distractor,
         cache_file_name=cache_file_name,
@@ -121,33 +106,9 @@ def main(
 
     # Flatten Each Context
 
-    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
-        masking_str = f"context_{masking_scheme}"
-        print(f"Flattening context {masking_scheme}...")
-        flat_col = new_ds.map(
-            lambda x: flatten_context(x, masking_scheme),
-            cache_file_name=cache_file_name,
-            load_from_cache_file=load_from_cache,
-        )[
-            f"fc_{masking_scheme}"
-        ]  # fc == flattened context
-        if f"fc_{masking_scheme}" not in new_ds.column_names:
-            new_ds = new_ds.add_column(name=f"fc_{masking_scheme}", column=flat_col)
-        # new_ds = new_ds.remove_columns([f"context_{masking_scheme}"])
-
-    # Normalize Whitespace
-    print("Normalizing whitespace...")
-    for masking_scheme in list(masking_schemes) + ["None", "supporting", "distractor"]:
-        # masking_str = f"context_{masking_scheme}"
-        new_ds = new_ds.map(
-            lambda x: {f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())},
-            cache_file_name=cache_file_name,
-            load_from_cache_file=load_from_cache,
-        )
-    
-    # Rename Columns
-    new_ds = new_ds.rename_column("question", "q1")
-    new_ds = new_ds.rename_column("answer", "a1")
+    new_ds = add_flat_contexts(
+        new_ds, masking_schemes, cache_file_name, load_from_cache
+    )
 
     save_path = os.path.join(
         "data",
