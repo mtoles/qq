@@ -41,15 +41,15 @@ class Primary_Model:
         Check `compute_metrics` function for actual requirements"""
         return self.model(**inputs)
 
-    def prepare_data(self, masking_scheme, a2_col, raw_val_dataset):
-        prepped_val_dataset = raw_val_dataset
+    def prepare_data(self, masking_scheme, a2_col, raw_ds):
+        ds = raw_ds
         # TODO: add column for masking_scheme
-        prepped_val_dataset = prepped_val_dataset.add_column(
-            column=raw_val_dataset[f"fc_{masking_scheme}"],
+        ds = ds.add_column(
+            column=raw_ds[f"fc_{masking_scheme}"],
             name=f"prepped_{masking_scheme}_{str(a2_col)}",
         )
 
-        return prepped_val_dataset
+        return ds
 
     def evaluate(self):
         raise NotImplementedError("You should subclass this method")
@@ -107,7 +107,7 @@ class BigBird_PM(Primary_Model):
         prepped_val_dataset = super(BigBird_PM, self).prepare_data(
             masking_scheme=masking_scheme,
             a2_col=a2_col,
-            raw_val_dataset=raw_val_dataset,
+            raw_ds=raw_val_dataset,
         )
         sep_str = "\n\n" if self.tk.sep_token is None else self.tk.sep_token
         prepped_val_dataset = prepped_val_dataset.map(
@@ -182,7 +182,7 @@ class T5_PM(Primary_Model):
         prepped_val_dataset = super(T5_PM, self).prepare_data(
             masking_scheme=masking_scheme,
             a2_col=a2_col,
-            raw_val_dataset=raw_val_dataset,
+            raw_ds=raw_val_dataset,
         )
 
         def _add_prompt(x, masking_scheme):
@@ -192,10 +192,19 @@ class T5_PM(Primary_Model):
             )
             return x
 
+        # stupid workaround since .map crashes if any column contains too many empty dicts
+        # cached_col_name = f"prepped_{masking_scheme}_{str(a2_col)}"
+        # cached_col = prepped_val_dataset[cached_col_name]
+        # prepped_val_dataset = prepped_val_dataset.remove_columns([cached_col_name])
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepend_question(x, masking_scheme, a2_col, "\n\n"),
             load_from_cache_file=False,
         )
+        # add the column back in
+        # prepped_val_dataset = prepped_val_dataset.add_column(
+        #     cached_col, name=cached_col_name
+        # )
+
         if a2_col is not None:
             prepped_val_dataset = prepped_val_dataset.map(
                 lambda x: append_a2(x, masking_scheme, a2_col, "\n\n"),
@@ -219,6 +228,7 @@ class T5_PM(Primary_Model):
 
     def evaluate(self, masking_scheme, ds, a2_col):
         masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
+        # ds = self.prepare_data(masking_scheme, ds, a2_col)
         ds = self.prepare_data(masking_scheme, ds, a2_col)
 
         with torch.no_grad():

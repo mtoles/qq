@@ -229,3 +229,9 @@ def split_distractor(example):
 
 def mask_None(example):
     return example
+
+def reduce_to_n(ds, n):
+    """Reduce the dataset to at most n examples of each `id`"""
+    df = ds.to_pandas()
+    df = df.groupby("id").head(n)
+    return Dataset.from_pandas(df)

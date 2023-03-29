@@ -14,7 +14,7 @@ from secondary_model import (
 )
 from dataset_utils import bf_filtering
 from datetime import datetime
-from masking import bf_del_sentences, bf_add_sentences
+from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 import pandas as pd
 
 
@@ -81,8 +81,9 @@ def main(
 
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
-            ds = ds.add_column("context_bfdelsentence", [{} for _ in range(len(ds))])
-            ds = ds.add_column("context_bfaddsentence", [{} for _ in range(len(ds))])
+            # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
+            ds = ds.add_column("context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))])
+            ds = ds.add_column("context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))])
 
             # masking
             ds_got_right_None = ds.filter(lambda x: x["m1_supporting_None_f1"] > 0.0)
@@ -101,11 +102,15 @@ def main(
             )
 
             ds_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
+            
             ds_bfaddsentence, metrics["bfaddsentence"] = m1.evaluate(
                 masking_scheme="bfaddsentence",
                 ds=ds_bfaddsentence,
                 a2_col=None,
             )
+            # reduce masked dataset to at most n=3 examples of each `id`
+            ds_bfaddsentence = reduce_to_n(ds_bfaddsentence, 3)
+
             print
 
         ds, metrics[masking_scheme] = m1.evaluate(
