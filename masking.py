@@ -234,4 +234,6 @@ def reduce_to_n(ds, n):
     """Reduce the dataset to at most n examples of each `id`"""
     df = ds.to_pandas()
     df = df.groupby("id").head(n)
-    return Dataset.from_pandas(df)
+    ds = Dataset.from_pandas(df)
+    ds = ds.remove_columns(["__index_level_0__"])
+    return ds
