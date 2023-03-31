@@ -4,6 +4,7 @@ Utilities for processing datasets
 from hotpot_evaluate_v1 import f1_score, normalize_answer
 from utils import sublist_is_in_list
 from datasets import Dataset
+import pandas as pd
 
 PUNCTUATION_SET_TO_EXCLUDE = set("".join(["‘", "’", "´", "`", ".", ",", "-", '"']))
 
@@ -119,3 +120,43 @@ def bf_filtering(ds):
     df = df[df["was_damaged"]]
     ds = Dataset.from_pandas(df)
     return ds
+
+
+def make_id_col_unique(ds, suffix):
+    df = ds.to_pandas()
+    # get a list of dataframes where each dataframe only contains examples of a single id
+    df_list = [df[df["id"] == x] for x in df["id"].unique()]
+    for dfx in df_list:
+        dfx["id"] = [dfx["id"].iloc[i] + "_" + str(i) + suffix for i in range(len(dfx))]
+    new_df = pd.concat(df_list)
+    return new_df
+
+
+def combine_adversarial_ds(ds_add, ds_del):
+    """combine the two adversarially created datasets, standardize columns, and make ids unique again"""
+    df_add = make_id_col_unique(ds_add, "a")
+    df_del = make_id_col_unique(ds_del, "d")
+
+    df_add["masked_sentence"] = ["" for _ in range(len(df_add))]
+    df_del["distractor_sentence"] = ["" for _ in range(len(df_del))]
+
+    df_del = df_del.rename(
+        columns={
+            "m1_bfdelsentence_None_gen": "m1_bf_None_gen",
+            "fc_bfdelsentence": "fc_bfsentence",
+            "prepped_bfdelsentence_None": "prepped_bfsentence_None",
+            "m1_bfdelsentence_None_f1": "m1_bf_None_f1",
+        }
+    )
+    df_add = df_add.rename(
+        columns={
+            "m1_bfaddsentence_None_gen": "m1_bf_None_gen",
+            "fc_bfaddsentence": "fc_bfsentence",
+            "prepped_bfaddsentence_None": "prepped_bfsentence_None",
+            "m1_bfaddsentence_None_f1": "m1_bf_None_f1",
+        }
+    )
+
+    df = pd.concat([df_add, df_del]).sort_values(by="id")
+
+    return df

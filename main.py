@@ -12,7 +12,7 @@ from secondary_model import (
     OpenAI_Secondary_Model,
     Gt_Secondary_Model,
 )
-from dataset_utils import bf_filtering
+from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
 from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 import pandas as pd
@@ -26,6 +26,7 @@ import pandas as pd
 @click.option("--oracle_arch", help="oracle architecture")
 @click.option("--eval_batch_size", default=2, help="batch size for eval")
 @click.option("--masking_scheme", help="{randomsentence | bfdelsentence | None")
+@click.option("--adversarial_drop_thresh", default=0.5, help="include only examples in the adversarially generated examples where the delta between baseline and masked or distracted is greater than this threshold")
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -46,6 +47,7 @@ def main(
     oracle_arch,
     eval_batch_size,
     masking_scheme,
+    adversarial_drop_thresh,
     downsample_pt_size,
     results_filename,
     profile_only,
@@ -82,8 +84,12 @@ def main(
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
             # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
-            ds = ds.add_column("context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))])
-            ds = ds.add_column("context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))])
+            ds = ds.add_column(
+                "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
+            )
+            ds = ds.add_column(
+                "context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))]
+            )
 
             # masking
             ds_got_right_None = ds.filter(lambda x: x["m1_supporting_None_f1"] > 0.0)
@@ -92,8 +98,9 @@ def main(
             ds_bfdelsentence, metrics["bfdelsentence"] = m1.evaluate(
                 masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
             )
-            ds_got_wrong_with_bfdelsentence = ds_bfdelsentence.filter(
-                lambda x: x["m1_bfdelsentence_None_f1"] == 0.0
+
+            ds_got_worse_with_bfdelsentence = ds_bfdelsentence.filter(
+                lambda x: x["m1_bfdelsentence_None_f1"] < x["m1_supporting_None_f1"]
             )
 
             # distracting
@@ -102,14 +109,37 @@ def main(
             )
 
             ds_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
-            
+
             ds_bfaddsentence, metrics["bfaddsentence"] = m1.evaluate(
                 masking_scheme="bfaddsentence",
                 ds=ds_bfaddsentence,
                 a2_col=None,
             )
+
+            ds_got_worse_with_bf_add_sentence = ds_bfaddsentence.filter(
+                lambda x: x["m1_bfaddsentence_None_f1"] < x["m1_supporting_None_f1"]
+            )
+
             # reduce masked dataset to at most n=3 examples of each `id`
-            ds_bfaddsentence = reduce_to_n(ds_bfaddsentence, 3)
+            # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
+            ds_got_worse_with_bf_add_sentence = reduce_to_n(
+                ds_got_worse_with_bf_add_sentence,
+                3,
+                baseline_f1_col_name="m1_supporting_None_f1",
+                exp_f1_col_name="m1_bfaddsentence_None_f1",
+                adversarial_drop_thresh=adversarial_drop_thresh,
+            )
+            ds_got_worse_with_bfdelsentence = reduce_to_n(
+                ds_got_worse_with_bfdelsentence,
+                3,
+                baseline_f1_col_name="m1_supporting_None_f1",
+                exp_f1_col_name="m1_bfdelsentence_None_f1",
+                adversarial_drop_thresh=adversarial_drop_thresh,
+            )
+
+            output_ds = combine_adversarial_ds(
+                ds_got_worse_with_bf_add_sentence, ds_got_worse_with_bfdelsentence
+            )
 
             print
 

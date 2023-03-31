@@ -4,6 +4,8 @@ from copy import deepcopy
 from datasets import Dataset, concatenate_datasets
 from tqdm import tqdm
 
+import pandas as pd
+
 
 def flatten_context(example, masking_scheme):
     masking_str = f"context_{masking_scheme}"
@@ -169,7 +171,6 @@ def distract_bf_sentence(example):
         new_example["context_bfaddsentence"]["sentences"][rand_keys[0]].insert(
             rand_keys[1], new_example["distractor_sentence"]
         )
-        new_example["is_distracted"] = True
         new_examples.append(new_example)
 
     # create an example for each added distractor
@@ -230,10 +231,16 @@ def split_distractor(example):
 def mask_None(example):
     return example
 
-def reduce_to_n(ds, n):
-    """Reduce the dataset to at most n examples of each `id`"""
+def reduce_to_n(ds: Dataset, n: int, baseline_f1_col_name: str, exp_f1_col_name: str, adversarial_drop_thresh: float):
+    """Reduce the dataset to at most n examples of each `id`, selecting examples with the highest (baseline_f1_col_name - exp_f1_col_name)"""
     df = ds.to_pandas()
-    df = df.groupby("id").head(n)
+    df["delta"] = df[baseline_f1_col_name] - df[exp_f1_col_name]
+    df = df[df["delta"]>adversarial_drop_thresh]
+    df["rand"] = [random.rand() for _ in range(len(df))]
+    # sort by delta, then by rand, then take the top n
+    df_list = list(x[1].sort_values(by=["delta", "rand"]).head(n) for x in df.groupby("id"))
+    # df = df.groupby("id").sort_values(by=["delta", "rand"]).head(n)
+    df = pd.concat(df_list)
     ds = Dataset.from_pandas(df)
-    ds = ds.remove_columns(["__index_level_0__"])
+    ds = ds.remove_columns(["__index_level_0__", "delta", "rand"])
     return ds
