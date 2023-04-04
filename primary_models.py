@@ -44,10 +44,12 @@ class Primary_Model:
     def prepare_data(self, masking_scheme, a2_col, raw_ds):
         ds = raw_ds
         # TODO: add column for masking_scheme
-        ds = ds.add_column(
-            column=raw_ds[f"fc_{masking_scheme}"],
-            name=f"prepped_{masking_scheme}_{str(a2_col)}",
-        )
+        new_col_name = f"prepped_{masking_scheme}_{str(a2_col)}"
+        if new_col_name not in ds.column_names:
+            ds = ds.add_column(
+                column=raw_ds[f"fc_{masking_scheme}"],
+                name=new_col_name,
+            )
 
         return ds
 

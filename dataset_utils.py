@@ -112,7 +112,7 @@ def check_dataset(dataset, tk):
     )
 
 
-def bf_filtering(ds):
+def bf_filtering(ds: Dataset) -> Dataset:
     df = ds.to_pandas()
     df["was_damaged"] = (df["m1_supporting_None_f1"] > 0) & (
         df["m1_bfdelsentence_None_f1"] == 0
@@ -122,7 +122,7 @@ def bf_filtering(ds):
     return ds
 
 
-def make_id_col_unique(ds, suffix):
+def make_id_col_unique(ds: Dataset, suffix: str = "") -> pd.DataFrame:
     df = ds.to_pandas()
     # get a list of dataframes where each dataframe only contains examples of a single id
     df_list = [df[df["id"] == x] for x in df["id"].unique()]
@@ -132,31 +132,39 @@ def make_id_col_unique(ds, suffix):
     return new_df
 
 
-def combine_adversarial_ds(ds_add, ds_del):
+def combine_adversarial_ds(ds_add: Dataset, ds_del: Dataset) -> Dataset:
     """combine the two adversarially created datasets, standardize columns, and make ids unique again"""
     df_add = make_id_col_unique(ds_add, "a")
     df_del = make_id_col_unique(ds_del, "d")
 
-    df_add["masked_sentence"] = ["" for _ in range(len(df_add))]
+    # df_add["masked_sentence"] = ["" for _ in range(len(df_add))]
     df_del["distractor_sentence"] = ["" for _ in range(len(df_del))]
-
-    df_del = df_del.rename(
-        columns={
-            "m1_bfdelsentence_None_gen": "m1_bf_None_gen",
-            "fc_bfdelsentence": "fc_bfsentence",
-            "prepped_bfdelsentence_None": "prepped_bfsentence_None",
-            "m1_bfdelsentence_None_f1": "m1_bf_None_f1",
-        }
+    col_name_map = {
+        "m1_bfaddsentence_None_gen": "m1_bf_None_gen",
+        "m1_bfdelsentence_None_gen": "m1_bf_None_gen",
+        "prepped_bfaddsentence_None": "prepped_bfsentence_None",
+        "prepped_bfdelsentence_None": "prepped_bfsentence_None",
+        "fc_bfdelsentence": "fc_bfsentence",
+        "fc_bfaddsentence": "fc_bfsentence",
+        "m1_bfaddsentence_None_f1": "m1_bf_None_f1",
+        "m1_bfdelsentence_None_f1": "m1_bf_None_f1",
+    }
+    # Remove the residual columns used to create distractor added examples
+    # or else you end up with duplicate column names
+    df_add = df_add.drop(
+        [
+            "prepped_bfdelsentence_None",
+            "m1_bfdelsentence_None_gen",
+            "fc_bfdelsentence",
+            "m1_bfdelsentence_None_f1",
+        ],
+        axis=1,
     )
-    df_add = df_add.rename(
-        columns={
-            "m1_bfaddsentence_None_gen": "m1_bf_None_gen",
-            "fc_bfaddsentence": "fc_bfsentence",
-            "prepped_bfaddsentence_None": "prepped_bfsentence_None",
-            "m1_bfaddsentence_None_f1": "m1_bf_None_f1",
-        }
-    )
 
-    df = pd.concat([df_add, df_del]).sort_values(by="id")
+    df_del = df_del.rename(columns=col_name_map)
+    df_add = df_add.rename(columns=col_name_map)
 
-    return df
+    df = pd.concat([df_add, df_del], ignore_index=True).sort_values(by="id")
+    ds = Dataset.from_pandas(df)
+    ds = ds.remove_columns(["__index_level_0__"])
+    return ds

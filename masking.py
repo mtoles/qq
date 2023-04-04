@@ -6,6 +6,8 @@ from tqdm import tqdm
 
 import pandas as pd
 
+from dataset_utils import combine_adversarial_ds
+
 
 def flatten_context(example, masking_scheme):
     masking_str = f"context_{masking_scheme}"
@@ -63,6 +65,7 @@ def add_flat_contexts(
 
 
 def mask_random_sentence(example):
+    # Depricated in favor of mask_bf_sentence
     new_example = example.copy()
     """Mask random useful sentence in example."""
     n_supporting_facts = len(new_example["supporting_facts"])
@@ -93,6 +96,70 @@ def mask_random_sentence(example):
     # )
     return new_example
     # return {"masked_col": new_example["context_None"]}
+
+
+def adversarial_dataset(ds, metrics, m1, masking_scheme, adversarial_drop_thresh):
+    # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
+    ds = ds.add_column(
+        "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
+    )
+    ds = ds.add_column(
+        "context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))]
+    )
+
+    # masking
+    ds_got_right_None = ds.filter(lambda x: x["m1_supporting_None_f1"] > 0.0)
+    ds_bfdelsentence = bf_del_sentences(ds_got_right_None)  # filtering is wrong
+
+    ds_bfdelsentence, metrics["bfdelsentence"] = m1.evaluate(
+        masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
+    )
+
+    ds_got_worse_with_bfdelsentence = ds_bfdelsentence.filter(
+        lambda x: x["m1_bfdelsentence_None_f1"] < x["m1_supporting_None_f1"]
+    )
+
+    # distracting
+
+    ds_got_right_with_supporting = ds_bfdelsentence.filter(
+        lambda x: x["m1_supporting_None_f1"] > adversarial_drop_thresh
+    )
+
+    ds_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
+
+    ds_bfaddsentence, metrics["bfaddsentence"] = m1.evaluate(
+        masking_scheme="bfaddsentence",
+        ds=ds_bfaddsentence,
+        a2_col=None,
+    )
+
+    ds_got_worse_with_bf_add_sentence = ds_bfaddsentence.filter(
+        lambda x: x["m1_bfaddsentence_None_f1"] < x["m1_supporting_None_f1"]
+    )
+
+    # reduce masked dataset to at most n=3 examples of each `id`
+    # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
+    ds_got_worse_with_bf_add_sentence = reduce_to_n(
+        ds_got_worse_with_bf_add_sentence,
+        3,
+        baseline_f1_col_name="m1_supporting_None_f1",
+        exp_f1_col_name="m1_bfaddsentence_None_f1",
+        adversarial_drop_thresh=adversarial_drop_thresh,
+    )
+    ds_got_worse_with_bfdelsentence = reduce_to_n(
+        ds_got_worse_with_bfdelsentence,
+        3,
+        baseline_f1_col_name="m1_supporting_None_f1",
+        exp_f1_col_name="m1_bfdelsentence_None_f1",
+        adversarial_drop_thresh=adversarial_drop_thresh,
+    )
+
+    output_ds = combine_adversarial_ds(
+        ds_got_worse_with_bf_add_sentence, ds_got_worse_with_bfdelsentence
+    )
+
+    # output_ds.to_csv("adversarial.csv")
+    return output_ds, metrics
 
 
 def mask_bf_sentence(example):
@@ -231,14 +298,23 @@ def split_distractor(example):
 def mask_None(example):
     return example
 
-def reduce_to_n(ds: Dataset, n: int, baseline_f1_col_name: str, exp_f1_col_name: str, adversarial_drop_thresh: float):
+
+def reduce_to_n(
+    ds: Dataset,
+    n: int,
+    baseline_f1_col_name: str,
+    exp_f1_col_name: str,
+    adversarial_drop_thresh: float,
+):
     """Reduce the dataset to at most n examples of each `id`, selecting examples with the highest (baseline_f1_col_name - exp_f1_col_name)"""
     df = ds.to_pandas()
     df["delta"] = df[baseline_f1_col_name] - df[exp_f1_col_name]
-    df = df[df["delta"]>adversarial_drop_thresh]
+    df = df[df["delta"] > adversarial_drop_thresh]
     df["rand"] = [random.rand() for _ in range(len(df))]
     # sort by delta, then by rand, then take the top n
-    df_list = list(x[1].sort_values(by=["delta", "rand"]).head(n) for x in df.groupby("id"))
+    df_list = list(
+        x[1].sort_values(by=["delta", "rand"]).head(n) for x in df.groupby("id")
+    )
     # df = df.groupby("id").sort_values(by=["delta", "rand"]).head(n)
     df = pd.concat(df_list)
     ds = Dataset.from_pandas(df)

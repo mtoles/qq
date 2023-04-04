@@ -14,7 +14,8 @@ from secondary_model import (
 )
 from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
-from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
+# from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
+from masking import adversarial_dataset
 import pandas as pd
 
 
@@ -83,65 +84,8 @@ def main(
 
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
-            # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
-            ds = ds.add_column(
-                "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
-            )
-            ds = ds.add_column(
-                "context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))]
-            )
-
-            # masking
-            ds_got_right_None = ds.filter(lambda x: x["m1_supporting_None_f1"] > 0.0)
-            ds_bfdelsentence = bf_del_sentences(ds_got_right_None)  # filtering is wrong
-
-            ds_bfdelsentence, metrics["bfdelsentence"] = m1.evaluate(
-                masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
-            )
-
-            ds_got_worse_with_bfdelsentence = ds_bfdelsentence.filter(
-                lambda x: x["m1_bfdelsentence_None_f1"] < x["m1_supporting_None_f1"]
-            )
-
-            # distracting
-            ds_got_right_with_supporting = ds.filter(
-                lambda x: x["m1_supporting_None_f1"] > 0.0
-            )
-
-            ds_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
-
-            ds_bfaddsentence, metrics["bfaddsentence"] = m1.evaluate(
-                masking_scheme="bfaddsentence",
-                ds=ds_bfaddsentence,
-                a2_col=None,
-            )
-
-            ds_got_worse_with_bf_add_sentence = ds_bfaddsentence.filter(
-                lambda x: x["m1_bfaddsentence_None_f1"] < x["m1_supporting_None_f1"]
-            )
-
-            # reduce masked dataset to at most n=3 examples of each `id`
-            # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
-            ds_got_worse_with_bf_add_sentence = reduce_to_n(
-                ds_got_worse_with_bf_add_sentence,
-                3,
-                baseline_f1_col_name="m1_supporting_None_f1",
-                exp_f1_col_name="m1_bfaddsentence_None_f1",
-                adversarial_drop_thresh=adversarial_drop_thresh,
-            )
-            ds_got_worse_with_bfdelsentence = reduce_to_n(
-                ds_got_worse_with_bfdelsentence,
-                3,
-                baseline_f1_col_name="m1_supporting_None_f1",
-                exp_f1_col_name="m1_bfdelsentence_None_f1",
-                adversarial_drop_thresh=adversarial_drop_thresh,
-            )
-
-            output_ds = combine_adversarial_ds(
-                ds_got_worse_with_bf_add_sentence, ds_got_worse_with_bfdelsentence
-            )
-
-            print
+            ds, metrics = adversarial_dataset(ds, metrics, m1, masking_scheme, adversarial_drop_thresh)
+            
 
         ds, metrics[masking_scheme] = m1.evaluate(
             masking_scheme=masking_scheme, ds=ds, a2_col=None
@@ -182,6 +126,11 @@ def main(
         df = pd.DataFrame(ds)
         percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
         print(metrics)
+        drop_cols = [
+            "supporting_"
+        ]
+
+        df.to_csv(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}.csv")
 
         f.write(
             f"""Model: {m1_path if m1_path else m1_arch}

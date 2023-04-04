@@ -30,7 +30,7 @@ def main(
     load_from_cache,
 ):
     # Unit Tests
-
+    masking_schemes = list(masking_schemes)
     assert split in ["train", "validation"], "Invalid split"
     assert dataset in ["hotpot"], "Invalid dataset"
     assert "None" not in masking_schemes, "`None` masking will be included by default."
@@ -107,8 +107,18 @@ def main(
     # Flatten Each Context
 
     new_ds = add_flat_contexts(
-        new_ds, masking_schemes + ["None", "supporting", "distractor"], cache_file_name, load_from_cache
+        new_ds,
+        masking_schemes + ["None", "supporting", "distractor"],
+        cache_file_name,
+        load_from_cache,
     )
+
+    # filter out examples with no distractors
+    before = len(new_ds)
+    new_ds = new_ds.filter(
+        lambda ex: max([len(x) for x in ex["context_distractor"]["sentences"]]) > 0
+    )
+    print(f"Filtered out {before - len(new_ds)} examples with no distractors")
 
     save_path = os.path.join(
         "data",
@@ -117,6 +127,7 @@ def main(
             dataset, split, downsample_data_size, masking_schemes, distract_or_focus
         ),
     )
+
     new_ds.save_to_disk(save_path)
 
 
