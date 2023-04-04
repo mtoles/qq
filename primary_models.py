@@ -18,18 +18,20 @@ from prepare_data import (
     append_a2,
 )
 from tqdm import tqdm
+from torch.utils.data import DataLoader
 
 import torch
+import numpy as np
 
 
 class Primary_Model:
     def __init__(
         self,
         model_path=None,
-        eval_batch_size=2,
+        batch_size=2,
     ):
         self.model_path = model_path
-        self.eval_batch_size = eval_batch_size
+        self.batch_size = batch_size
 
     def __call__(self, **inputs):
         return self.forward(**inputs)
@@ -63,7 +65,7 @@ class BigBird_PM(Primary_Model):
     def __init__(
         self,
         model_path=None,
-        eval_batch_size=2,
+        batch_size=2,
     ):
         self.collate_fn = lambda x: collate_fn_bb(x, self.tk)
         # don't compute the loss
@@ -71,7 +73,7 @@ class BigBird_PM(Primary_Model):
             output_dir="main/outputs/",
             do_train=False,
             do_eval=True,
-            per_gpu_eval_batch_size=eval_batch_size,
+            per_gpu_eval_batch_size=batch_size,
             group_by_length=True,
             disable_tqdm=False,
             remove_unused_columns=False,
@@ -94,7 +96,7 @@ class BigBird_PM(Primary_Model):
             ).cuda()
         super(BigBird_PM, self).__init__(
             model_path=model_path,
-            eval_batch_size=eval_batch_size,
+            batch_size=batch_size,
         )
         self.max_length = self.model.bert.embeddings.position_embeddings.weight.shape[0]
 
@@ -157,7 +159,7 @@ class BigBird_PM(Primary_Model):
 class T5_PM(Primary_Model):
     def __init__(
         self,
-        eval_batch_size=2,
+        batch_size=2,
         model_name=None,
     ):
         model_name = f"google/flan-{model_name}"
@@ -167,12 +169,12 @@ class T5_PM(Primary_Model):
         ).cuda()
         super(T5_PM, self).__init__(
             model_path=None,
-            eval_batch_size=eval_batch_size,
+            batch_size=batch_size,
         )
 
     def forward(self, **inputs):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
-        input_ids = torch.tensor(inputs["input_ids"]).unsqueeze(0).cuda()
+        input_ids = inputs["input_ids"]
         generation = self.model.generate(
             input_ids, max_new_tokens=10, pad_token_id=self.tk.pad_token_id
         )[:, 1:-1]
@@ -194,18 +196,10 @@ class T5_PM(Primary_Model):
             )
             return x
 
-        # stupid workaround since .map crashes if any column contains too many empty dicts
-        # cached_col_name = f"prepped_{masking_scheme}_{str(a2_col)}"
-        # cached_col = prepped_val_dataset[cached_col_name]
-        # prepped_val_dataset = prepped_val_dataset.remove_columns([cached_col_name])
         prepped_val_dataset = prepped_val_dataset.map(
             lambda x: prepend_question(x, masking_scheme, a2_col, "\n\n"),
             load_from_cache_file=False,
         )
-        # add the column back in
-        # prepped_val_dataset = prepped_val_dataset.add_column(
-        #     cached_col, name=cached_col_name
-        # )
 
         if a2_col is not None:
             prepped_val_dataset = prepped_val_dataset.map(
@@ -216,16 +210,6 @@ class T5_PM(Primary_Model):
             lambda x: _add_prompt(x, masking_scheme),
             load_from_cache_file=False,
         )
-        # prepped_val_dataset = prepped_val_dataset.map(
-        #     lambda x: prepare_inputs_hp(
-        #         x,
-        #         tk=self.tk,
-        #         max_length=2048,
-        #         masking_scheme=masking_scheme,
-        #         a2_col=a2_col,
-        #     ),
-        #     load_from_cache_file=False,
-        # )
         return prepped_val_dataset
 
     def evaluate(self, masking_scheme, ds, a2_col):
@@ -244,47 +228,79 @@ class T5_PM(Primary_Model):
             # Data recorded into the dataset under ['m1_{masking_scheme}_gen', 'm1_{masking_scheme}_f1']
             gen_strs = []  # generated strings
             f1s = []  # f1 scores
+            ems = [] # eexact match (binary)
 
-            for i, x in enumerate(tqdm(ds)):
-                input_tokens = self.tk(ds[i][masking_str])["input_ids"]
+            num_batches = len(ds) // self.batch_size
+            if len(ds) % self.batch_size != 0:
+                num_batches += 1
+
+            for batch_idx in tqdm(range(num_batches)):
+                start_idx = batch_idx * self.batch_size
+                end_idx = min(start_idx + self.batch_size, len(ds))
+                batch = ds.select(range(start_idx, end_idx))
+                input_tokens = self.tk(
+                    batch[masking_str], return_tensors="pt", padding=True
+                )["input_ids"].cuda()
                 generation = self.forward(input_ids=input_tokens)
-                str_preds.append(
-                    self.tk.batch_decode(generation, skip_special_tokens=True)[0]
+                str_preds_batch = self.tk.batch_decode(
+                    generation, skip_special_tokens=True
                 )
-                generation_str = str_preds[-1]
-                str_gts.append(x["a1"])
-                cls_preds.append(None)
-                cls_gts.append(None)
-                input_idss.append(input_tokens)
-                single_metrics = get_metrics(
-                    str_preds[-1:],
-                    str_gts[-1:],
-                    cls_preds[-1:],
-                    cls_gts[-1:],
-                    input_idss[-1:],
+                str_preds.extend(str_preds_batch)
+                str_gts.extend([x["a1"] for x in batch])
+                cls_preds.extend([None] * len(batch))
+                cls_gts.extend([None] * len(batch))
+                input_idss.extend(input_tokens)
+                batch_metrics = get_metrics(
+                    str_preds_batch,
+                    [x["a1"] for x in batch],
+                    [None] * len(batch),
+                    [None] * len(batch),
+                    input_tokens,
                     self.tk,
                     None,
                 )
-                gen_strs.append(generation_str)
-                f1s.append(single_metrics["f1"])
+                gen_strs.extend(str_preds_batch)
+                f1s.extend(batch_metrics["f1"])
+                ems.extend(batch_metrics["em"])
+            # for i, x in enumerate(tqdm(ds)):
+            #     input_tokens = self.tk(ds[i][masking_str])["input_ids"]
+            #     generation = self.forward(input_ids=input_tokens)
+            #     str_preds.append(
+            #         self.tk.batch_decode(generation, skip_special_tokens=True)[0]
+            #     )
+            #     generation_str = str_preds[-1]
+            #     str_gts.append(x["a1"])
+            #     cls_preds.append(None)
+            #     cls_gts.append(None)
+            #     input_idss.append(input_tokens)
+            #     single_metrics = get_metrics(
+            #         str_preds[-1:],
+            #         str_gts[-1:],
+            #         cls_preds[-1:],
+            #         cls_gts[-1:],
+            #         input_idss[-1:],
+            #         self.tk,
+            #         None,
+            #     )
+            #     gen_strs.append(generation_str)
+            #     f1s.append(single_metrics["f1"])
 
             ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_gen", gen_strs)
             ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_f1", f1s)
+            ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_em", ems)
 
             # Get aggregate metrics
-            metrics = get_metrics(
-                str_preds,
-                str_gts,
-                cls_preds,
-                cls_gts,
-                input_idss,
-                self.tk,
-                None,
-            )
+            agg_f1 = np.mean(f1s)
+            agg_em = np.mean(ems)
+
+            metrics = {
+                "f1": agg_f1,
+                "em": agg_em,
+            }
         return ds, metrics
 
 
-def get_m1(m1_path, m1_arch, eval_batch_size):
+def get_m1(m1_path, m1_arch, batch_size):
     # Unit Tests
     assert m1_arch in [
         "bigbird",
@@ -296,10 +312,10 @@ def get_m1(m1_path, m1_arch, eval_batch_size):
     ]
     # Load primary model
     if m1_arch == "bigbird":
-        m1 = BigBird_PM(m1_path, eval_batch_size=eval_batch_size)
+        m1 = BigBird_PM(m1_path, batch_size=batch_size)
     elif m1_arch.startswith("t5"):
         m1 = T5_PM(
-            eval_batch_size=eval_batch_size,
+            batch_size=batch_size,
             model_name=m1_arch,
         )
     else:

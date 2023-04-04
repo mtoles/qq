@@ -59,11 +59,11 @@ def get_metrics(
         precisions.append(p)
         recalls.append(r)
 
-    accuracy = sum(matches) / len(matches)
-    f1 = sum(f1s) / len(f1s)
-    precision = sum(precisions) / len(precisions)
-    recall = sum(recalls) / len(recalls)
-    return {"accuracy": accuracy, "f1": f1, "precision": precision, "recall": recall}
+    # accuracy = sum(matches) / len(matches)
+    # f1 = sum(f1s) / len(f1s)
+    # precision = sum(precisions) / len(precisions)
+    # recall = sum(recalls) / len(recalls)
+    return {"em": matches, "f1": f1s, "precision": precisions, "recall": recalls}
 
 
 def get_metrics_single(
@@ -86,7 +86,7 @@ def get_metrics_single(
     #     if cat_pred in ["yes", "no"]:
     #         str_pred = cat_pred
 
-    match = 0
+    match = str_pred == str_gt
     f1, precision, recall = f1_score(str_pred, str_gt)
     if log_path is not None:
         log_results(

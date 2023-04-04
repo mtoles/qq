@@ -53,6 +53,7 @@ def main(
     results_filename,
     profile_only,
 ):
+    start = datetime.now()
     ds_masking_scheme = (
         "None" if masking_scheme == "bfdelsentence" else "masking_scheme"
     )
@@ -125,27 +126,28 @@ def main(
         # Analysis
         df = pd.DataFrame(ds)
         percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
-        print(metrics)
+        # print(metrics)
         drop_cols = [
             "supporting_"
         ]
 
         df.to_csv(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}.csv")
+        print(f"runtime: {datetime.now()-start}")
 
-        f.write(
-            f"""Model: {m1_path if m1_path else m1_arch}
-Masking Scheme:  {masking_scheme}
-Oracle:          {oracle.model_name}
-Datetime:        {now}
-Data:            {pt_dataset_path} {original_raw_dataset_len}/{len(raw_dataset)}
-Masking:         {masking_scheme}
-F1 delta:        {metrics["answered"]["f1"]-metrics[masking_scheme]["f1"]}
-Precision delta: {metrics["answered"]["precision"]-metrics[masking_scheme]["precision"]}
-Recall delta:    {metrics["answered"]["recall"]-metrics[masking_scheme]["recall"]}
-Oracle acc:      {percent_oracle_correct}
-\n
-"""
-        )
+#         f.write(
+#             f"""Model: {m1_path if m1_path else m1_arch}
+# Masking Scheme:  {masking_scheme}
+# Oracle:          {oracle.model_name}
+# Datetime:        {now}
+# Data:            {pt_dataset_path} {original_raw_dataset_len}/{len(raw_dataset)}
+# Masking:         {masking_scheme}
+# F1 delta:        {metrics["answered"]["f1"]-metrics[masking_scheme]["f1"]}
+# Precision delta: {metrics["answered"]["precision"]-metrics[masking_scheme]["precision"]}
+# Recall delta:    {metrics["answered"]["recall"]-metrics[masking_scheme]["recall"]}
+# Oracle acc:      {percent_oracle_correct}
+# \n
+# """
+#         )
 
 
 if __name__ == "__main__":
