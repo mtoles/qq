@@ -131,7 +131,7 @@ def main(
             "supporting_"
         ]
 
-        df.to_csv(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}.csv")
+        # df.to_csv(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}.csv")
         print(f"runtime: {datetime.now()-start}")
 
 #         f.write(
