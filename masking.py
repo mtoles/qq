@@ -116,7 +116,8 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
     )
 
     ds_got_worse_with_bfdelsentence = ds_bfdelsentence.filter(
-        lambda x: x["m1_bfdelsentence_None_f1"] < x["m1_supporting_None_f1"]
+        lambda x: x["m1_supporting_None_f1"] - x["m1_bfdelsentence_None_f1"]
+        > adversarial_drop_thresh
     )
 
     # distracting
@@ -129,16 +130,15 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
     mini_dss = []
     for mini_ds in mini_dss_bfaddsentence:
         # ds_got_worse_with_bf_add_sentence, metrics["bfaddsentence"] = m1.evaluate(
-        mini_ds_got_worse_with_bf_add_sentence, _metrics = m1.evaluate(
+        mini_ds_bf_add_sentence, _metrics = m1.evaluate(
             masking_scheme="bfaddsentence",
             ds=mini_ds,
             a2_col=None,
             max_adversarial_examples=max_adversarial_examples,
             threshold=adversarial_drop_thresh,
         )
-        mini_dss.append(mini_ds_got_worse_with_bf_add_sentence)
+        mini_dss.append(mini_ds_bf_add_sentence)
     ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss)
-
 
     # reduce masked dataset to at most `adversarial_drop_thresh` examples of each `id`
     # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
@@ -251,8 +251,14 @@ def bf_add_sentences(ds):
     """Return a list of datasets where examples in each dataset have a different sentence masked.
     Every example in each dataset will have a different distractor sentence added"""
     bf_mini_datasets = [distract_bf_sentence(example) for example in tqdm(ds)]
-    # new_ds = concatenate_datasets(bf_mini_datasets)
-    return bf_mini_datasets
+    # concatenate and merge dataset who share an id
+    tmp_ds = concatenate_datasets(bf_mini_datasets)
+    output_dss = []
+    ids = set(tmp_ds["id"])
+    # TODO: make this run in O(n)
+    for id in ids:
+        output_dss.append(tmp_ds.filter(lambda x: x["id"] == id))
+    return output_dss
 
 
 def split_distractor(example):

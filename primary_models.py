@@ -304,17 +304,13 @@ class T5_PM(Primary_Model):
 
             # Reduce to only the first max_adversarial_examples examples where the model was damaged
             if adversarial_mode:
-                ds = (
-                    ds.filter(
+                ds = ds.filter(
                         lambda x: x[f"m1_supporting_{str(a2_col)}_f1"]
                         - x[f"m1_{masking_scheme}_{str(a2_col)}_f1"]
-                        < threshold,
+                        > threshold,
                         num_proc=1,
-                    )
-                    .shuffle()
-                    .select(range(max_adversarial_examples))
-                )
-
+                    ).shuffle()
+                ds = ds.select(range(min(max_adversarial_examples, len(ds))))
             # Get aggregate metrics
             # Note that aggregate metrics are not very meaningful if in adversarial mode
             # Since the dataset is filtered to only include examples where the model was damaged
@@ -325,6 +321,7 @@ class T5_PM(Primary_Model):
                 "f1": agg_f1,
                 "em": agg_em,
             }
+            assert (not max_adversarial_examples) or (len(ds) <= max_adversarial_examples)
         return ds, metrics
 
 

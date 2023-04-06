@@ -127,7 +127,7 @@ def make_id_col_unique(ds: Dataset, suffix: str = "") -> pd.DataFrame:
     # get a list of dataframes where each dataframe only contains examples of a single id
     df_list = [df[df["id"] == x] for x in df["id"].unique()]
     for dfx in df_list:
-        dfx["id"] = [dfx["id"].iloc[i] + "_" + str(i) + suffix for i in range(len(dfx))]
+        dfx["id"] = [dfx["id"].iloc[i] + "_" + suffix + str(i) for i in range(len(dfx))]
     new_df = pd.concat(df_list)
     return new_df
 
