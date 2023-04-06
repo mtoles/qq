@@ -85,7 +85,7 @@ def main(
 
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
-            ds, metrics = adversarial_dataset(ds, metrics, m1, masking_scheme, adversarial_drop_thresh)
+            ds = adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh)
             
 
         ds, metrics[masking_scheme] = m1.evaluate(
