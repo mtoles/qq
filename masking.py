@@ -157,6 +157,8 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
     )
 
     # output_ds.to_csv("adversarial.csv")
+    df = output_ds.to_pandas()
+    df[["id", "m1_supporting_None_f1", "m1_bf_None_f1"]].to_csv("adversarial_2.csv")
     return output_ds
 
 
