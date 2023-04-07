@@ -228,7 +228,7 @@ class T5_PM(Primary_Model):
             not max_adversarial_examples and not threshold
         ), "Must specify both max_adversarial_examples and threshold (adversarial mode) or neither (normal mode)"
         adversarial_mode = max_adversarial_examples is not None
-        adversarial_mode = False
+        # adversarial_mode = False
         # If in adversarial mode, shuffle the dataset to remove biases
         if adversarial_mode:
             ds = ds.shuffle()

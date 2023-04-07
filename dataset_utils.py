@@ -153,15 +153,15 @@ def combine_adversarial_ds(ds_add: Dataset, ds_del: Dataset) -> Dataset:
     }
     # Remove the residual columns used to create distractor added examples
     # or else you end up with duplicate column names
-    df_add = df_add.drop(
-        [
-            "prepped_bfdelsentence_None",
-            "m1_bfdelsentence_None_gen",
-            "fc_bfdelsentence",
-            "m1_bfdelsentence_None_f1",
-        ],
-        axis=1,
-    )
+    # df_add = df_add.drop(
+    #     [
+    #         "prepped_bfdelsentence_None",
+    #         # "m1_bfdelsentence_None_gen",
+    #         "fc_bfdelsentence",
+    #         # "m1_bfdelsentence_None_f1",
+    #     ],
+    #     axis=1,
+    # )
 
     df_del = df_del.rename(columns=col_name_map)
     df_add = df_add.rename(columns=col_name_map)

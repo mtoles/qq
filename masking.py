@@ -151,6 +151,14 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
         exp_f1_col_name="m1_bfdelsentence_None_f1",
         adversarial_drop_thresh=adversarial_drop_thresh,
     )
+    
+    ds_got_worse_with_bf_add_sentence = reduce_to_n(
+        ds_got_worse_with_bf_add_sentence,
+        max_adversarial_examples,
+        baseline_f1_col_name="m1_supporting_None_f1",
+        exp_f1_col_name="m1_bfaddsentence_None_f1",
+        adversarial_drop_thresh=adversarial_drop_thresh,
+    )
 
     output_ds = combine_adversarial_ds(
         ds_got_worse_with_bf_add_sentence, ds_got_worse_with_bfdelsentence
@@ -158,7 +166,10 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
 
     # output_ds.to_csv("adversarial.csv")
     df = output_ds.to_pandas()
-    df[["id", "m1_supporting_None_f1", "m1_bf_None_f1"]].to_csv("adversarial_2.csv")
+    df["id_suffix"] = df["id"].apply(lambda x: x.split("_")[1])
+    df["id"] = df["id"].apply(lambda x: x.split("_")[0])
+    df = df[df["m1_bf_None_f1"]<df["m1_supporting_None_f1"]]
+    df[["id", "m1_supporting_None_f1", "m1_bf_None_f1", "masked_sentence", "distractor_sentence"]].to_csv("adversarial_2.csv")
     return output_ds
 
 
@@ -245,6 +256,12 @@ def distract_bf_sentence(example):
         new_example = deepcopy(example)
     bf_mini_dataset = add_flat_contexts(
         Dataset.from_list(new_examples), ["bfaddsentence"]
+    )
+
+    # drop columns that refer to the bfdelsentence examples from which
+    # these examples are derived
+    bf_mini_dataset = bf_mini_dataset.remove_columns(
+    ["m1_bfdelsentence_None_gen", "m1_bfdelsentence_None_f1", "m1_bfdelsentence_None_em", "prepped_bfdelsentence_None", "fc_bfdelsentence"]
     )
     return bf_mini_dataset
 
