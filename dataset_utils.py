@@ -148,6 +148,8 @@ def combine_adversarial_ds(ds_add: Dataset, ds_del: Dataset) -> Dataset:
         "fc_bfaddsentence": "fc_bfsentence",
         "m1_bfaddsentence_None_f1": "m1_bf_None_f1",
         "m1_bfdelsentence_None_f1": "m1_bf_None_f1",
+        "m1_bfaddsentence_None_em": "m1_bf_None_em",
+        "m1_bfdelsentence_None_em": "m1_bf_None_em",
     }
     # Remove the residual columns used to create distractor added examples
     # or else you end up with duplicate column names
