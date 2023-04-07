@@ -33,6 +33,11 @@ import pandas as pd
     default=None,
     help="use at most this many examples in validation",
 )
+@click.option(
+    "--ds_shift",
+    default=0,
+    help="shift the dataset by this many examples before downsampling",
+)
 @click.option("--results_filename", help="path to save results")
 @click.option(
     "--profile_only",
@@ -50,9 +55,12 @@ def main(
     masking_scheme,
     adversarial_drop_thresh,
     downsample_pt_size,
+    ds_shift,
     results_filename,
     profile_only,
 ):
+    if ds_shift:
+        assert downsample_pt_size is not None, "There is no reason to shift the dataset without downsampling"
     start = datetime.now()
     ds_masking_scheme = (
         "None" if masking_scheme == "bfdelsentence" else "masking_scheme"
@@ -72,7 +80,7 @@ def main(
 
         raw_dataset = load_from_disk(pt_dataset_path)
         if str(downsample_pt_size) != "None":
-            raw_dataset = raw_dataset.select(range(int(downsample_pt_size)))
+            raw_dataset = raw_dataset.select(range(ds_shift, ds_shift + int(downsample_pt_size)))
         original_raw_dataset_len = len(raw_dataset)
         ds = raw_dataset
         # Evaluate the primary model
