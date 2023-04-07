@@ -253,11 +253,18 @@ def bf_add_sentences(ds):
     bf_mini_datasets = [distract_bf_sentence(example) for example in tqdm(ds)]
     # concatenate and merge dataset who share an id
     tmp_ds = concatenate_datasets(bf_mini_datasets)
-    output_dss = []
-    ids = set(tmp_ds["id"])
-    # TODO: make this run in O(n)
-    for id in ids:
-        output_dss.append(tmp_ds.filter(lambda x: x["id"] == id))
+    id_dict = dict()
+
+    def add_to_dict(example):
+        id = example["id"]
+        if id not in id_dict:
+            id_dict[id] = []
+        id_dict[id].append(example)
+        return example
+
+    _ = tmp_ds.map(add_to_dict, batched=False)
+
+    output_dss = [Dataset.from_list(id_dict[id]) for id in id_dict]
     return output_dss
 
 
