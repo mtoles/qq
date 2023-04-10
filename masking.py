@@ -229,9 +229,9 @@ def distract_bf_sentence(example):
         new_example["distractor_sentence"] = new_example["context_distractor"][
             "sentences"
         ][rand_keys[0]][rand_keys[1]]
-        # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
+        
         new_example["context_bfaddsentence"]["sentences"] = deepcopy(
-            new_example["context_supporting"]["sentences"]
+            new_example["context_bfdelsentence"]["sentences"]
         )
         new_example["context_bfaddsentence"]["sentences"][rand_keys[0]].insert(
             rand_keys[1], new_example["distractor_sentence"]
