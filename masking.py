@@ -246,7 +246,7 @@ def distract_bf_sentence(example):
     n_distractors_sentences = len(example["context_distractor"]["sentences"])
     assert n_distractors_sentences > 0, "No distractor sentences found"
 
-    # # Locate all the facts
+    # # Locate all the distractors
     distractor_keys = []
     for i, sentences in enumerate(example["context_distractor"]["sentences"]):
         for j, sentence in enumerate(
@@ -254,7 +254,7 @@ def distract_bf_sentence(example):
         ):  # actually len(sentences) = 1 so j is always 0
             distractor_keys.append((i, j))
 
-    # create an example for each masked fact
+    # create an example for each distractor
     for i in range(len(distractor_keys)):
         new_example = deepcopy(example)
         # delete the "fc_bfdelsentence" field since it will be out of date.
@@ -266,7 +266,7 @@ def distract_bf_sentence(example):
         ][rand_keys[0]][rand_keys[1]]
         # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
         new_example["context_bfaddsentence"]["sentences"] = deepcopy(
-            new_example["context_supporting"]["sentences"]
+            new_example["context_bfdelsentence"]["sentences"]
         )
         new_example["context_bfaddsentence"]["sentences"][rand_keys[0]].insert(
             rand_keys[1], new_example["distractor_sentence"]
