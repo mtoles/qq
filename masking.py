@@ -10,7 +10,6 @@ from dataset_utils import combine_adversarial_ds
 
 # Maximum number of adversarial examples given each unique example id.
 # Masked examples and distracted examples are counted separately.
-max_adversarial_examples = 3
 
 
 def flatten_context(example, masking_scheme):
@@ -96,7 +95,9 @@ def mask_random_sentence(example):
     return new_example
 
 
-def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
+def adversarial_dataset(
+    ds, m1, masking_scheme, adversarial_drop_thresh, max_adversarial_examples
+):
     # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
     ds = ds.add_column(
         "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
@@ -105,10 +106,19 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
         "context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))]
     )
 
-    # masking
-    ds_got_right_None = ds.filter(lambda x: x["m1_supporting_None_f1"] > 0.0)
-    ds_bfdelsentence = bf_del_sentences(ds_got_right_None)
+    def pp(ds):
+        print(f"total: {len(ds)}, ids: {len(set(ds['id']))}")
 
+    pp(ds)
+
+    # masking
+
+    ds_got_right_supporting = ds.filter(
+        lambda x: x["m1_supporting_None_f1"] > 0.0, load_from_cache_file=False
+    )
+    pp(ds_got_right_supporting)
+    ds_bfdelsentence = bf_del_sentences(ds_got_right_supporting)
+    pp(ds_bfdelsentence)
     # Don't run masking in adversarial mode so that we get a more
     # even distribution once we run it again in distractor mode.
     ds_bfdelsentence, _metrics = m1.evaluate(
@@ -123,10 +133,12 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
     # distracting
 
     ds_got_right_with_supporting = ds_bfdelsentence.filter(
-        lambda x: x["m1_supporting_None_f1"] > adversarial_drop_thresh
-    )
-
+        lambda x: x["m1_bfdelsentence_None_f1"] > adversarial_drop_thresh,
+        load_from_cache_file=False,
+    )  # filtering not technically necessary but speeds things up
+    pp(ds_got_right_with_supporting)
     mini_dss_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
+    [pp(x) for x in mini_dss_bfaddsentence]
     mini_dss = []
     for mini_ds in mini_dss_bfaddsentence:
         # ds_got_worse_with_bf_add_sentence, metrics["bfaddsentence"] = m1.evaluate(
@@ -151,7 +163,7 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
         exp_f1_col_name="m1_bfdelsentence_None_f1",
         adversarial_drop_thresh=adversarial_drop_thresh,
     )
-    
+
     ds_got_worse_with_bf_add_sentence = reduce_to_n(
         ds_got_worse_with_bf_add_sentence,
         max_adversarial_examples,
@@ -166,10 +178,20 @@ def adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh):
 
     # output_ds.to_csv("adversarial.csv")
     df = output_ds.to_pandas()
+    df1 = pd.read_csv("adversarial_1.csv")
+
     df["id_suffix"] = df["id"].apply(lambda x: x.split("_")[1])
     df["id"] = df["id"].apply(lambda x: x.split("_")[0])
-    df = df[df["m1_bf_None_f1"]<df["m1_supporting_None_f1"]]
-    df[["id", "m1_supporting_None_f1", "m1_bf_None_f1", "masked_sentence", "distractor_sentence"]].to_csv("adversarial_2.csv")
+    df[
+        [
+            "id",
+            "m1_supporting_None_f1",
+            "m1_bf_None_f1",
+            # "masked_sentence",
+            # "distractor_sentence",
+            "fc_bfsentence",
+        ]
+    ].to_csv("adversarial_2.csv")
     return output_ds
 
 
@@ -261,7 +283,13 @@ def distract_bf_sentence(example):
     # drop columns that refer to the bfdelsentence examples from which
     # these examples are derived
     bf_mini_dataset = bf_mini_dataset.remove_columns(
-    ["m1_bfdelsentence_None_gen", "m1_bfdelsentence_None_f1", "m1_bfdelsentence_None_em", "prepped_bfdelsentence_None", "fc_bfdelsentence"]
+        [
+            "m1_bfdelsentence_None_gen",
+            "m1_bfdelsentence_None_f1",
+            "m1_bfdelsentence_None_em",
+            "prepped_bfdelsentence_None",
+            "fc_bfdelsentence",
+        ]
     )
     return bf_mini_dataset
 
