@@ -109,18 +109,16 @@ def adversarial_dataset(
     def pp(ds):
         print(f"total: {len(ds)}, ids: {len(set(ds['id']))}")
 
-    pp(ds)
 
     # masking
 
     ds_got_right_supporting = ds.filter(
         lambda x: x["m1_supporting_None_f1"] > 0.0, load_from_cache_file=False
     )
-    pp(ds_got_right_supporting)
     ds_bfdelsentence = bf_del_sentences(ds_got_right_supporting)
-    pp(ds_bfdelsentence)
     # Don't run masking in adversarial mode so that we get a more
     # even distribution once we run it again in distractor mode.
+    print("m1 masking...")
     ds_bfdelsentence, _metrics = m1.evaluate(
         masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
     )
@@ -136,11 +134,10 @@ def adversarial_dataset(
         lambda x: x["m1_bfdelsentence_None_f1"] > adversarial_drop_thresh,
         load_from_cache_file=False,
     )  # filtering not technically necessary but speeds things up
-    pp(ds_got_right_with_supporting)
     mini_dss_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
-    [pp(x) for x in mini_dss_bfaddsentence]
     mini_dss = []
-    for mini_ds in mini_dss_bfaddsentence:
+    print("m1 distracting...")
+    for mini_ds in tqdm(mini_dss_bfaddsentence):
         # ds_got_worse_with_bf_add_sentence, metrics["bfaddsentence"] = m1.evaluate(
         mini_ds_bf_add_sentence, _metrics = m1.evaluate(
             masking_scheme="bfaddsentence",
@@ -176,22 +173,10 @@ def adversarial_dataset(
         ds_got_worse_with_bf_add_sentence, ds_got_worse_with_bfdelsentence
     )
 
-    # output_ds.to_csv("adversarial.csv")
-    df = output_ds.to_pandas()
-    df1 = pd.read_csv("adversarial_1.csv")
+    # df = output_ds.to_pandas()
 
-    df["id_suffix"] = df["id"].apply(lambda x: x.split("_")[1])
-    df["id"] = df["id"].apply(lambda x: x.split("_")[0])
-    df[
-        [
-            "id",
-            "m1_supporting_None_f1",
-            "m1_bf_None_f1",
-            # "masked_sentence",
-            # "distractor_sentence",
-            "fc_bfsentence",
-        ]
-    ].to_csv("adversarial_2.csv")
+    # df["id_suffix"] = df["id"].apply(lambda x: x.split("_")[1])
+    # df["id"] = df["id"].apply(lambda x: x.split("_")[0])
     return output_ds
 
 
@@ -234,7 +219,7 @@ def mask_bf_sentence(example):
 
 
 def bf_del_sentences(ds):
-    bf_mini_datasets = [mask_bf_sentence(example) for example in tqdm(ds)]
+    bf_mini_datasets = [mask_bf_sentence(example) for example in ds]
     new_ds = concatenate_datasets(bf_mini_datasets)
     new_ds = add_flat_contexts(new_ds, ["bfdelsentence"], load_from_cache=False)
     return new_ds
