@@ -28,6 +28,7 @@ import pandas as pd
 @click.option("--eval_batch_size", default=2, help="batch size for eval")
 @click.option("--masking_scheme", help="{randomsentence | bfdelsentence | None")
 @click.option("--adversarial_drop_thresh", default=0.5, help="include only examples in the adversarially generated examples where the delta between baseline and masked or distracted is greater than this threshold")
+@click.option("--max_adversarial_examples", default=3, help="create at most this many adversarial examples per example")
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -54,11 +55,15 @@ def main(
     eval_batch_size,
     masking_scheme,
     adversarial_drop_thresh,
+    max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
     results_filename,
     profile_only,
 ):
+    if max_adversarial_examples is None:
+        max_adversarial_examples = float("inf")
+        print("warning: failing to limit the number of adversarial examples may take a long time")
     if ds_shift:
         assert downsample_pt_size is not None, "There is no reason to shift the dataset without downsampling"
     start = datetime.now()
@@ -93,7 +98,7 @@ def main(
 
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
-            ds = adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh)
+            ds = adversarial_dataset(ds, m1, masking_scheme, adversarial_drop_thresh, max_adversarial_examples)
             
 
         ds, metrics[masking_scheme] = m1.evaluate(
