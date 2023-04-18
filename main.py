@@ -4,7 +4,7 @@
 #  pt: primary task
 
 import click
-from datasets import load_from_disk
+from datasets import load_from_disk, Dataset
 from oracles import T5_Bool_Oracle
 from primary_models import get_m1
 from secondary_model import (
@@ -49,6 +49,11 @@ import pandas as pd
     default=0,
     help="Shift the dataset by this many examples before downsampling. Useful for debugging specific examples.",
 )
+@click.option(
+    "--cached_adversarial_dataset_path",
+    default=None,
+    help="Path to save/load cached adversarial dataset. If included, skip adversarial dataset generation.",
+)
 @click.option("--results_filename", help="path to save results")
 @click.option(
     "--profile_only",
@@ -69,6 +74,7 @@ def main(
     max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
+    cached_adversarial_dataset_path,
     results_filename,
     profile_only,
 ):
@@ -90,40 +96,59 @@ def main(
         results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
 
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
+
         assert m2_arch in ["repeater", "openai", "gt"]
         assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
         masking_str = f"fc_{masking_scheme}"
         m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
         # Receive and prepare the primary task
-
-        raw_dataset = load_from_disk(pt_dataset_path)
-        if str(downsample_pt_size) != "None":
-            raw_dataset = raw_dataset.select(
-                range(ds_shift, ds_shift + int(downsample_pt_size))
-            )
-        original_raw_dataset_len = len(raw_dataset)
-        ds = raw_dataset
-        # Evaluate the primary model
         metrics = {}
 
-        # first pass
-        print("m1 first pass...")
-        ds, metrics["supporting"] = m1.evaluate(
-            masking_scheme="supporting", ds=ds, a2_col=None
-        )
-        print("generating adversarial data...")
-        # select and mask examples where the primary
-        if masking_scheme == "bfsentence":
-            ds = adversarial_dataset(
-                ds,
-                m1,
-                masking_scheme,
-                adversarial_drop_thresh,
-                max_adversarial_examples,
+        if cached_adversarial_dataset_path is None:
+            raw_dataset = load_from_disk(pt_dataset_path)
+            if str(downsample_pt_size) != "None":
+                raw_dataset = raw_dataset.select(
+                    range(ds_shift, ds_shift + int(downsample_pt_size))
+                )
+            original_raw_dataset_len = len(raw_dataset)
+            ds = raw_dataset
+            # Evaluate the primary model
+
+            # first pass
+            print("m1 first pass...")
+            ds, metrics["supporting"] = m1.evaluate(
+                masking_scheme="supporting", ds=ds, a2_col=None
             )
+            print("generating adversarial data...")
+            # select and mask examples where the primary
+            if masking_scheme == "bfsentence":
+                ds = adversarial_dataset(
+                    ds,
+                    m1,
+                    masking_scheme,
+                    adversarial_drop_thresh,
+                    max_adversarial_examples,
+                )
 
-
+        else:
+            # Load dataset from cache
+            cached_adv_df = pd.read_hdf(cached_adversarial_dataset_path)
+            ds = Dataset.from_pandas(cached_adv_df)
+            # Drop columns pertaining to the previous M2, which are created after this point
+            drop_cols = [
+                "__index_level_0__",
+                "q2_bfsentence",
+                "a2_bfsentence",
+                "a2_is_correct_bfsentence",
+                "prepped_bfsentence_a2",
+                "m1_bfsentence_a2_gen",
+                "m1_bfsentence_a2_f1",
+                "m1_bfsentence_a2_em",
+            ]  # needs fixing
+            for col in drop_cols:
+                if col in ds.column_names:
+                    ds = ds.remove_columns(drop_cols)
 
         if profile_only:
             df = pd.DataFrame(ds)
