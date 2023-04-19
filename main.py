@@ -164,6 +164,7 @@ def main(
         else:
             raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
         # Apply the secondary model
+        print("m2...")
         ds = m2.process(
             ds,
             q1_col="q1",
@@ -179,6 +180,7 @@ def main(
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         oracle.model.cpu()
         m1.model.cuda()
+        print("m1 second pass...")
         ds, metrics["answered"] = m1.evaluate(
             masking_scheme=masking_scheme, ds=ds, a2_col="a2"
         )
@@ -186,7 +188,7 @@ def main(
         # Analysis
         df = pd.DataFrame(ds)
         print(f"runtime: {datetime.now()-start}")
-        df.to_hdf(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}_{oracle_arch}.hd5", "ds")
+        df.to_hdf(f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}.hd5", "ds")
         # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
         # # print(metrics)
         # drop_cols = [
