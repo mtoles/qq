@@ -186,7 +186,7 @@ def main(
         # Analysis
         df = pd.DataFrame(ds)
         print(f"runtime: {datetime.now()-start}")
-        df.to_hdf(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}.hd5", "ds")
+        df.to_hdf(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}_{oracle_arch}.hd5", "ds")
         # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
         # # print(metrics)
         # drop_cols = [
