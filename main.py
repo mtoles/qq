@@ -54,6 +54,11 @@ import pandas as pd
     default=None,
     help="Path to save/load cached adversarial dataset. If included, skip adversarial dataset generation.",
 )
+@click.option(
+    "--oai_cache_path",
+    default=None,
+    help="Path to save/load cached chatGPT responses.",
+)
 @click.option("--results_filename", help="path to save results")
 @click.option(
     "--profile_only",
@@ -75,6 +80,7 @@ def main(
     downsample_pt_size,
     ds_shift,
     cached_adversarial_dataset_path,
+    oai_cache_path,
     results_filename,
     profile_only,
 ):
@@ -135,6 +141,10 @@ def main(
             # Load dataset from cache
             cached_adv_df = pd.read_hdf(cached_adversarial_dataset_path)
             ds = Dataset.from_pandas(cached_adv_df)
+            if str(downsample_pt_size) != "None":
+                ds = ds.select(
+                    range(ds_shift, ds_shift + int(downsample_pt_size))
+                )
             # Drop columns pertaining to the previous M2, which are created after this point
             drop_cols = [
                 "__index_level_0__",
@@ -158,7 +168,7 @@ def main(
         if m2_arch == "repeater":
             m2 = Repeater_Secondary_Model()
         elif m2_arch == "openai":
-            m2 = OpenAI_Secondary_Model()
+            m2 = OpenAI_Secondary_Model(oai_cache_path)
         elif m2_arch == "gt":
             m2 = Gt_Secondary_Model()
         else:
