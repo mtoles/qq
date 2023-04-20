@@ -25,6 +25,7 @@ import pandas as pd
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
 @click.option("--m2_arch", help="secondary model architecture")
+@click.option("--template_id", help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}")
 @click.option("--oracle_arch", help="oracle architecture")
 @click.option("--pm_eval_batch_size", help="batch size for eval", type=int)
 @click.option("--oracle_eval_batch_size", help="batch size for eval", type=int)
@@ -71,6 +72,7 @@ def main(
     m1_path,
     m1_arch,
     m2_arch,
+    template_id,
     oracle_arch,
     pm_eval_batch_size,
     oracle_eval_batch_size,
@@ -166,7 +168,7 @@ def main(
         if m2_arch == "repeater":
             m2 = Repeater_Secondary_Model()
         elif m2_arch == "openai":
-            m2 = OpenAI_Secondary_Model(oai_cache_path)
+            m2 = OpenAI_Secondary_Model(oai_cache_path, template_id)
         elif m2_arch == "gt":
             m2 = Gt_Secondary_Model()
         else:
