@@ -142,9 +142,7 @@ def main(
             cached_adv_df = pd.read_hdf(cached_adversarial_dataset_path)
             ds = Dataset.from_pandas(cached_adv_df)
             if str(downsample_pt_size) != "None":
-                ds = ds.select(
-                    range(ds_shift, ds_shift + int(downsample_pt_size))
-                )
+                ds = ds.select(range(ds_shift, ds_shift + int(downsample_pt_size)))
             # Drop columns pertaining to the previous M2, which are created after this point
             drop_cols = [
                 "__index_level_0__",
@@ -187,6 +185,7 @@ def main(
             model_name=oracle_arch, batch_size=oracle_eval_batch_size
         )
         # Answer questions with the oracle
+        print("oracle...")
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         oracle.model.cpu()
         m1.model.cuda()
@@ -198,7 +197,10 @@ def main(
         # Analysis
         df = pd.DataFrame(ds)
         print(f"runtime: {datetime.now()-start}")
-        df.to_hdf(f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}.hd5", "ds")
+        df.to_hdf(
+            f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}.hd5",
+            "ds",
+        )
         # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
         # # print(metrics)
         # drop_cols = [

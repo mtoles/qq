@@ -21,7 +21,7 @@ class Oracle:
             lambda x: self.forward(x, q2_masking_scheme),
             load_from_cache_file=False,
             batched=True,
-            batch_size=self.batch_size,
+            batch_size=1, # batching happens internally
         )
         return new_ds
 
