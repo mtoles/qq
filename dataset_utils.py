@@ -126,9 +126,15 @@ def make_id_col_unique(ds: Dataset, suffix: str = "") -> pd.DataFrame:
     df = ds.to_pandas()
     # get a list of dataframes where each dataframe only contains examples of a single id
     df_list = [df[df["id"] == x] for x in df["id"].unique()]
+    new_list = []
+    def append_id(x):
+        x['id'] = x['id'] + "_" + suffix + str(x.name)
+        return x
+
     for dfx in df_list:
-        dfx["id"] = [dfx["id"].iloc[i] + "_" + str(i) + suffix for i in range(len(dfx))]
-    new_df = pd.concat(df_list)
+        # dfx["id"] = [dfx.loc[i,"id"] + "_" + suffix + str(i) for i in range(len(dfx))]
+        new_list.append(dfx.apply(append_id, axis=1))
+    new_df = pd.concat(new_list)
     return new_df
 
 
@@ -140,26 +146,17 @@ def combine_adversarial_ds(ds_add: Dataset, ds_del: Dataset) -> Dataset:
     # df_add["masked_sentence"] = ["" for _ in range(len(df_add))]
     df_del["distractor_sentence"] = ["" for _ in range(len(df_del))]
     col_name_map = {
-        "m1_bfaddsentence_None_gen": "m1_bf_None_gen",
-        "m1_bfdelsentence_None_gen": "m1_bf_None_gen",
+        "m1_bfaddsentence_None_gen": "m1_bfsentence_None_gen",
+        "m1_bfdelsentence_None_gen": "m1_bfsentence_None_gen",
         "prepped_bfaddsentence_None": "prepped_bfsentence_None",
         "prepped_bfdelsentence_None": "prepped_bfsentence_None",
         "fc_bfdelsentence": "fc_bfsentence",
         "fc_bfaddsentence": "fc_bfsentence",
-        "m1_bfaddsentence_None_f1": "m1_bf_None_f1",
-        "m1_bfdelsentence_None_f1": "m1_bf_None_f1",
+        "m1_bfaddsentence_None_f1": "m1_bfsentence_None_f1",
+        "m1_bfdelsentence_None_f1": "m1_bfsentence_None_f1",
+        "m1_bfaddsentence_None_em": "m1_bfsentence_None_em",
+        "m1_bfdelsentence_None_em": "m1_bfsentence_None_em",
     }
-    # Remove the residual columns used to create distractor added examples
-    # or else you end up with duplicate column names
-    df_add = df_add.drop(
-        [
-            "prepped_bfdelsentence_None",
-            "m1_bfdelsentence_None_gen",
-            "fc_bfdelsentence",
-            "m1_bfdelsentence_None_f1",
-        ],
-        axis=1,
-    )
 
     df_del = df_del.rename(columns=col_name_map)
     df_add = df_add.rename(columns=col_name_map)

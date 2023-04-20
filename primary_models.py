@@ -1,5 +1,7 @@
 # A wrapper class for primary models
 # Define custom primary models here
+# Currently only t5 models are supported.
+# Bigbird needs to be updated following code changes elsewhere.
 
 from utils import *
 from bb_model import BigBirdForNaturalQuestions
@@ -212,7 +214,24 @@ class T5_PM(Primary_Model):
         )
         return prepped_val_dataset
 
-    def evaluate(self, masking_scheme, ds, a2_col):
+    def evaluate(
+        self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None
+    ):
+        """
+        Args:
+            masking_scheme (str): The masking scheme to use. Usually "bfsentence"
+            ds (Dataset): The dataset to evaluate on. Must have a column named "prepped_{masking_scheme}_{str(a2_col)}"
+            a2_col (str): The name of the column containing the answer to the question. If None, then no answer is given.
+            max_adversarial_examples (int): The maximum number of adversarial examples to evaluate. If None, then as many as possible will be evaluated.
+        """
+        assert (max_adversarial_examples and threshold) or (
+            not max_adversarial_examples and not threshold
+        ), "Must specify both max_adversarial_examples and threshold (adversarial mode) or neither (normal mode)"
+        adversarial_mode = max_adversarial_examples is not None
+        # adversarial_mode = False
+        # If in adversarial mode, shuffle the dataset to remove biases
+        if adversarial_mode:
+            ds = ds.shuffle()
         masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
         # ds = self.prepare_data(masking_scheme, ds, a2_col)
         ds = self.prepare_data(masking_scheme, ds, a2_col)
@@ -228,12 +247,13 @@ class T5_PM(Primary_Model):
             # Data recorded into the dataset under ['m1_{masking_scheme}_gen', 'm1_{masking_scheme}_f1']
             gen_strs = []  # generated strings
             f1s = []  # f1 scores
-            ems = [] # eexact match (binary)
+            ems = []  # eexact match (binary)
 
             num_batches = len(ds) // self.batch_size
             if len(ds) % self.batch_size != 0:
                 num_batches += 1
 
+            num_adversarial_examples = 0
             for batch_idx in tqdm(range(num_batches)):
                 start_idx = batch_idx * self.batch_size
                 end_idx = min(start_idx + self.batch_size, len(ds))
@@ -262,41 +282,49 @@ class T5_PM(Primary_Model):
                 gen_strs.extend(str_preds_batch)
                 f1s.extend(batch_metrics["f1"])
                 ems.extend(batch_metrics["em"])
-            # for i, x in enumerate(tqdm(ds)):
-            #     input_tokens = self.tk(ds[i][masking_str])["input_ids"]
-            #     generation = self.forward(input_ids=input_tokens)
-            #     str_preds.append(
-            #         self.tk.batch_decode(generation, skip_special_tokens=True)[0]
-            #     )
-            #     generation_str = str_preds[-1]
-            #     str_gts.append(x["a1"])
-            #     cls_preds.append(None)
-            #     cls_gts.append(None)
-            #     input_idss.append(input_tokens)
-            #     single_metrics = get_metrics(
-            #         str_preds[-1:],
-            #         str_gts[-1:],
-            #         cls_preds[-1:],
-            #         cls_gts[-1:],
-            #         input_idss[-1:],
-            #         self.tk,
-            #         None,
-            #     )
-            #     gen_strs.append(generation_str)
-            #     f1s.append(single_metrics["f1"])
+
+                # Break the loop if we are in adversarial generation mode
+                # and have generated enough adversarial examples.
+                if adversarial_mode:
+                    original_f1s = batch[f"m1_supporting_{str(a2_col)}_f1"]
+                    adversarial_f1s = batch_metrics["f1"]
+                    was_damaged_batch = [
+                        x - y < threshold for x, y in zip(original_f1s, adversarial_f1s)
+                    ]
+                    num_new_adversarial_examples = sum(was_damaged_batch)
+                    if num_new_adversarial_examples >= max_adversarial_examples:
+                        # If we end early, truncate the dataset to only the data that actually got processed
+                        ds = ds.select(range(len(gen_strs)))
+                        break
+
+            # If in adversarial mode, only keep the first max_adversarial_examples examples where
 
             ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_gen", gen_strs)
             ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_f1", f1s)
             ds = ds.add_column(f"m1_{masking_scheme}_{str(a2_col)}_em", ems)
 
+            # Reduce to only the first max_adversarial_examples examples where the model was damaged
+            if adversarial_mode:
+                ds = ds.filter(
+                    lambda x: x[f"m1_supporting_{str(a2_col)}_f1"]
+                    - x[f"m1_{masking_scheme}_{str(a2_col)}_f1"]
+                    > threshold,
+                    num_proc=1,
+                ).shuffle()
+                ds = ds.select(range(min(max_adversarial_examples, len(ds))))
             # Get aggregate metrics
-            agg_f1 = np.mean(f1s)
-            agg_em = np.mean(ems)
+            # Note that aggregate metrics are not very meaningful if in adversarial mode
+            # Since the dataset is filtered to only include examples where the model was damaged
+            agg_f1 = np.mean(ds[f"m1_{masking_scheme}_{str(a2_col)}_f1"])
+            agg_em = np.mean(ds[f"m1_{masking_scheme}_{str(a2_col)}_em"])
 
             metrics = {
                 "f1": agg_f1,
                 "em": agg_em,
             }
+            # assert (not max_adversarial_examples) or (
+            #     len(ds) <= max_adversarial_examples
+            # )
         return ds, metrics
 
 
