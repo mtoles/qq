@@ -4,6 +4,7 @@
 #  pt: primary task
 
 import click
+import torch
 from datasets import load_from_disk, Dataset
 from oracles import T5_Bool_Oracle
 from primary_models import get_m1
@@ -25,6 +26,10 @@ import pandas as pd
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
 @click.option("--m2_arch", help="secondary model architecture")
+@click.option(
+    "--template_id",
+    help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
+)
 @click.option("--oracle_arch", help="oracle architecture")
 @click.option("--pm_eval_batch_size", help="batch size for eval", type=int)
 @click.option("--oracle_eval_batch_size", help="batch size for eval", type=int)
@@ -71,6 +76,7 @@ def main(
     m1_path,
     m1_arch,
     m2_arch,
+    template_id,
     oracle_arch,
     pm_eval_batch_size,
     oracle_eval_batch_size,
@@ -166,7 +172,7 @@ def main(
         if m2_arch == "repeater":
             m2 = Repeater_Secondary_Model()
         elif m2_arch == "openai":
-            m2 = OpenAI_Secondary_Model(oai_cache_path)
+            m2 = OpenAI_Secondary_Model(oai_cache_path, template_id)
         elif m2_arch == "gt":
             m2 = Gt_Secondary_Model()
         else:
@@ -187,7 +193,10 @@ def main(
         # Answer questions with the oracle
         print("oracle...")
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
-        oracle.model.cpu()
+        del oracle
+        torch.cuda.empty_cache()  # free up memory
+
+        # oracle.model.cpu()
         m1.model.cuda()
         print("m1 second pass...")
         ds, metrics["answered"] = m1.evaluate(

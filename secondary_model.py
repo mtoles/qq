@@ -13,12 +13,76 @@ config = configparser.ConfigParser()
 config.read("config.ini")
 openai.api_key = config.get("API_KEYS", "openai_api_key")
 
+in_context_examples = """Context:
+House of Anubis: House of Anubis is a mystery television series developed for Nickelodeon based on the Dutch-Belgian television series "Het Huis Anubis".
+Question 1:
+The Dutch-Belgian television series that "House of Anubis" was based on first aired in what year?
+Question 2:
+In what year did "Het Huis Anubis" air?
+
+Context:
+Oberoi family: The Oberoi family is an Indian family that is famous for its involvement in hotels, namely through The Oberoi Group.'
+Question 1:
+The Oberoi family is part of a hotel company that has a head office in what city?
+Question 2:
+What city holds the head office of The Oberoi Group?
+
+Context:
+Zilpo Road: The nine mile byway starts south of Morehead, Kentucky and can be accessed by U.S. Highway 60. Arkansas Highway 113: The route runs 29.48 mi from Arkansas Highway 10 to Morrilton.
+Question 1:
+What U.S Highway gives access to Zilpo Road, and is also known as Midland Trail?
+Question 2:
+what U.S. Highway is also known as Midland Trail?
+
+Context:
+My Finale: "My Finale" is the hour-long season finale for season eight of the American sitcom "Scrubs". Human Error (House): "Human Error" is the twenty-fourth episode and season finale of the third season of "House" and the seventieth episode overall.
+Question 1:
+Human Error" is the season finale of the third season of a tv show that aired on what network?
+Question 2:
+What network aired the season finale of the third season of "House"?
+
+Context:
+Annette Bening: Annette Carol Bening (born May 29, 1958) is an American actress. She is a four-time Academy Award nominee; for "The Grifters" (1990), "American Beauty" (1999), "Being Julia" (2004) and "The Kids Are All Right" (2010). In 2006, she received a star on the Hollywood Walk of Fame. The Great Outdoors (film): The Great Outdoors is a 1988 American comedy film directed by Howard Deutch, and written and produced by John Hughes. John Lithgow: John Arthur Lithgow ( ; born October 19 , 1945) is an American actor, musician, singer, comedian, voice actor, and author.
+Question 1:
+The 1988 American comedy film, The Great Outdoors, starred a four-time Academy Award nominee, who received a star on the Hollywood Walk of Fame in what year?
+Question 2:
+Who starred in the 1988 American comedy film, The Great Outdoors?"""
+
 # Abstract class for secondary models
 class Secondary_Model:
     def __init__(
         self,
+        prompt_id,
     ):
         self.model_name = "dummy"
+        self.prompt_id = "p1"  # the id of the prompt to use for this model
+        self.prompt_dict = {
+            "p1": "Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}",
+            "p2": "Some information is missing from this context. Ask a simpler question that would help you answer it.\n\nContext:\n\n{context}\n\nMain Question:\n\n{q1}\n\nSimpler question:",
+            "p3": "What question can you ask to help you answer the final question?\n\n{context}\n\n{q1}\n\nYou can ask:",
+            "p4": "".join(
+                [
+                    "Ask another question that would help you answer the previous question:\n\n",
+                    in_context_examples,
+                    "\n\nContext:\n{context}\nQuestion 1:\n{q1}\nQuestion 2:\n",
+                ]
+            ),
+            "p5": "".join(
+                [
+                    "Some information is missing from each context. Ask a simpler question that would help you answer it.\n\n",
+                    in_context_examples,
+                    "\n\nContext:\n{context}\nQuestion 1:\n{q1}\nQuestion 2:\n",
+                ]
+            ),
+            "p6": "".join(
+                [
+                    "What question can you ask to help you answer the final question?\n\n",
+                    in_context_examples,
+                    "\n\nContext:\n{context}\nQuestion 1:\n{q1}\nQuestion 2:\n",
+                ]
+            ),
+        }
+        self.template = self.prompt_dict[self.prompt_id]
 
     def prepare_data(self, masking_scheme):
         pass
@@ -55,20 +119,24 @@ class Repeater_Secondary_Model(Secondary_Model):
 
 
 class OpenAI_Secondary_Model(Secondary_Model):
-    def __init__(self, cache_path):
+    def __init__(self, cache_path, prompt_id):
+        # call the parent constructor
+        super().__init__(prompt_id)
         self.model_name = "chatGPT"
         self.model = "gpt-3.5-turbo"
         self.cache_path = cache_path
         self.oai_model_id = (
             None  # the current openai model id. set on the first api call
         )
-
-        if not os.path.exists(self.cache_path):
+        if self.cache_path is None:
             self.cache_df = pd.DataFrame(columns=["response"])
-            self.cache_df.to_csv(self.cache_path)
-            # Create the cache file
         else:
-            self.cache_df = pd.read_csv(self.cache_path, index_col=0)
+            if not os.path.exists(self.cache_path):
+                self.cache_df = pd.DataFrame(columns=["response"])
+                self.cache_df.to_csv(self.cache_path)
+                # Create the cache file
+            else:
+                self.cache_df = pd.read_csv(self.cache_path, index_col=0)
 
     def prepare_data(self, masking_scheme):
         pass
@@ -113,7 +181,8 @@ class OpenAI_Secondary_Model(Secondary_Model):
         # If we don't yet know the current OpenAi model id, get it
         q1 = example[question_col]
         context = example[context_col]
-        prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
+        # prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
+        prompt = self.template.format(context=context, q1=q1)
         if self.oai_model_id is not None:
             idx = f"{self.oai_model_id} {prompt}"
         else:
