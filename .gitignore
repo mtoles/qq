@@ -1,0 +1,15 @@
+evaluating_big_bird_on_triviaqa.py
+.vscode/launch.json
+.cache/
+.vscode/
+.model_cache/
+bigbird_hotpot_complete_tuning/
+main/
+data/
+data2/
+tb_logs/
+models/
+inf_logs/
+command_palette.md
+tmp.txt
+__pycache__/
