@@ -224,19 +224,19 @@ class T5_PM(Primary_Model):
             a2_col (str): The name of the column containing the answer to the question. If None, then no answer is given.
             max_adversarial_examples (int): The maximum number of adversarial examples to evaluate. If None, then as many as possible will be evaluated.
         """
-        assert (max_adversarial_examples and threshold) or (
-            not max_adversarial_examples and not threshold
-        ), "Must specify both max_adversarial_examples and threshold (adversarial mode) or neither (normal mode)"
-        adversarial_mode = max_adversarial_examples is not None
-        # adversarial_mode = False
-        # If in adversarial mode, shuffle the dataset to remove biases
-        if adversarial_mode:
-            ds = ds.shuffle()
-        masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
-        # ds = self.prepare_data(masking_scheme, ds, a2_col)
-        ds = self.prepare_data(masking_scheme, ds, a2_col)
-
         with torch.no_grad():
+            assert (max_adversarial_examples and threshold) or (
+                not max_adversarial_examples and not threshold
+            ), "Must specify both max_adversarial_examples and threshold (adversarial mode) or neither (normal mode)"
+            adversarial_mode = max_adversarial_examples is not None
+            # adversarial_mode = False
+            # If in adversarial mode, shuffle the dataset to remove biases
+            if adversarial_mode:
+                ds = ds.shuffle()
+            masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
+            # ds = self.prepare_data(masking_scheme, ds, a2_col)
+            ds = self.prepare_data(masking_scheme, ds, a2_col)
+
             # Data used for computing aggregate metrics
             str_preds = []
             str_gts = []
