@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader
 
 import torch
 import numpy as np
+from datasets.utils.logging import disable_progress_bar, enable_progress_bar
 
 
 class Primary_Model:
@@ -215,7 +216,7 @@ class T5_PM(Primary_Model):
         return prepped_val_dataset
 
     def evaluate(
-        self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None
+        self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None, display=True
     ):
         """
         Args:
@@ -235,6 +236,7 @@ class T5_PM(Primary_Model):
                 ds = ds.shuffle()
             masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
             # ds = self.prepare_data(masking_scheme, ds, a2_col)
+            disable_progress_bar()
             ds = self.prepare_data(masking_scheme, ds, a2_col)
 
             # Data used for computing aggregate metrics
@@ -254,7 +256,8 @@ class T5_PM(Primary_Model):
                 num_batches += 1
 
             num_adversarial_examples = 0
-            for batch_idx in tqdm(range(num_batches)):
+            batch_ids = tqdm(range(num_batches)) if display else range(num_batches)
+            for batch_idx in batch_ids:
                 start_idx = batch_idx * self.batch_size
                 end_idx = min(start_idx + self.batch_size, len(ds))
                 batch = ds.select(range(start_idx, end_idx))
@@ -325,6 +328,7 @@ class T5_PM(Primary_Model):
             # assert (not max_adversarial_examples) or (
             #     len(ds) <= max_adversarial_examples
             # )
+        enable_progress_bar()
         return ds, metrics
 
 

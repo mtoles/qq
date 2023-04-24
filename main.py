@@ -12,6 +12,8 @@ from secondary_model import (
     Repeater_Secondary_Model,
     OpenAI_Secondary_Model,
     Gt_Secondary_Model,
+    Flan_Secondary_Model,
+    Alpaca_Secondary_Model
 )
 from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
@@ -19,6 +21,7 @@ from datetime import datetime
 # from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 from masking import adversarial_dataset
 import pandas as pd
+import os
 
 
 @click.command()
@@ -108,8 +111,7 @@ def main(
         results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
 
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
-
-        assert m2_arch in ["repeater", "openai", "gt"]
+        assert m2_arch in ["repeater", "openai", "gt", "alpaca"] or m2_arch.startswith("flan")
         assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
         masking_str = f"fc_{masking_scheme}"
@@ -175,6 +177,10 @@ def main(
             m2 = OpenAI_Secondary_Model(oai_cache_path, template_id)
         elif m2_arch == "gt":
             m2 = Gt_Secondary_Model()
+        elif m2_arch.startswith("flan"):
+            m2 = Flan_Secondary_Model(model_name=m2_arch)
+        elif m2_arch == "alpaca":
+            m2 = Alpaca_Secondary_Model()
         else:
             raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
         # Apply the secondary model
@@ -206,10 +212,16 @@ def main(
         # Analysis
         df = pd.DataFrame(ds)
         print(f"runtime: {datetime.now()-start}")
+        output_dir = "outputs"
+        save_path = os.path.join(output_dir,
+                                 f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}.hd5")
+
         df.to_hdf(
-            f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}.hd5",
+            save_path,
             "ds",
         )
+
+        print(f"save to {save_path}")
         # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
         # # print(metrics)
         # drop_cols = [

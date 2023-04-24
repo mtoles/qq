@@ -1,3 +1,4 @@
+import torch
 from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model
 import pandas as pd
 import numpy as np
@@ -5,7 +6,6 @@ import openai
 import configparser
 import os
 import h5py
-
 from tqdm import tqdm
 
 # Set up the API once for all models
@@ -48,14 +48,23 @@ The 1988 American comedy film, The Great Outdoors, starred a four-time Academy A
 Question 2:
 Who starred in the 1988 American comedy film, The Great Outdoors?"""
 
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+
+
+# Set up the API once for all models
+config = configparser.ConfigParser()
+config.read("config.ini")
+openai.api_key = config.get("API_KEYS", "openai_api_key")
+
 # Abstract class for secondary models
 class Secondary_Model:
     def __init__(
         self,
-        prompt_id,
+        prompt_id = "p1",
     ):
         self.model_name = "dummy"
-        self.prompt_id = "p1"  # the id of the prompt to use for this model
+        self.prompt_id = prompt_id  # the id of the prompt to use for this model
         self.prompt_dict = {
             "p1": "Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}",
             "p2": "Some information is missing from this context. Ask a simpler question that would help you answer it.\n\nContext:\n\n{context}\n\nMain Question:\n\n{q1}\n\nSimpler question:",
@@ -118,10 +127,46 @@ class Repeater_Secondary_Model(Secondary_Model):
         return example[question_col]
 
 
+class Alpaca_Secondary_Model(Secondary_Model):
+    def __init__(self):
+        super(Alpaca_Secondary_Model, self).__init__()
+
+
+class Flan_Secondary_Model(Secondary_Model):
+    def __init__(self, model_name="flan-t5-small", max_length=2048, device="cuda", precision="bf16"):
+        super(Flan_Secondary_Model, self).__init__()
+        self.model_name = model_name
+        self.device = device
+        if precision == "int8":
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(f"google/{model_name}",
+                                                               device_map="auto", load_in_8bit=True)
+        elif precision == "bf16":
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(f"google/{model_name}", torch_dtype=torch.bfloat16)
+        else:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(f"google/{model_name}")
+        self.model.to(self.device)
+
+
+        self.tokenizer = AutoTokenizer.from_pretrained(f"google/{model_name}")
+        self.max_length = max_length
+
+    def forward(self, example, question_col, context_col):
+        q1 = example[question_col]
+        context = example[context_col]
+        prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
+        # prompt = f"Ask another question about the context to help you answer the following question. Context: {context}. Question: {q1}"
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        outputs = self.model.generate(**inputs)
+        q2 = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
+        print(q2)
+        return q2
+
+
+
 class OpenAI_Secondary_Model(Secondary_Model):
-    def __init__(self, cache_path, prompt_id):
-        # call the parent constructor
-        super().__init__(prompt_id)
+    def __init__(self, cache_path, prompt_id="p1"):
+        super(OpenAI_Secondary_Model, self).__init__(prompt_id)
         self.model_name = "chatGPT"
         self.model = "gpt-3.5-turbo"
         self.cache_path = cache_path
@@ -183,6 +228,7 @@ class OpenAI_Secondary_Model(Secondary_Model):
         context = example[context_col]
         # prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
         prompt = self.template.format(context=context, q1=q1)
+
         if self.oai_model_id is not None:
             idx = f"{self.oai_model_id} {prompt}"
         else:

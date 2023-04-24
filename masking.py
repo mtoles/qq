@@ -7,6 +7,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from dataset_utils import combine_adversarial_ds
+from datasets.utils.logging import disable_progress_bar, enable_progress_bar
 
 # Maximum number of adversarial examples given each unique example id.
 # Masked examples and distracted examples are counted separately.
@@ -123,6 +124,7 @@ def adversarial_dataset(
         masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
     )
 
+    disable_progress_bar()
     ds_got_worse_with_bfdelsentence = ds_bfdelsentence.filter(
         lambda x: x["m1_supporting_None_f1"] - x["m1_bfdelsentence_None_f1"]
         > adversarial_drop_thresh
@@ -136,6 +138,7 @@ def adversarial_dataset(
     )  # filtering not technically necessary but speeds things up
     mini_dss_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
     mini_dss = []
+
     print("m1 distracting...")
     for mini_ds in tqdm(mini_dss_bfaddsentence):
         # ds_got_worse_with_bf_add_sentence, metrics["bfaddsentence"] = m1.evaluate(
@@ -145,6 +148,7 @@ def adversarial_dataset(
             a2_col=None,
             max_adversarial_examples=max_adversarial_examples,
             threshold=adversarial_drop_thresh,
+            display=False
         )
         mini_dss.append(mini_ds_bf_add_sentence)
     ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss)
@@ -282,7 +286,7 @@ def distract_bf_sentence(example):
 def bf_add_sentences(ds):
     """Return a list of datasets where examples in each dataset have a different sentence masked.
     Every example in each dataset will have a different distractor sentence added"""
-    bf_mini_datasets = [distract_bf_sentence(example) for example in tqdm(ds)]
+    bf_mini_datasets = [distract_bf_sentence(example) for example in ds]
     # concatenate and merge dataset who share an id
     tmp_ds = concatenate_datasets(bf_mini_datasets)
     id_dict = dict()
