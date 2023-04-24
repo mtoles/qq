@@ -11,7 +11,8 @@ from tqdm import tqdm
 # Set up the API once for all models
 config = configparser.ConfigParser()
 config.read("config.ini")
-openai.api_key = config.get("API_KEYS", "openai_api_key")
+# openai.api_key = config.get("API_KEYS", "openai_api_key")
+openai.api_key = "123"
 
 in_context_examples = """Context:
 House of Anubis: House of Anubis is a mystery television series developed for Nickelodeon based on the Dutch-Belgian television series "Het Huis Anubis".
@@ -55,13 +56,14 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 # Set up the API once for all models
 config = configparser.ConfigParser()
 config.read("config.ini")
-openai.api_key = config.get("API_KEYS", "openai_api_key")
+# openai.api_key = config.get("API_KEYS", "openai_api_key")
+openai.api_key = "123"
 
 # Abstract class for secondary models
 class Secondary_Model:
     def __init__(
         self,
-        prompt_id = "p1",
+        prompt_id="p1",
     ):
         self.model_name = "dummy"
         self.prompt_id = prompt_id  # the id of the prompt to use for this model
@@ -133,8 +135,12 @@ class Alpaca_Secondary_Model(Secondary_Model):
 
 
 class Flan_Secondary_Model(Secondary_Model):
-    def __init__(self, model_name="flan-t5-small", max_length=2048, device="cuda", precision="bf16"):
-        super(Flan_Secondary_Model, self).__init__()
+    def __init__(self, model_name="flan-t5-small",
+                 prompt_id="p4",
+                 max_length=2048,
+                 device="cuda",
+                 precision="bf16"):
+        super(Flan_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
         self.device = device
         if precision == "int8":
@@ -153,13 +159,11 @@ class Flan_Secondary_Model(Secondary_Model):
     def forward(self, example, question_col, context_col):
         q1 = example[question_col]
         context = example[context_col]
-        prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
-        # prompt = f"Ask another question about the context to help you answer the following question. Context: {context}. Question: {q1}"
+        prompt = self.template.format(context=context, q1=q1)
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         outputs = self.model.generate(**inputs)
         q2 = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
-        print(q2)
         return q2
 
 
