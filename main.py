@@ -15,6 +15,7 @@ from secondary_model import (
     Flan_Secondary_Model,
     Alpaca_Secondary_Model
 )
+from utils import set_random_seed
 from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
 
@@ -74,6 +75,11 @@ import os
     default=False,
     help="only profile the primary model on dataset, then exit",
 )
+@click.option(
+    "--alpaca_model_path",
+    default=None,
+    help="Path to save/load cached alpaca model.",
+)
 def main(
     pt_dataset_path,
     m1_path,
@@ -92,7 +98,9 @@ def main(
     oai_cache_path,
     results_filename,
     profile_only,
+    alpaca_model_path,
 ):
+    set_random_seed(0)
     if max_adversarial_examples is None:
         max_adversarial_examples = float("inf")
         print(
@@ -170,6 +178,10 @@ def main(
             df = pd.DataFrame(ds)
             df.to_csv(f"{downsample_pt_size}_profile.csv")
             quit()
+
+        # Save memory by moving m1 to CPU
+        m1.model.cpu()
+
         # Create the secondary model
         if m2_arch == "repeater":
             m2 = Repeater_Secondary_Model()
@@ -180,9 +192,10 @@ def main(
         elif m2_arch.startswith("flan"):
             m2 = Flan_Secondary_Model(model_name=m2_arch)
         elif m2_arch == "alpaca":
-            m2 = Alpaca_Secondary_Model()
+            m2 = Alpaca_Secondary_Model(model_name=m2_arch)
         else:
             raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
+
         # Apply the secondary model
         print("m2...")
         ds = m2.process(
@@ -190,8 +203,12 @@ def main(
             q1_col="q1",
             masking_scheme=masking_scheme,
         )
-        # Save memory by moving m1 to CPU
-        m1.model.cpu()
+
+        # Delete m2
+        m2.model.cpu()
+        del m2
+        torch.cuda.empty_cache()
+
         # Create the oracle
         oracle = T5_Bool_Oracle(
             model_name=oracle_arch, batch_size=oracle_eval_batch_size
