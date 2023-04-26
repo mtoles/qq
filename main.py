@@ -15,6 +15,7 @@ from secondary_model import (
 )
 from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
+from time import sleep
 
 # from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 from masking import adversarial_dataset
@@ -185,7 +186,9 @@ def main(
             masking_scheme=masking_scheme,
         )
         # Save memory by moving m1 to CPU
-        m1.model.cpu()
+        # m1.model.cpu()
+        del m1
+        torch.cuda.empty_cache()  # free up memory
         # Create the oracle
         oracle = T5_Bool_Oracle(
             model_name=oracle_arch, batch_size=oracle_eval_batch_size
@@ -195,9 +198,11 @@ def main(
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         del oracle
         torch.cuda.empty_cache()  # free up memory
+        print("sleeping...")
+        sleep(30)  # wait for memory to be freed
 
-        # oracle.model.cpu()
-        m1.model.cuda()
+        # Bring back the primary model
+        m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
         print("m1 second pass...")
         ds, metrics["answered"] = m1.evaluate(
             masking_scheme=masking_scheme, ds=ds, a2_col="a2"
@@ -207,7 +212,7 @@ def main(
         df = pd.DataFrame(ds)
         print(f"runtime: {datetime.now()-start}")
         df.to_hdf(
-            f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}.hd5",
+            f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}_{template_id}.hd5",
             "ds",
         )
         # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
