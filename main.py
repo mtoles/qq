@@ -192,7 +192,8 @@ def main(
         elif m2_arch.startswith("flan"):
             m2 = Flan_Secondary_Model(model_name=m2_arch)
         elif m2_arch == "alpaca":
-            m2 = Alpaca_Secondary_Model(model_name=m2_arch)
+            m2 = Alpaca_Secondary_Model(model_name=m2_arch,
+                                        model_path=alpaca_model_path)
         else:
             raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
 

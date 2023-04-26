@@ -11,8 +11,7 @@ from tqdm import tqdm
 # Set up the API once for all models
 config = configparser.ConfigParser()
 config.read("config.ini")
-# openai.api_key = config.get("API_KEYS", "openai_api_key")
-openai.api_key = "123"
+openai.api_key = config.get("API_KEYS", "openai_api_key")
 
 in_context_examples = """Context:
 House of Anubis: House of Anubis is a mystery television series developed for Nickelodeon based on the Dutch-Belgian television series "Het Huis Anubis".
@@ -130,8 +129,8 @@ class Repeater_Secondary_Model(Secondary_Model):
 
 
 class Alpaca_Secondary_Model(Secondary_Model):
-    def __init__(self, model_name="",
-                 model_path="/local-scratch1/data/ykhuang/cache/transformers/alpaca/tuned",
+    def __init__(self, model_name,
+                 model_path,
                  max_length=4096,
                  prompt_id="p1",
                  device="cuda",
@@ -171,7 +170,8 @@ class Alpaca_Secondary_Model(Secondary_Model):
 
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
         inputs = {k: v.to(self.device) for k, v in inputs.items() if k != 'token_type_ids'}
-        outputs = self.model.generate(**inputs, max_length=self.max_length)
+        with torch.no_grad():
+            outputs = self.model.generate(**inputs, max_length=self.max_length)
         q2 = self.tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):], skip_special_tokens=True)
 
         return q2
@@ -179,7 +179,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
 
 class Flan_Secondary_Model(Secondary_Model):
     def __init__(self, model_name="flan-t5-small",
-                 prompt_id="p4",
+                 prompt_id="p1",
                  max_length=4096,
                  device="cuda",
                  precision="bf16"):
@@ -206,7 +206,8 @@ class Flan_Secondary_Model(Secondary_Model):
         prompt = self.template.format(context=context, q1=q1)
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        outputs = self.model.generate(**inputs)
+        with torch.no_grad():
+            outputs = self.model.generate(**inputs)
         q2 = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
         return q2
 
