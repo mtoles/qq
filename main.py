@@ -212,7 +212,7 @@ def main(
         df = pd.DataFrame(ds)
         print(f"runtime: {datetime.now()-start}")
         df.to_hdf(
-            f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}.hd5",
+            f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}_{template_id}.hd5",
             "ds",
         )
         # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
