@@ -289,7 +289,7 @@ class T5_PM(Primary_Model):
                     original_f1s = batch[f"m1_supporting_{str(a2_col)}_f1"]
                     adversarial_f1s = batch_metrics["f1"]
                     was_damaged_batch = [
-                        x - y < threshold for x, y in zip(original_f1s, adversarial_f1s)
+                        x - y > threshold for x, y in zip(original_f1s, adversarial_f1s)
                     ]
                     num_new_adversarial_examples = sum(was_damaged_batch)
                     if num_new_adversarial_examples >= max_adversarial_examples:
