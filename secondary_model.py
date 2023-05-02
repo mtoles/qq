@@ -7,6 +7,8 @@ import configparser
 import os
 import h5py
 from tqdm import tqdm
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForCausalLM
+
 
 # Set up the API once for all models
 config = configparser.ConfigParser()
@@ -48,15 +50,6 @@ The 1988 American comedy film, The Great Outdoors, starred a four-time Academy A
 Question 2:
 Who starred in the 1988 American comedy film, The Great Outdoors?"""
 
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForCausalLM
-
-
-
-# Set up the API once for all models
-config = configparser.ConfigParser()
-config.read("config.ini")
-# openai.api_key = config.get("API_KEYS", "openai_api_key")
-openai.api_key = "123"
 
 # Abstract class for secondary models
 class Secondary_Model:
