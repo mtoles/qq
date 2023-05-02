@@ -20,8 +20,8 @@ dependencies:
   - urllib3
   - ujson
   # BigBird (vasudevgupta)
-  - jsonlines=3.1.0
-  - openssl=1.1.1
+  # - jsonlines=3.1.0
+  # - openssl=1.1.1
   # matt
   - ipykernel
   - black
@@ -31,6 +31,7 @@ dependencies:
   - openai
   - nltk
   - pytables=3.7.0 # df.to_hdf()
+  - fire
   # - h5py
   - pip:
     - transformers==4.21.3 # Later versions fail during distributed training
