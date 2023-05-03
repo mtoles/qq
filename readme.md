@@ -21,13 +21,13 @@ openai_api_key = YOUR_API_KEY
 ```
 ### Prepare Models
 To get the alpaca-7B model, 
-1. modify the path in [scripts/recover_alpaca.sh](scripts/recover_alpaca.sh)
+1. add config file to [configures/config.ini](), it should look like
 ```
-TRANSFORMERS_CACHE="<YOUR_TRANSFORMERS_CACHE_PATH>" 
-LLAMA_PATH_RAW="<YOUR_LLAMA_PATH>"
+LLAMA_PATH_RAW=<YOUR_PATH_TO_SAVE_LLAMA>
+TRANSFORMERS_CACHE=<YOUR_PATH_TO_SAVE_HUGGINGFACE_MODELS>
 ```
  
-2. then run the script with 
+2. then run the script [scripts/recover_alpaca.sh](scripts/recover_alpaca.sh) with 
 ```
 bash scripts/recover_alpaca.sh
 ```

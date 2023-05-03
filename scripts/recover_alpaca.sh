@@ -1,8 +1,5 @@
-#CONFIG_PATH="configures/config.ini"
-#source "$CONFIG_PATH"
-TRANSFORMERS_CACHE="<YOUR_TRANSFORMERS_CACHE_PATH>"
-LLAMA_PATH_RAW="<YOUR_LLAMA_PATH>"
-export TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE"
+CONFIG_PATH="configures/config.ini"
+source "$CONFIG_PATH"
 
 # https://github.com/tatsu-lab/stanford_alpaca
 LLAMA_PATH_RAW=$LLAMA_PATH_RAW
