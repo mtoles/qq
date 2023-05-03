@@ -21,7 +21,7 @@ openai_api_key = YOUR_API_KEY
 ```
 ### Prepare Models
 To get the alpaca-7B model, 
-1. add config file to [configures/config.ini](), it should look like
+1. create config file [configures/config.ini](), it should look like
 ```
 LLAMA_PATH_RAW=<YOUR_PATH_TO_SAVE_LLAMA>
 TRANSFORMERS_CACHE=<YOUR_PATH_TO_SAVE_HUGGINGFACE_MODELS>
