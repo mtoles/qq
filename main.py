@@ -16,10 +16,14 @@ from secondary_model import (
 from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
 from time import sleep
+import time
+import threading
+from datasets import concatenate_datasets
 
 # from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 from masking import adversarial_dataset
 import pandas as pd
+import re
 
 
 @click.command()
@@ -72,6 +76,7 @@ import pandas as pd
     default=False,
     help="only profile the primary model on dataset, then exit",
 )
+@click.option("--gpus", help="GPUs to use for M1")
 def main(
     pt_dataset_path,
     m1_path,
@@ -90,6 +95,7 @@ def main(
     oai_cache_path,
     results_filename,
     profile_only,
+    gpus,
 ):
     if max_adversarial_examples is None:
         max_adversarial_examples = float("inf")
@@ -112,9 +118,24 @@ def main(
 
         assert m2_arch in ["repeater", "openai", "gt"]
         assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
+        
+        # Get GPU info
+        gpu_list = get_gpus_param(gpus)
+        if gpu_list == None:
+            gpu_list = [0]
+        
+        gpu_ids = []
+        for gpu in gpu_list:
+            if check_cuda_device(gpu):
+                gpu_ids.append(gpu)
+        print(f"Valid gpu ids: {gpu_ids}")
 
         masking_str = f"fc_{masking_scheme}"
-        m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
+        
+        m1_list = []
+        for id in gpu_ids:
+            m1_list.append(get_m1(m1_path, m1_arch, pm_eval_batch_size, f"cuda:{id}"))
+        
         # Receive and prepare the primary task
         metrics = {}
 
@@ -127,12 +148,20 @@ def main(
             original_raw_dataset_len = len(raw_dataset)
             ds = raw_dataset
             # Evaluate the primary model
-
             # first pass
             print("m1 first pass...")
-            ds, metrics["supporting"] = m1.evaluate(
-                masking_scheme="supporting", ds=ds, a2_col=None
-            )
+            m1_1_start = time.perf_counter()
+            
+            if len(m1_list) == 1:
+                ds, metrics["supporting"] = m1_list[0].evaluate(
+                    masking_scheme="supporting", ds=ds, a2_col=None
+                )
+            else:
+                ds, metrics["supporting"] = run_m1_multi_gpus(ds, m1_list, "supporting", None)
+            
+            m1_1_end = time.perf_counter()
+            print("m1 first pass time: ", m1_1_end-m1_1_start)
+            
             print("generating adversarial data...")
             # select and mask examples where the primary
             if masking_scheme == "bfsentence":
@@ -187,7 +216,7 @@ def main(
         )
         # Save memory by moving m1 to CPU
         # m1.model.cpu()
-        del m1
+        cleanup_m1(m1_list)
         torch.cuda.empty_cache()  # free up memory
         # Create the oracle
         oracle = T5_Bool_Oracle(
@@ -202,11 +231,20 @@ def main(
         sleep(30)  # wait for memory to be freed
 
         # Bring back the primary model
-        m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
+        m1_list = []
+        for id in gpu_ids:
+            m1_list.append(get_m1(m1_path, m1_arch, pm_eval_batch_size, f"cuda:{id}"))
         print("m1 second pass...")
-        ds, metrics["answered"] = m1.evaluate(
-            masking_scheme=masking_scheme, ds=ds, a2_col="a2"
-        )
+        m1_2_start = time.perf_counter()
+        if len(m1_list) == 1:
+            ds, metrics["answered"] = m1_list[0].evaluate(
+                masking_scheme=masking_scheme, ds=ds, a2_col=None
+            )
+        else:
+            ds, metrics["answered"] = run_m1_multi_gpus(ds, m1_list, masking_scheme,"a2")
+
+        m1_2_end = time.perf_counter()
+        print("m1 second pass time: ", m1_2_end-m1_2_start)
 
         # Analysis
         df = pd.DataFrame(ds)
@@ -239,6 +277,71 @@ def main(
 # """
 #         )
 
+def cleanup_m1(m1_list):
+    for m1 in m1_list:
+        del m1
+
+def check_cuda_device(device_idx):
+    """
+    Check if a specific CUDA device exists on the system.
+
+    Args:
+    - device_idx (int): The index of the device to check.
+
+    Returns:
+    - (bool): True if the device exists, False otherwise.
+    """
+    device_name = f"cuda:{device_idx}"
+
+    if not torch.cuda.is_available():
+        return False
+    num_devices = torch.cuda.device_count()
+    if int(device_idx) >= num_devices:
+        return False
+    if torch.cuda.get_device_name(device_name) != '':
+        return True
+    print(f"CUDA device {device_name} is invalid")
+    return False
+
+def get_gpus_param(gpus):
+    if re.match(r'(\d+)', gpus):
+        print("Only taking the first 2 GPUs ...")
+        gpu_list = re.findall(r'\d{1,2}', gpus)[:2]
+        return gpu_list
+    return None
+
+# Only support 2 for now, can be modified to support 2^n GPUs where n >= 0
+def run_m1_multi_gpus(ds, m1s, metric_key, a2_col):
+    # Split the dataset into 2 subsets
+    size0 = int(len(ds) * 0.5)
+    ds_t = ds.train_test_split(test_size=size0, shuffle=True, seed=42)
+
+    ds_map = {}
+    metrics_map = {}
+    ds_labels = ["train", "test"]
+    threads = []
+    
+    for idx, m1 in enumerate(m1s):
+        threads.append(threading.Thread(target=run_m1_help, args=(m1, ds_t[ds_labels[idx]], a2_col, metric_key, ds_map, metrics_map, idx)))
+
+    # Start both threads
+    for t in threads:
+        t.start()
+
+    # Wait for both threads to finish
+    for t in threads:
+        t.join()
+
+    ds = concatenate_datasets([ds_map[0], ds_map[1]])
+    metrics = {}
+    metrics[metric_key] = metrics_map[0]
+    metrics[metric_key].update(metrics_map[1])
+
+    return ds, metrics
+
+def run_m1_help(m1, ds, a2_col, masking_scheme, ds_map, metrics_map, idx):
+    ds_map[idx], metrics_map[idx] = m1.evaluate(masking_scheme=masking_scheme, ds=ds, a2_col=a2_col)
+#   print('GS type of metrics_map[idx] :', type(metrics_map[idx]))
 
 if __name__ == "__main__":
     main()

@@ -163,12 +163,15 @@ class T5_PM(Primary_Model):
         self,
         batch_size=2,
         model_name=None,
+        gpu="cuda",
     ):
         model_name = f"google/flan-{model_name}"
+        self.gpu=gpu
         self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
         self.model = T5ForConditionalGeneration.from_pretrained(
             model_name, cache_dir="./.model_cache"
-        ).cuda()
+        ).to(self.gpu)
+        print("CUDA VISIBLE devices count: ", torch.cuda.device_count())
         super(T5_PM, self).__init__(
             model_path=None,
             batch_size=batch_size,
@@ -215,7 +218,7 @@ class T5_PM(Primary_Model):
         return prepped_val_dataset
 
     def evaluate(
-        self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None
+            self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None
     ):
         """
         Args:
@@ -260,7 +263,7 @@ class T5_PM(Primary_Model):
                 batch = ds.select(range(start_idx, end_idx))
                 input_tokens = self.tk(
                     batch[masking_str], return_tensors="pt", padding=True
-                )["input_ids"].cuda()
+                )["input_ids"].to(self.gpu)
                 generation = self.forward(input_ids=input_tokens)
                 str_preds_batch = self.tk.batch_decode(
                     generation, skip_special_tokens=True
@@ -328,7 +331,7 @@ class T5_PM(Primary_Model):
         return ds, metrics
 
 
-def get_m1(m1_path, m1_arch, batch_size):
+def get_m1(m1_path, m1_arch, batch_size, gpu):
     # Unit Tests
     assert m1_arch in [
         "bigbird",
@@ -345,6 +348,7 @@ def get_m1(m1_path, m1_arch, batch_size):
         m1 = T5_PM(
             batch_size=batch_size,
             model_name=m1_arch,
+            gpu=gpu
         )
     else:
         raise NotImplementedError
