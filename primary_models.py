@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader
 
 import torch
 import numpy as np
+import time
 
 
 class Primary_Model:
@@ -167,15 +168,25 @@ class T5_PM(Primary_Model):
     ):
         model_name = f"google/flan-{model_name}"
         self.gpu=gpu
+        print(f"t5 init start... gpu: {gpu}")
+        t5_init_tk_start = time.perf_counter()
         self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
+        t5_init_tk_end = time.perf_counter()
+        print("t5_init_tk time: ", t5_init_tk_end-t5_init_tk_start)
         self.model = T5ForConditionalGeneration.from_pretrained(
             model_name, cache_dir="./.model_cache"
         ).to(self.gpu)
+        t5_init_model_end = time.perf_counter()
+        print("t5_init_model time: ", t5_init_model_end-t5_init_tk_end)
         print("CUDA VISIBLE devices count: ", torch.cuda.device_count())
         super(T5_PM, self).__init__(
             model_path=None,
             batch_size=batch_size,
         )
+
+#    def set_gpu(gpu):
+#        self.gpu = gpu
+#        self.model.to(self.gpu)
 
     def forward(self, **inputs):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""

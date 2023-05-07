@@ -24,6 +24,7 @@ from datasets import concatenate_datasets
 from masking import adversarial_dataset
 import pandas as pd
 import re
+import copy
 
 
 @click.command()
@@ -132,14 +133,21 @@ def main(
 
         masking_str = f"fc_{masking_scheme}"
         
+        print("start getting m1...")
+        m1_get_start = time.perf_counter()
+        
         m1_list = []
-        for id in gpu_ids:
-            m1_list.append(get_m1(m1_path, m1_arch, pm_eval_batch_size, f"cuda:{id}"))
+        
+        m1_list = fill_m1_list_parallel(m1_path, m1_arch, pm_eval_batch_size, gpu_ids)
+        
+        m1_get_end = time.perf_counter()
+        print("m1 get time: ", m1_get_end-m1_get_start)
         
         # Receive and prepare the primary task
         metrics = {}
 
         if cached_adversarial_dataset_path is None:
+            print("start loading dataset...")
             raw_dataset = load_from_disk(pt_dataset_path)
             if str(downsample_pt_size) != "None":
                 raw_dataset = raw_dataset.select(
@@ -231,9 +239,12 @@ def main(
         sleep(30)  # wait for memory to be freed
 
         # Bring back the primary model
+        m1_get_start = time.perf_counter()
         m1_list = []
-        for id in gpu_ids:
-            m1_list.append(get_m1(m1_path, m1_arch, pm_eval_batch_size, f"cuda:{id}"))
+        m1_list = fill_m1_list_parallel(m1_path, m1_arch, pm_eval_batch_size, gpu_ids)
+                
+        m1_get_end = time.perf_counter()
+        print("m1 get time2: ", m1_get_end-m1_get_start)
         print("m1 second pass...")
         m1_2_start = time.perf_counter()
         if len(m1_list) == 1:
@@ -245,6 +256,7 @@ def main(
 
         m1_2_end = time.perf_counter()
         print("m1 second pass time: ", m1_2_end-m1_2_start)
+        cleanup_m1(m1_list)
 
         # Analysis
         df = pd.DataFrame(ds)
@@ -310,6 +322,31 @@ def get_gpus_param(gpus):
         return gpu_list
     return None
 
+# Fill M1 list in parallel to save time
+def fill_m1_list_parallel(m1_path, m1_arch, pm_eval_batch_size, gpu_ids):
+    m1_dict = {}
+    m1_list = []
+    threads = []
+    
+    for idx, id in enumerate(gpu_ids):
+        threads.append(threading.Thread(target=get_m1_help, args=(m1_path, m1_arch, pm_eval_batch_size, f"cuda:{id}", m1_dict, idx)))
+
+    # Start both threads
+    for t in threads:
+        t.start()
+
+    # Wait for both threads to finish
+    for t in threads:
+        t.join()
+        
+    for m1 in m1_dict.values():
+        m1_list.append(m1)
+    
+    return m1_list
+
+def get_m1_help(m1_path, m1_arch, pm_eval_batch_size, gpu_id, m1_dict, idx):
+    m1_dict[idx] = get_m1(m1_path, m1_arch, pm_eval_batch_size, gpu_id)
+
 # Only support 2 for now, can be modified to support 2^n GPUs where n >= 0
 def run_m1_multi_gpus(ds, m1s, metric_key, a2_col):
     # Split the dataset into 2 subsets
@@ -341,7 +378,6 @@ def run_m1_multi_gpus(ds, m1s, metric_key, a2_col):
 
 def run_m1_help(m1, ds, a2_col, masking_scheme, ds_map, metrics_map, idx):
     ds_map[idx], metrics_map[idx] = m1.evaluate(masking_scheme=masking_scheme, ds=ds, a2_col=a2_col)
-#   print('GS type of metrics_map[idx] :', type(metrics_map[idx]))
 
 if __name__ == "__main__":
     main()
