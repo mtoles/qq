@@ -216,16 +216,25 @@ def main(
         )
         # Save memory by moving m1 to CPU
         # m1.model.cpu()
-        cleanup_m1(m1_list)
+        cleanup_model(m1_list)
         torch.cuda.empty_cache()  # free up memory
         # Create the oracle
-        oracle = T5_Bool_Oracle(
-            model_name=oracle_arch, batch_size=oracle_eval_batch_size
-        )
+        oracle_list = []
+        for id in gpu_ids:
+            oracle_list.append(T5_Bool_Oracle(model_name=oracle_arch, batch_size=oracle_eval_batch_size, gpu=f"cuda:{id}"))
+
         # Answer questions with the oracle
         print("oracle...")
-        ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
-        del oracle
+        oracle_start = time.perf_counter()
+        if len(oracle_list) == 1:
+            ds = oracle_list[0].process(ds, q2_masking_scheme=masking_scheme)
+        else:
+            ds = run_oracle_multi_gpus(ds, oracle_list, masking_scheme)
+            
+        oracle_end = time.perf_counter()
+        print("oracle time: ", oracle_end-oracle_start)
+        
+        cleanup_model(oracle_list)
         torch.cuda.empty_cache()  # free up memory
         print("sleeping...")
         sleep(30)  # wait for memory to be freed
@@ -277,9 +286,9 @@ def main(
 # """
 #         )
 
-def cleanup_m1(m1_list):
-    for m1 in m1_list:
-        del m1
+def cleanup_model(model_list):
+    for m in model_list:
+        del m
 
 def check_cuda_device(device_idx):
     """
@@ -309,6 +318,33 @@ def get_gpus_param(gpus):
         gpu_list = re.findall(r'\d{1,2}', gpus)[:2]
         return gpu_list
     return None
+
+# Only support 2 for now, can be modified to support 2^n GPUs where n >= 0
+def run_oracle_multi_gpus(ds, oracle_list, masking_scheme):
+    # Split the dataset into 2 subsets
+    size0 = int(len(ds) * 0.5)
+    ds_t = ds.train_test_split(test_size=size0, shuffle=True, seed=26)
+
+    ds_map = {}
+    metrics_map = {}
+    ds_labels = ["train", "test"]
+    threads = []
+    
+    for idx, o in enumerate(oracle_list):
+        threads.append(threading.Thread(target=run_oracle_help, args=(o, ds_t[ds_labels[idx]], masking_scheme, ds_map, idx)))
+
+    # Start both threads
+    for t in threads:
+        t.start()
+
+    # Wait for both threads to finish
+    for t in threads:
+        t.join()
+
+    return concatenate_datasets([ds_map[0], ds_map[1]])
+
+def run_oracle_help(o, ds, masking_scheme, ds_map, idx):
+    ds_map[idx] = o.process(ds, q2_masking_scheme=masking_scheme)
 
 # Only support 2 for now, can be modified to support 2^n GPUs where n >= 0
 def run_m1_multi_gpus(ds, m1s, metric_key, a2_col):

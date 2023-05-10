@@ -117,16 +117,18 @@ class T5_Bool_Oracle(Oracle):
         model_name,
         batch_size,
         # raw_val_dataset=None,
+        gpu
     ):
         self.model_name = model_name
         self.batch_size = batch_size
         self.model_name = f"google/flan-{self.model_name}"
+        self.gpu = gpu
         self.tk = AutoTokenizer.from_pretrained(
             self.model_name, cache_dir="./.model_cache"
         )
         self.model = T5ForConditionalGeneration.from_pretrained(
             self.model_name, cache_dir="./.model_cache"
-        ).cuda()
+        ).to(gpu)
         self.model.eval()
 
     def forward(self, example, q2_masking_scheme):
@@ -148,7 +150,7 @@ class T5_Bool_Oracle(Oracle):
 
             input_ids = self.tk(
                 input_strs, return_tensors="pt", padding=True
-            ).input_ids.cuda()
+            ).input_ids.to(self.gpu)
 
             c = len(corpus_strs)
 
@@ -156,8 +158,8 @@ class T5_Bool_Oracle(Oracle):
             label_strs = ["yes", "no"]
             label_encoding = self.tk(label_strs, return_tensors="pt", padding=True)
             max_answer_len = 1  # must change if label_strs is edited
-            label_ids = label_encoding.input_ids[:, :-1].cuda()
-            label_attention_masks = label_encoding.attention_mask[:, :-1].cuda()
+            label_ids = label_encoding.input_ids[:, :-1].to(self.gpu)
+            label_attention_masks = label_encoding.attention_mask[:, :-1].to(self.gpu)
 
             # process logits in batches
             num_batches = math.ceil(c / self.batch_size)
