@@ -198,8 +198,8 @@ def main(
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         del oracle
         torch.cuda.empty_cache()  # free up memory
-        print("sleeping...")
-        sleep(30)  # wait for memory to be freed
+        # print("sleeping...")
+        # sleep(30)  # wait for memory to be freed
 
         # Bring back the primary model
         m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
