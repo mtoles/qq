@@ -66,7 +66,7 @@ def evaluate(example, model, tk):
     default=True,
     help="Disable to prevent loading from any cache (i.e. hugging face datasets, .map",
 )
-@click.option("--cache_dir", default=None, help="Preprocessed data directory")
+# @click.option("--cache_dir", default=None, help="Preprocessed data directory")
 def main(
     model_path,
     model,
@@ -75,7 +75,7 @@ def main(
     batch_size,
     downsample_data_size,
     load_from_cache,
-    cache_dir,
+    # cache_dir,
 ):
     if downsample_data_size is not None:
         downsample_str = f"[:{downsample_data_size}]"

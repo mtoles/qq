@@ -32,6 +32,7 @@ dependencies:
   - nltk
   - pytables=3.7.0 # df.to_hdf()
   - fire
+  - tokenizers=0.13.3
   # - h5py
   - pip:
     # - transformers==4.21.3 # Later versions fail during distributed training
