@@ -21,7 +21,7 @@ class Oracle:
             lambda x: self.forward(x, q2_masking_scheme),
             load_from_cache_file=False,
             batched=True,
-            batch_size=1, # batching happens internally
+            batch_size=1,  # batching happens internally
         )
         return new_ds
 
@@ -132,15 +132,25 @@ class T5_Bool_Oracle(Oracle):
     def forward(self, example, q2_masking_scheme):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
         with torch.no_grad():
-            q2 = example[f"q2_{q2_masking_scheme}"]
-            masked_sentence = example["masked_sentence"]
+            q2 = example[f"q2_{q2_masking_scheme}"][0]
+            masked_sentence = example["masked_sentence"][0]
+            masked_sentence_title = example["masked_sentence_title"][0]
             # Build the corpus
             # First answer is correct. The rest are distractor.
-            corpus_strs = masked_sentence + [
-                distractor
-                for sublist in example["context_distractor"][0]["sentences"]
-                for distractor in sublist
-            ]
+            # corpus_strs = masked_sentence + [
+            #     distractor
+            #     for sublist in example["context_distractor"][0]["sentences"]
+            #     for distractor in sublist
+            # ]
+            cs_template = "%s: %s"
+            corpus_strs = [cs_template % (masked_sentence_title, masked_sentence)]  # make sure a2 is always at index 0
+            for i, sublist in enumerate(example["context_distractor"][0]["sentences"]):
+                for distractor in sublist:
+                    title = example["context_None"][0]["title"][i]
+                    # corpus_str = f"{title}: {distractor}"
+                    corpus_str = cs_template % (title, distractor)
+                    corpus_strs.append(corpus_str)
+
             input_strs = [
                 f"question: {q2}\ncontext: {cs}\nprompt: Does the context answer the question, yes or no?"
                 for cs in corpus_strs

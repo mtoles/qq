@@ -67,32 +67,33 @@ def add_flat_contexts(
     return new_ds
 
 
-def mask_random_sentence(example):
-    # Depricated in favor of mask_bf_sentence
-    new_example = example.copy()
-    """Mask random useful sentence in example."""
-    n_supporting_facts = len(new_example["supporting_facts"])
-    assert n_supporting_facts > 0, "No supporting facts found"
+# def mask_random_sentence(example):
+#     # Depricated in favor of mask_bf_sentence
+#     new_example = example.copy()
+#     """Mask random useful sentence in example."""
+#     n_supporting_facts = len(new_example["supporting_facts"])
+#     assert n_supporting_facts > 0, "No supporting facts found"
 
-    # Locate all the facts
-    fact_keys = []
-    for i, sentences in enumerate(example["context_supporting"]["sentences"]):
-        for j, sentence in enumerate(sentences):
-            fact_keys.append((i, j))
+#     # Locate all the facts
+#     fact_keys = []
+#     for i, sentences in enumerate(example["context_supporting"]["sentences"]):
+#         for j, sentence in enumerate(sentences):
+#             fact_keys.append((i, j))
 
-    # Select one random fact
-    rand_index = random.randint(0, len(fact_keys))
-    rand_keys = fact_keys[rand_index]
-    new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
-        rand_keys[0]
-    ][rand_keys[1]]
+#     # Select one random fact
+#     rand_index = random.randint(0, len(fact_keys))
+#     rand_keys = fact_keys[rand_index]
+#     new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
+#         rand_keys[0]
+#     ][rand_keys[1]]
 
-    # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
-    new_example["context_randomsentence"]["sentences"] = deepcopy(
-        new_example["context_supporting"]["sentences"]
-    )
-    new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
-    return new_example
+
+#     # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
+#     new_example["context_randomsentence"]["sentences"] = deepcopy(
+#         new_example["context_supporting"]["sentences"]
+#     )
+#     new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
+#     return new_example
 
 
 def adversarial_dataset(
@@ -147,7 +148,7 @@ def adversarial_dataset(
             threshold=adversarial_drop_thresh,
         )
         mini_dss.append(mini_ds_bf_add_sentence)
-    ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss)
+    ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss) # bug here. if n=10 then bug is at example 5
 
     # reduce masked dataset to at most `adversarial_drop_thresh` examples of each `id`
     # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
@@ -202,6 +203,9 @@ def mask_bf_sentence(example):
         new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
             rand_keys[0]
         ][rand_keys[1]]
+        new_example["masked_sentence_title"] = new_example["context_None"]["title"][
+            rand_keys[0]
+        ]
         # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
         new_example["context_bfdelsentence"]["sentences"] = deepcopy(
             new_example["context_supporting"]["sentences"]
@@ -320,6 +324,9 @@ def split_distractor(example):
     new_example["context_distractor"]["sentences"] = [
         [] for _ in range(len(example["context_None"]["sentences"]))
     ]
+    # new_example["context_None"]["title"] = example["context_None"]["title"]
+    
+
 
     supporting_sentences = defaultdict(set)
     for title, sent_index in zip(
