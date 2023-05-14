@@ -4,7 +4,7 @@ import os
 import click
 from datasets import load_dataset
 
-from masking import mask_random_sentence, mask_None, split_distractor, add_flat_contexts
+from masking import mask_None, split_distractor, add_flat_contexts
 from utils import (
     make_cache_file_name,
     get_downsample_dataset_size_str,

@@ -254,7 +254,12 @@ class T5_PM(Primary_Model):
                 num_batches += 1
 
             num_adversarial_examples = 0
-            for batch_idx in tqdm(range(num_batches)):
+            # only use tqdm if not in adversarial mode
+            if adversarial_mode:
+                it = range(num_batches)
+            else:
+                it = tqdm(range(num_batches))
+            for batch_idx in it:
                 start_idx = batch_idx * self.batch_size
                 end_idx = min(start_idx + self.batch_size, len(ds))
                 batch = ds.select(range(start_idx, end_idx))
