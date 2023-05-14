@@ -109,7 +109,6 @@ def main(
         results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
 
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
-
         assert m2_arch in ["repeater", "openai", "gt"]
         assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
@@ -198,8 +197,6 @@ def main(
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         del oracle
         torch.cuda.empty_cache()  # free up memory
-        # print("sleeping...")
-        # sleep(30)  # wait for memory to be freed
 
         # Bring back the primary model
         m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
