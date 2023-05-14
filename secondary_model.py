@@ -48,6 +48,7 @@ The 1988 American comedy film, The Great Outdoors, starred a four-time Academy A
 Question 2:
 Who starred in the 1988 American comedy film, The Great Outdoors?"""
 
+
 # Abstract class for secondary models
 class Secondary_Model:
     def __init__(
@@ -213,20 +214,22 @@ class OpenAI_Secondary_Model(Secondary_Model):
 
 
 class Gt_Secondary_Model(Secondary_Model):
-    def __init__(
-        self,
-    ):
+    def __init__(self, gt_df):
         self.model_name = "groundtruth"
-        self.gt_q2_path = "q2_gt_dataset.csv"
-        self.df = pd.read_csv(self.gt_q2_path)
+        self.gt_df = gt_df
+        # self.gt_q2_path = "q2_gt_dataset.csv"
+        # self.df = pd.read_csv(self.gt_q2_path)
 
     def forward(self, example, question_col, context_col):
         # Always return the original question q1
-        if example["id"] in self.df["id"].values:
-            gt_q2 = self.df[self.df["id"] == example["id"]]["gt_q2"].values[0]
+        id = example["id"].split("_")[0]
+        if id in self.gt_df["id"].values:
+            gt_q2 = self.gt_df[self.gt_df["id"] == id]["gt_q2"].values[0]
             if gt_q2 is not np.nan:
                 return gt_q2
             else:
-                return f"id {example['id']} has empty gt_q2 in {self.gt_q2_path}"
+                raise NotImplementedError(
+                    f"id {example['id']} has empty gt_q2 in self.gt_df"
+                )
         else:
-            return f"id {example['id']} not found in {self.gt_q2_path}"
+            raise NotImplementedError(f"id {example['id']} not found in self.gt_df")

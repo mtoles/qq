@@ -119,10 +119,20 @@ def main(
 
         if cached_adversarial_dataset_path is None:
             raw_dataset = load_from_disk(pt_dataset_path)
+            # select only ground truth examples if we are doing analysis using the ground truth model
+            if m2_arch == "gt":
+                gt_df = pd.read_csv("q2_gt_dataset.csv")
+                gt_ids = set(gt_df["id"].tolist())
+                raw_dataset = raw_dataset.filter(
+                    lambda example: example["id"] in gt_ids
+                )
+
+            # downsample if a downsampling size is provided
             if str(downsample_pt_size) != "None":
                 raw_dataset = raw_dataset.select(
                     range(ds_shift, ds_shift + int(downsample_pt_size))
                 )
+
             original_raw_dataset_len = len(raw_dataset)
             ds = raw_dataset
             # Evaluate the primary model
@@ -174,7 +184,7 @@ def main(
         elif m2_arch == "openai":
             m2 = OpenAI_Secondary_Model(oai_cache_path, template_id)
         elif m2_arch == "gt":
-            m2 = Gt_Secondary_Model()
+            m2 = Gt_Secondary_Model(gt_df)
         else:
             raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
         # Apply the secondary model
@@ -197,6 +207,8 @@ def main(
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
         del oracle
         torch.cuda.empty_cache()  # free up memory
+        # print("sleeping...")
+        # sleep(30)  # wait for memory to be freed
 
         # Bring back the primary model
         m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
