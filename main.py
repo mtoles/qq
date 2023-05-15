@@ -113,19 +113,24 @@ def main(
         assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
         masking_str = f"fc_{masking_scheme}"
+        # Evaluate the primary model
         m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
         # Receive and prepare the primary task
         metrics = {}
 
         if cached_adversarial_dataset_path is None:
             raw_dataset = load_from_disk(pt_dataset_path)
-            # select only ground truth examples if we are doing analysis using the ground truth model
+            # filter out ids that don't appear in the gt dataset for speedup
             if m2_arch == "gt":
                 gt_df = pd.read_csv("q2_gt_dataset.csv")
-                gt_ids = set(gt_df["id"].tolist())
+                gt_ids = [x.split("_")[0] for x in gt_df["id"].tolist()]
+                len_before = len(raw_dataset)
                 raw_dataset = raw_dataset.filter(
-                    lambda example: example["id"] in gt_ids
+                    lambda x: x["id"].split("_")[0] in gt_ids
                 )
+                print(f"reduce to {len(raw_dataset)} / {len_before} examples")
+
+                
 
             # downsample if a downsampling size is provided
             if str(downsample_pt_size) != "None":
@@ -135,7 +140,6 @@ def main(
 
             original_raw_dataset_len = len(raw_dataset)
             ds = raw_dataset
-            # Evaluate the primary model
 
             # first pass
             print("m1 first pass...")
@@ -155,6 +159,7 @@ def main(
 
         else:
             # Load dataset from cache
+            # assert m2_arch != "gt", "gt is not supported with cached datasets and is likely to cause errors"
             cached_adv_df = pd.read_hdf(cached_adversarial_dataset_path)
             ds = Dataset.from_pandas(cached_adv_df)
             if str(downsample_pt_size) != "None":
@@ -172,8 +177,20 @@ def main(
             ]  # needs fixing
             for col in drop_cols:
                 if col in ds.column_names:
-                    ds = ds.remove_columns(drop_cols)
-
+                    ds = ds.remove_columns([col])
+        # select only ground truth examples if we are doing analysis using the ground truth model
+        if m2_arch == "gt":
+            gt_df = pd.read_csv("q2_gt_dataset.csv")
+            gt_qs = set(gt_df["prepped_bfsentence_None"].tolist())
+            before_len = len(ds)
+            # filter based on the question cuz i forgot to include the full id in the labeling doc
+            # and it wouldn't be ideal anyway cuz of suffix inconsistency
+            ds = ds.filter(
+                lambda example: example["prepped_bfsentence_None"].split("\n\n")[0]
+                in gt_qs
+            )
+            print(f"Reduced to {len(ds)} / {before_len} examples")
+            assert len(ds) == 100, "ground truth dataset should probably be exactly 100"
         if profile_only:
             df = pd.DataFrame(ds)
             df.to_csv(f"{downsample_pt_size}_profile.csv")
@@ -195,8 +212,8 @@ def main(
             masking_scheme=masking_scheme,
         )
         # Save memory by moving m1 to CPU
-        # m1.model.cpu()
-        del m1
+        m1.model.cpu()
+        # del m1
         torch.cuda.empty_cache()  # free up memory
         # Create the oracle
         oracle = T5_Bool_Oracle(
@@ -205,7 +222,7 @@ def main(
         # Answer questions with the oracle
         print("oracle...")
         ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
-        del oracle
+        oracle.model.cpu()
         torch.cuda.empty_cache()  # free up memory
         # print("sleeping...")
         # sleep(30)  # wait for memory to be freed
