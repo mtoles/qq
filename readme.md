@@ -59,3 +59,6 @@ python3 main.py --pt_dataset_path data/preprocess/hotpot-validation-None-randoms
 --adversarial_drop_thresh 0.5 --max_adversarial_examples 3 --downsample_pt_size 100 \
 --alpaca_model_path <YOUR_ALPACA_MODEL_PATH>
 ```
+
+2. Run preprocess with `python3 preprocess.py --split validation --dataset hotpot --distract_or_focus focus --cache_dir .../qq/.cache --load_from_cache False --masking_schemes bfsentence`
+3. Run main with `python3 /local-scratch1/data/mt/code/qq/main.py --pt_dataset_path data/preprocess/hotpot-validation-None-None-focus --m1_arch t5-small --m2_arch openai --oracle_arch t5-small --eval_batch_size 12 --oracle_eval_batch_size 12 --masking_scheme bfsentence --adversarial_drop_thresh 0.5 --max_adversarial_examples 3`

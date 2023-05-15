@@ -258,8 +258,12 @@ class T5_PM(Primary_Model):
                 num_batches += 1
 
             num_adversarial_examples = 0
-            batch_ids = tqdm(range(num_batches)) if display else range(num_batches)
-            for batch_idx in batch_ids:
+            # only use tqdm if not in adversarial mode
+            if adversarial_mode:
+                it = range(num_batches)
+            else:
+                it = tqdm(range(num_batches))
+            for batch_idx in it:
                 start_idx = batch_idx * self.batch_size
                 end_idx = min(start_idx + self.batch_size, len(ds))
                 batch = ds.select(range(start_idx, end_idx))
@@ -294,7 +298,7 @@ class T5_PM(Primary_Model):
                     original_f1s = batch[f"m1_supporting_{str(a2_col)}_f1"]
                     adversarial_f1s = batch_metrics["f1"]
                     was_damaged_batch = [
-                        x - y < threshold for x, y in zip(original_f1s, adversarial_f1s)
+                        x - y > threshold for x, y in zip(original_f1s, adversarial_f1s)
                     ]
                     num_new_adversarial_examples = sum(was_damaged_batch)
                     if num_new_adversarial_examples >= max_adversarial_examples:
