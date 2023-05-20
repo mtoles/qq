@@ -109,8 +109,8 @@ def main(
         results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
 
     with open(f"inf_logs/{results_filename}.txt", "a") as f:
-        assert m2_arch in ["repeater", "openai", "gt"]
-        assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
+        # assert m2_arch in (["repeater", "openai", "gt"]) or (m2_arch.starts)
+        # assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
         masking_str = f"fc_{masking_scheme}"
         # Evaluate the primary model

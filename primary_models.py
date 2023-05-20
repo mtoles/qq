@@ -255,10 +255,11 @@ class T5_PM(Primary_Model):
 
             num_adversarial_examples = 0
             # only use tqdm if not in adversarial mode
-            if adversarial_mode:
-                it = range(num_batches)
-            else:
-                it = tqdm(range(num_batches))
+            # if adversarial_mode:
+            #     it = range(num_batches)
+            # else:
+            #     it = tqdm(range(num_batches))
+            it = tqdm(range(num_batches))
             for batch_idx in it:
                 start_idx = batch_idx * self.batch_size
                 end_idx = min(start_idx + self.batch_size, len(ds))
@@ -290,17 +291,17 @@ class T5_PM(Primary_Model):
 
                 # Break the loop if we are in adversarial generation mode
                 # and have generated enough adversarial examples.
-                if adversarial_mode:
-                    original_f1s = batch[f"m1_supporting_{str(a2_col)}_f1"]
-                    adversarial_f1s = batch_metrics["f1"]
-                    was_damaged_batch = [
-                        x - y > threshold for x, y in zip(original_f1s, adversarial_f1s)
-                    ]
-                    num_new_adversarial_examples = sum(was_damaged_batch)
-                    if num_new_adversarial_examples >= max_adversarial_examples:
-                        # If we end early, truncate the dataset to only the data that actually got processed
-                        ds = ds.select(range(len(gen_strs)))
-                        break
+                # if adversarial_mode:
+                #     original_f1s = batch[f"m1_supporting_{str(a2_col)}_f1"]
+                #     adversarial_f1s = batch_metrics["f1"]
+                #     was_damaged_batch = [
+                #         x - y > threshold for x, y in zip(original_f1s, adversarial_f1s)
+                #     ]
+                #     num_new_adversarial_examples = sum(was_damaged_batch)
+                #     if num_new_adversarial_examples >= max_adversarial_examples:
+                #         # If we end early, truncate the dataset to only the data that actually got processed
+                #         ds = ds.select(range(len(gen_strs)))
+                #         break
 
             # If in adversarial mode, only keep the first max_adversarial_examples examples where
 
@@ -315,8 +316,8 @@ class T5_PM(Primary_Model):
                     - x[f"m1_{masking_scheme}_{str(a2_col)}_f1"]
                     > threshold,
                     num_proc=1,
-                ).shuffle()
-                ds = ds.select(range(min(max_adversarial_examples, len(ds))))
+                )#.shuffle()
+                # ds = ds.select(range(min(max_adversarial_examples, len(ds))))
             # Get aggregate metrics
             # Note that aggregate metrics are not very meaningful if in adversarial mode
             # Since the dataset is filtered to only include examples where the model was damaged

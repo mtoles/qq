@@ -66,6 +66,7 @@ def main(hdf_ds_paths):
     print(f"num_distractor_improved: {num_distractor_improved}")
     print(f"num_distractor_not_improved: {num_distractor_not_improved}")
     print(f"delta l: {df['delta_l'].mean()}")
+    print(f"percent improved: {sum(df['did_improve']) / len(df)}")
 
     # # display examples where the model improved despite using a distractor
     # df_distractor_improved = df[df["did_improve"] & ~df["a2_is_masked_sentence"]]
@@ -77,15 +78,15 @@ def main(hdf_ds_paths):
     # print
 
     # display examples where the model did not improve despite using a masked sentence
-    df_masked_sentence_not_improved = df[
-        ~df["did_improve"] & df["a2_is_masked_sentence"]
-    ]
-    for i in range(len(df_masked_sentence_not_improved)):
-        print(i)
-        print(df_masked_sentence_not_improved.iloc[i]["prepped_bfsentence_None"])
-        print(df_masked_sentence_not_improved.iloc[i]["masked_sentence"])
-        print(df_masked_sentence_not_improved.iloc[i]["a2_bfsentence"])
-    print
+    # df_masked_sentence_not_improved = df[
+    #     ~df["did_improve"] & df["a2_is_masked_sentence"]
+    # ]
+    # for i in range(len(df_masked_sentence_not_improved)):
+    #     print(i)
+    #     print(df_masked_sentence_not_improved.iloc[i]["prepped_bfsentence_None"])
+    #     print(df_masked_sentence_not_improved.iloc[i]["masked_sentence"])
+    #     print(df_masked_sentence_not_improved.iloc[i]["a2_bfsentence"])
+    # print
 
     # create a ground truth dataset for ground truth annotation
     # get first 100 rows with unique ids

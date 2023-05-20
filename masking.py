@@ -110,7 +110,6 @@ def adversarial_dataset(
     def pp(ds):
         print(f"total: {len(ds)}, ids: {len(set(ds['id']))}")
 
-
     # masking
 
     ds_got_right_supporting = ds.filter(
@@ -131,13 +130,21 @@ def adversarial_dataset(
 
     # distracting
 
-    ds_got_right_with_supporting = ds_bfdelsentence.filter(
+    ds_got_right_masked = ds_bfdelsentence.filter(
         lambda x: x["m1_bfdelsentence_None_f1"] > adversarial_drop_thresh,
         load_from_cache_file=False,
     )  # filtering not technically necessary but speeds things up
-    mini_dss_bfaddsentence = bf_add_sentences(ds_got_right_with_supporting)
+    mini_dss_bfaddsentence = bf_add_sentences(
+        ds_got_right_masked, "context_bfdelsentence"
+    )
+
     mini_dss = []
+    # mini_dss_from_sup = []
     print("m1 distracting...")
+    # for mini, li in [
+    #     (mini_dss_bfaddsentence, mini_dss),
+    #     (mini_dss_bfaddsentence_from_sup, mini_dss_from_sup),
+    # ]:
     for mini_ds in tqdm(mini_dss_bfaddsentence):
         # ds_got_worse_with_bf_add_sentence, metrics["bfaddsentence"] = m1.evaluate(
         mini_ds_bf_add_sentence, _metrics = m1.evaluate(
@@ -148,7 +155,40 @@ def adversarial_dataset(
             threshold=adversarial_drop_thresh,
         )
         mini_dss.append(mini_ds_bf_add_sentence)
-    ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss) # bug here. if n=10 then bug is at example 5
+    ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss)
+
+    # evaluate the reference col
+    ds_got_worse_with_bf_add_sentence, _metrics = m1.evaluate(
+        masking_scheme="suppbfaddsentence",
+        ds=ds_got_worse_with_bf_add_sentence,
+        a2_col=None,
+        max_adversarial_examples=None,
+        threshold=None,
+    )
+
+    # create a reference copy of mini_dss_bfaddsentence that uses the the supporting context
+    # instead so that we can filter properly later
+    # mini_dss_bfaddsentence_from_sup =
+
+    # ds_got_worse_with_bf_add_sentence_from_sup = concatenate_datasets(mini_dss_from_sup)
+    # print(sum(ds_got_worse_with_bf_add_sentence["m1_bfaddsentence_None_f1"]))
+    # print(sum(ds_got_worse_with_bf_add_sentence_from_sup["m1_bfaddsentence_None_f1"]))
+
+    # Add the f1 column from the _from_sup dataset to the actual dataset
+    # so that we can filter out examples by comparing mask+distractor to supp+distractor
+    # instead of just mask+distracto to supp alone
+    # ds_got_worse_with_bf_add_sentence = ds_got_worse_with_bf_add_sentence.add_column(
+    #     "m1_bfaddsentence_None_f1_from_sup",
+    #     ds_got_worse_with_bf_add_sentence_from_sup["m1_bfaddsentence_None_f1"],
+    # )
+    before = len(ds_got_worse_with_bf_add_sentence)
+    ds_got_worse_with_bf_add_sentence = ds_got_worse_with_bf_add_sentence.filter(
+        lambda x: x["m1_suppbfaddsentence_None_f1"] - x["m1_bfaddsentence_None_f1"]
+        > adversarial_drop_thresh
+    )
+    print(
+        f"filtered out {before - len(ds_got_worse_with_bf_add_sentence)} examples compared to supp+distractor"
+    )
 
     # reduce masked dataset to at most `adversarial_drop_thresh` examples of each `id`
     # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
@@ -229,7 +269,7 @@ def bf_del_sentences(ds):
     return new_ds
 
 
-def distract_bf_sentence(example):
+def distract_bf_sentence(example, src_col):
     # new_example = example.copy()
     new_examples = []
     n_distractors_sentences = len(example["context_distractor"]["sentences"])
@@ -253,11 +293,19 @@ def distract_bf_sentence(example):
         new_example["distractor_sentence"] = new_example["context_distractor"][
             "sentences"
         ][rand_keys[0]][rand_keys[1]]
-        
+
         new_example["context_bfaddsentence"]["sentences"] = deepcopy(
             new_example["context_bfdelsentence"]["sentences"]
+            # new_example[src_col]["sentences"]
         )
         new_example["context_bfaddsentence"]["sentences"][rand_keys[0]].insert(
+            rand_keys[1], new_example["distractor_sentence"]
+        )
+        new_example["context_suppbfaddsentence"] = {}
+        new_example["context_suppbfaddsentence"]["sentences"] = deepcopy(
+            new_example["context_supporting"]["sentences"]
+        )
+        new_example["context_suppbfaddsentence"]["sentences"][rand_keys[0]].insert(
             rand_keys[1], new_example["distractor_sentence"]
         )
         new_examples.append(new_example)
@@ -266,7 +314,7 @@ def distract_bf_sentence(example):
     for i in range(len(example["context_distractor"]["sentences"])):
         new_example = deepcopy(example)
     bf_mini_dataset = add_flat_contexts(
-        Dataset.from_list(new_examples), ["bfaddsentence"]
+        Dataset.from_list(new_examples), ["bfaddsentence", "suppbfaddsentence"]
     )
 
     # drop columns that refer to the bfdelsentence examples from which
@@ -283,10 +331,10 @@ def distract_bf_sentence(example):
     return bf_mini_dataset
 
 
-def bf_add_sentences(ds):
+def bf_add_sentences(ds, src_col):
     """Return a list of datasets where examples in each dataset have a different sentence masked.
     Every example in each dataset will have a different distractor sentence added"""
-    bf_mini_datasets = [distract_bf_sentence(example) for example in tqdm(ds)]
+    bf_mini_datasets = [distract_bf_sentence(example, src_col) for example in ds]
     # concatenate and merge dataset who share an id
     tmp_ds = concatenate_datasets(bf_mini_datasets)
     id_dict = dict()
@@ -325,8 +373,6 @@ def split_distractor(example):
         [] for _ in range(len(example["context_None"]["sentences"]))
     ]
     # new_example["context_None"]["title"] = example["context_None"]["title"]
-    
-
 
     supporting_sentences = defaultdict(set)
     for title, sent_index in zip(
