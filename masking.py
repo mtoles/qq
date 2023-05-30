@@ -67,33 +67,6 @@ def add_flat_contexts(
     return new_ds
 
 
-# def mask_random_sentence(example):
-#     # Depricated in favor of mask_bf_sentence
-#     new_example = example.copy()
-#     """Mask random useful sentence in example."""
-#     n_supporting_facts = len(new_example["supporting_facts"])
-#     assert n_supporting_facts > 0, "No supporting facts found"
-
-#     # Locate all the facts
-#     fact_keys = []
-#     for i, sentences in enumerate(example["context_supporting"]["sentences"]):
-#         for j, sentence in enumerate(sentences):
-#             fact_keys.append((i, j))
-
-#     # Select one random fact
-#     rand_index = random.randint(0, len(fact_keys))
-#     rand_keys = fact_keys[rand_index]
-#     new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
-#         rand_keys[0]
-#     ][rand_keys[1]]
-
-
-#     # Create the context_randomsentence column from everything in the context_None column besides the masked sentence
-#     new_example["context_randomsentence"]["sentences"] = deepcopy(
-#         new_example["context_supporting"]["sentences"]
-#     )
-#     new_example["context_randomsentence"]["sentences"][rand_keys[0]].pop(rand_keys[1])
-#     return new_example
 
 
 def adversarial_dataset(
