@@ -6,7 +6,7 @@
 import click
 import torch
 from datasets import load_from_disk, Dataset
-from oracles import T5_Bool_Oracle
+from oracles import T5_Bool_Oracle, Bloom_Bool_Oracle
 from primary_models import get_m1
 from secondary_model import (
     Repeater_Secondary_Model,
@@ -32,10 +32,14 @@ import os
     "--template_id",
     help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
 )
-@click.option("--oracle_arch", help="oracle architecture")
+@click.option("--oracle_arch", help="oracle architecture {t5, bloom}")
+@click.option(
+    "--oracle_size",
+    help="oracle size, t5: {small, base, large, xl, xxl}, bloom: {560m, 1b1, 1b7, 3b, 7b1}",
+)
 @click.option("--pm_eval_batch_size", help="batch size for eval", type=int)
 @click.option("--oracle_eval_batch_size", help="batch size for eval", type=int)
-@click.option("--masking_scheme", help="{randomsentence | bfdelsentence | None")
+@click.option("--masking_scheme", help="{randomsentence,  bfdelsentence, None")
 @click.option(
     "--adversarial_drop_thresh",
     default=0.5,
@@ -81,6 +85,7 @@ def main(
     m2_arch,
     template_id,
     oracle_arch,
+    oracle_size,
     pm_eval_batch_size,
     oracle_eval_batch_size,
     masking_scheme,
@@ -213,7 +218,9 @@ def main(
     # del m1
     torch.cuda.empty_cache()  # free up memory
     # Create the oracle
-    oracle = T5_Bool_Oracle(model_name=oracle_arch, batch_size=oracle_eval_batch_size)
+    oracle_name = f"{oracle_arch}-{oracle_size}"
+    Oracle = {"t5": T5_Bool_Oracle, "bloom": Bloom_Bool_Oracle}[oracle_arch]
+    oracle = Oracle(model_size=oracle_size, batch_size=oracle_eval_batch_size)
     # Answer questions with the oracle
     print("oracle...")
     ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
@@ -232,6 +239,10 @@ def main(
     # Analysis
     df = pd.DataFrame(ds)
     print(f"runtime: {datetime.now()-start}")
+
+    # make the dir if it doesn't exist
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
         f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}_{oracle_arch}_{template_id}.hd5",
