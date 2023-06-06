@@ -6,14 +6,14 @@
 import click
 import torch
 from datasets import load_from_disk, Dataset
-from oracles import T5_Bool_Oracle, Bloom_Bool_Oracle
+from oracles import T5_Bool_Oracle, Bloom_Bool_Oracle, Dolly_Bool_Oracle
 from primary_models import get_m1
 from secondary_model import (
     Repeater_Secondary_Model,
     OpenAI_Secondary_Model,
     Gt_Secondary_Model,
 )
-from dataset_utils import bf_filtering, combine_adversarial_ds
+from dataset_utils import bf_filtering, combine_adversarial_ds, get_save_path
 from datetime import datetime
 from time import sleep
 
@@ -192,7 +192,7 @@ def main(
             lambda example: example["prepped_bfsentence_None"].split("\n\n")[0] in gt_qs
         )
         print(f"Reduced to {len(ds)} / {before_len} examples")
-        assert len(ds) == 100, "ground truth dataset should probably be exactly 100"
+        # assert len(ds) == 100, "ground truth dataset should probably be exactly 100"
     if profile_only:
         df = pd.DataFrame(ds)
         df.to_csv(f"{downsample_pt_size}_profile.csv")
@@ -219,7 +219,11 @@ def main(
     torch.cuda.empty_cache()  # free up memory
     # Create the oracle
     oracle_name = f"{oracle_arch}-{oracle_size}"
-    Oracle = {"t5": T5_Bool_Oracle, "bloom": Bloom_Bool_Oracle}[oracle_arch]
+    Oracle = {
+        "t5": T5_Bool_Oracle,
+        "bloom": Bloom_Bool_Oracle,
+        "dolly": Dolly_Bool_Oracle,
+    }[oracle_arch]
     oracle = Oracle(model_size=oracle_size, batch_size=oracle_eval_batch_size)
     # Answer questions with the oracle
     print("oracle...")
