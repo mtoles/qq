@@ -204,8 +204,8 @@ class OpenAI_Secondary_Model(Secondary_Model):
             return example
 
         ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
-        for i in tqdm(range(len(ds))):
-            _add_q2(ds[i])  # debugging
+        # for i in tqdm(range(len(ds))):
+        #     _add_q2(ds[i])  # debugging
         ds = ds.map(
             lambda x: _add_q2(x),
             load_from_cache_file=False,

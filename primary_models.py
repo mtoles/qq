@@ -259,7 +259,7 @@ class T5_PM(Primary_Model):
                 it = range(num_batches)
             else:
                 it = tqdm(range(num_batches))
-            it = tqdm(range(num_batches))
+            # it = tqdm(range(num_batches))
             for batch_idx in it:
                 start_idx = batch_idx * self.batch_size
                 end_idx = min(start_idx + self.batch_size, len(ds))
