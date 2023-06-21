@@ -72,12 +72,12 @@ class T5_Bool_Oracle(Oracle):
                     corpus_str = distractor
                     corpus_strs.append(corpus_str)
             # add supporting facts
-            # for i, sublist in enumerate(example["context_supporting"][0]["sentences"]):
-            #     for supporting in sublist:
-            #         title = example["context_None"][0]["title"][i]
-            #         # corpus_str = cs_template % (title, supporting)
-            #         corpus_str = supporting
-            #         corpus_strs.append(corpus_str)
+            for i, sublist in enumerate(example["context_supporting"][0]["sentences"]):
+                for supporting in sublist:
+                    title = example["context_None"][0]["title"][i]
+                    # corpus_str = cs_template % (title, supporting)
+                    corpus_str = supporting
+                    corpus_strs.append(corpus_str)
             input_strs = [
                 f"question: {q2}\ncontext: {cs}\nprompt: Does the context answer the question, yes or no?"
                 for cs in corpus_strs

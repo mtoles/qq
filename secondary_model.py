@@ -5,7 +5,7 @@ import openai
 import configparser
 import os
 import h5py
-import time 
+import time
 from tqdm import tqdm
 
 # Set up the API once for all models
@@ -161,7 +161,7 @@ class OpenAI_Secondary_Model(Secondary_Model):
                     # pause a second
                     time.sleep(1)
                     continue
-                
+
             q2 = response["choices"][0]["message"]["content"].strip()
             self.oai_model_id = response.model
             idx = f"{self.oai_model_id} {prompt}"
@@ -224,7 +224,7 @@ class Gt_Secondary_Model(Secondary_Model):
         # Always return the original question q1
         id = example["id"].split("_")[0]
         if id in self.gt_df["id"].values:
-            gt_q2 = self.gt_df[self.gt_df["id"] == id]["gt_q2"].values[0]
+            gt_q2 = self.gt_df[self.gt_df["id"] == id]["q2_gt"].values[0]
             if gt_q2 is not np.nan:
                 return gt_q2
             else:

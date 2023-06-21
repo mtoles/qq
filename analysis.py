@@ -53,18 +53,31 @@ def main(hdfs_dir):
         ]
         # df = df_raw[interesting_cols]
         df = df_raw
+        # rename randsentence col to bfsentence col
+        df.rename(
+            columns={
+                "prepped_randsentence_None": "prepped_bfsentence_None",
+                "q2_randsentence": "q2_bfsentence",
+                "a2_randsentence": "a2_bfsentence",
+                "m1_randsentence_None_f1": "m1_bfsentence_None_f1",
+                "m1_randsentence_a2_f1": "m1_bfsentence_a2_f1",
+                "a2_is_correct_randsentence": "a2_is_correct_bfsentence",
+                "m1_randsentence_a2_gen": "m1_bfsentence_a2_gen",
+            },
+            inplace=True,
+        )
         df["did_improve"] = df["m1_bfsentence_None_f1"] < df["m1_bfsentence_a2_f1"]
         df["wrong_answer_but_improved"] = (
             df["a2_is_correct_bfsentence"] == False
         ) & df["did_improve"]
         df["delta_l"] = df["m1_bfsentence_a2_f1"] - df["m1_bfsentence_None_f1"]
         # separate id from add/delete type
-        df["type"] = df["id"].apply(lambda x: x.split("_")[1][0])
+        # df["type"] = df["id"].apply(lambda x: x.split("_")[1][0])
         df["id"] = df["id"].apply(lambda x: x.split("_")[0])
         df["a2_is_masked_sentence"] = df.apply(
             lambda x: x["masked_sentence"] in x["a2_bfsentence"], axis=1
         )
-        df["a2_type"] = df.apply(get_answer_type, axis=1)
+        # df["a2_type"] = df.apply(get_answer_type, axis=1)
         df["a2_in_a1"] = df.apply(lambda x: x["a2_bfsentence"] in x["a1"], axis=1)
         num_questions = len(df)
         num_a2_is_masked_sentence = sum(df["a2_is_masked_sentence"])
@@ -79,17 +92,28 @@ def main(hdfs_dir):
         num_distractor_not_improved = sum(
             ~df["a2_is_masked_sentence"] & ~df["did_improve"]
         )
-        # print(f"num_questions: {num_questions}")
-        # print(f"num_a2_is_masked_sentence: {num_a2_is_masked_sentence}")
-        # print(f"num_a2_is_distractor: {num_a2_is_distractor}")
-        # print(f"num_masked_sentence_improved: {num_masked_sentence_improved}")
-        # print(f"num_masked_sentence_not_improved: {num_masked_sentence_not_improved}")
-        # print(f"num_distractor_improved: {num_distractor_improved}")
-        # print(f"num_distractor_not_improved: {num_distractor_not_improved}")
+        print(f"num_questions: {num_questions}")
+        print(f"num_a2_is_masked_sentence: {num_a2_is_masked_sentence}")
+        print(f"num_a2_is_distractor: {num_a2_is_distractor}")
+        print(f"num_masked_sentence_improved: {num_masked_sentence_improved}")
+        print(f"num_masked_sentence_not_improved: {num_masked_sentence_not_improved}")
+        print(f"num_distractor_improved: {num_distractor_improved}")
+        print(f"num_distractor_not_improved: {num_distractor_not_improved}")
         print(hdf_ds_path)
         print(f"delta l: {df['delta_l'].mean()}")
         # print(f"percent improved: {sum(df['did_improve']) / len(df)}")
         print
+
+        # reorder columns for saving df
+        first_cols = ["id", "q1", "a1", "masked_sentence", "fc_randsentence"]
+        column_order = first_cols + [col for col in df.columns if col not in first_cols]
+        df = df[column_order]
+        # sample the df for gt annotation
+        # save the df
+        df.sample(100).to_csv("gt_data/non_adversarial/gt_source_100.csv", index=False)
+        print
+        
+
 
 def get_answer_type(example):
     supporting = example["context_supporting"]["sentences"]

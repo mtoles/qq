@@ -6,7 +6,7 @@
 import click
 import torch
 from datasets import load_from_disk, Dataset
-from oracles import *#T5_Bool_Oracle, Bloom_Bool_Oracle, Dolly_Bool_Oracle
+from oracles import *  # T5_Bool_Oracle, Bloom_Bool_Oracle, Dolly_Bool_Oracle
 from primary_models import get_m1
 from secondary_model import (
     Repeater_Secondary_Model,
@@ -129,7 +129,7 @@ def main(
         raw_dataset = load_from_disk(pt_dataset_path)
         # filter out ids that don't appear in the gt dataset for speedup
         if m2_arch == "gt":
-            gt_df = pd.read_csv("q2_gt_dataset.csv")
+            gt_df = pd.read_csv("gt_data/non_adversarial/gt_labeled_100.csv")
             gt_ids = [x.split("_")[0] for x in gt_df["id"].tolist()]
             len_before = len(raw_dataset)
             raw_dataset = raw_dataset.filter(lambda x: x["id"].split("_")[0] in gt_ids)
@@ -149,20 +149,19 @@ def main(
         ds, metrics["supporting"] = m1.evaluate(
             masking_scheme="supporting", ds=ds, a2_col=None
         )
-        print("generating adversarial data...")
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
+            print("generating adversarial data...")
             ds = adversarial_dataset(
                 ds,
                 m1,
-                masking_scheme,
                 adversarial_drop_thresh,
                 max_adversarial_examples,
             )
         elif masking_scheme == "randsentence":
-            ds = randsentence_dataset(
-                ds,
-            )
+            ds = randsentence_dataset(ds, m1, max_adversarial_examples)
+        elif masking_scheme == "randdistsentence":
+            ds = adversarial_dataset(ds, m1, -1, max_adversarial_examples) # set drop thresh to -1 so no filtering happens
 
     else:
         # Load dataset from cache
@@ -187,14 +186,12 @@ def main(
                 ds = ds.remove_columns([col])
     # select only ground truth examples if we are doing analysis using the ground truth model
     if m2_arch == "gt":
-        gt_df = pd.read_csv("q2_gt_dataset.csv")
-        gt_qs = set(gt_df["prepped_bfsentence_None"].tolist())
+        # gt_df = pd.read_csv("q2_gt_dataset.csv")
+        gt_qs = set(gt_df["prepped_bfdelsentence_None"].tolist())
         before_len = len(ds)
         # filter based on the question cuz i forgot to include the full id in the labeling doc
         # and it wouldn't be ideal anyway cuz of suffix inconsistency
-        ds = ds.filter(
-            lambda example: example["prepped_bfsentence_None"].split("\n\n")[0] in gt_qs
-        )
+        ds = ds.filter(lambda example: example["prepped_bfdelsentence_None"] in gt_qs)
         print(f"Reduced to {len(ds)} / {before_len} examples")
         # assert len(ds) == 100, "ground truth dataset should probably be exactly 100"
     if profile_only:

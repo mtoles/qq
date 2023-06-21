@@ -26,7 +26,7 @@ def flatten_context(example, masking_scheme):
 def add_flat_contexts(
     new_ds, masking_schemes, cache_file_name=None, load_from_cache=False
 ):
-    """Convert lists of sentences into single strings under the prefix "fc_. Used both here and in preprocess.py"""
+    """Convert lists of sentences into single strings under the prefix "fc_". Used both here and in preprocess.py"""
     for masking_scheme in list(masking_schemes):
         masking_str = f"context_{masking_scheme}"
         # print(f"Flattening context {masking_scheme}...")
@@ -67,10 +67,8 @@ def add_flat_contexts(
     return new_ds
 
 
-
-
 def adversarial_dataset(
-    ds, m1, masking_scheme, adversarial_drop_thresh, max_adversarial_examples
+    ds, m1, adversarial_drop_thresh, max_adversarial_examples
 ):
     # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
     ds = ds.add_column(
@@ -157,7 +155,7 @@ def adversarial_dataset(
     before = len(ds_got_worse_with_bf_add_sentence)
     ds_got_worse_with_bf_add_sentence = ds_got_worse_with_bf_add_sentence.filter(
         lambda x: x["m1_suppbfaddsentence_None_f1"] - x["m1_bfaddsentence_None_f1"]
-        > adversarial_drop_thresh
+        >= adversarial_drop_thresh
     )
     print(
         f"filtered out {before - len(ds_got_worse_with_bf_add_sentence)} examples compared to supp+distractor"
@@ -365,122 +363,43 @@ def split_distractor(example):
                 # new_example["context_distractor"]["title"].append(title)
     return new_example
 
-def randsetnence_dataset(ds):
+
+def randsentence_dataset(ds, m1, max_adversarial_examples):
     # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
     ds = ds.add_column(
-        "context_randsentence", [{"sentences": []} for _ in range(len(ds))]
+        "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
     )
 
     # masking
-
-    ds_got_right_supporting = ds.filter(
-        lambda x: x["m1_supporting_None_f1"] > 0.0, load_from_cache_file=False
-    )
-    ds_bfdelsentence = bf_del_sentences(ds_got_right_supporting)
-    # Don't run masking in adversarial mode so that we get a more
-    # even distribution once we run it again in distractor mode.
-    print("m1 masking...")
-    ds_bfdelsentence, _metrics = m1.evaluate(
-        masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
-    )
-
-    ds_got_worse_with_bfdelsentence = ds_bfdelsentence.filter(
-        lambda x: x["m1_supporting_None_f1"] - x["m1_bfdelsentence_None_f1"]
-        > adversarial_drop_thresh
-    )
-
-    # distracting
-
-    ds_got_right_masked = ds_bfdelsentence.filter(
-        lambda x: x["m1_bfdelsentence_None_f1"] > adversarial_drop_thresh,
-        load_from_cache_file=False,
-    )  # filtering not technically necessary but speeds things up
-    mini_dss_bfaddsentence = bf_add_sentences(
-        ds_got_right_masked, "context_bfdelsentence"
-    )
-
-    mini_dss = []
-    # mini_dss_from_sup = []
-    print("m1 distracting...")
-    # for mini, li in [
-    #     (mini_dss_bfaddsentence, mini_dss),
-    #     (mini_dss_bfaddsentence_from_sup, mini_dss_from_sup),
-    # ]:
-    for mini_ds in tqdm(mini_dss_bfaddsentence):
-        # ds_got_worse_with_bf_add_sentence, metrics["bfaddsentence"] = m1.evaluate(
-        mini_ds_bf_add_sentence, _metrics = m1.evaluate(
-            masking_scheme="bfaddsentence",
-            ds=mini_ds,
-            a2_col=None,
-            max_adversarial_examples=max_adversarial_examples,
-            threshold=adversarial_drop_thresh,
-        )
-        mini_dss.append(mini_ds_bf_add_sentence)
-    ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss)
+    ds_bfdelsentence = bf_del_sentences(ds)
 
     # evaluate the reference col
     ds_got_worse_with_bf_add_sentence, _metrics = m1.evaluate(
-        masking_scheme="suppbfaddsentence",
-        ds=ds_got_worse_with_bf_add_sentence,
+        masking_scheme="bfdelsentence",
+        ds=ds_bfdelsentence,
         a2_col=None,
-        max_adversarial_examples=None,
-        threshold=None,
+        max_adversarial_examples=max_adversarial_examples,
+        threshold=-1,
     )
 
-    # create a reference copy of mini_dss_bfaddsentence that uses the the supporting context
-    # instead so that we can filter properly later
-    # mini_dss_bfaddsentence_from_sup =
+    # reduce to n=max_examples of each id
+    # df = pd.DataFrame(ds_got_worse_with_bf_add_sentence)
+    # df_list = list(x[1].head(max_adversarial_examples) for x in df.groupby("id"))
+    # df = pd.concat(df_list)
+    # output_ds = Dataset.from_pandas(df)
 
-    # ds_got_worse_with_bf_add_sentence_from_sup = concatenate_datasets(mini_dss_from_sup)
-    # print(sum(ds_got_worse_with_bf_add_sentence["m1_bfaddsentence_None_f1"]))
-    # print(sum(ds_got_worse_with_bf_add_sentence_from_sup["m1_bfaddsentence_None_f1"]))
-
-    # Add the f1 column from the _from_sup dataset to the actual dataset
-    # so that we can filter out examples by comparing mask+distractor to supp+distractor
-    # instead of just mask+distracto to supp alone
-    # ds_got_worse_with_bf_add_sentence = ds_got_worse_with_bf_add_sentence.add_column(
-    #     "m1_bfaddsentence_None_f1_from_sup",
-    #     ds_got_worse_with_bf_add_sentence_from_sup["m1_bfaddsentence_None_f1"],
-    # )
-    before = len(ds_got_worse_with_bf_add_sentence)
-    ds_got_worse_with_bf_add_sentence = ds_got_worse_with_bf_add_sentence.filter(
-        lambda x: x["m1_suppbfaddsentence_None_f1"] - x["m1_bfaddsentence_None_f1"]
-        > adversarial_drop_thresh
-    )
-    print(
-        f"filtered out {before - len(ds_got_worse_with_bf_add_sentence)} examples compared to supp+distractor"
-    )
-
-    # reduce masked dataset to at most `adversarial_drop_thresh` examples of each `id`
-    # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
-    # we do nothing with `ds_got_worse_with_bf_add_sentence` because it is already reduced
-    # in m1.evaluate
-    ds_got_worse_with_bfdelsentence = reduce_to_n(
-        ds_got_worse_with_bfdelsentence,
-        max_adversarial_examples,
-        baseline_f1_col_name="m1_supporting_None_f1",
-        exp_f1_col_name="m1_bfdelsentence_None_f1",
-        adversarial_drop_thresh=adversarial_drop_thresh,
-    )
-
-    ds_got_worse_with_bf_add_sentence = reduce_to_n(
-        ds_got_worse_with_bf_add_sentence,
-        max_adversarial_examples,
-        baseline_f1_col_name="m1_supporting_None_f1",
-        exp_f1_col_name="m1_bfaddsentence_None_f1",
-        adversarial_drop_thresh=adversarial_drop_thresh,
-    )
-
-    output_ds = combine_adversarial_ds(
-        ds_got_worse_with_bf_add_sentence, ds_got_worse_with_bfdelsentence
-    )
-
-    # df = output_ds.to_pandas()
-
-    # df["id_suffix"] = df["id"].apply(lambda x: x.split("_")[1])
-    # df["id"] = df["id"].apply(lambda x: x.split("_")[0])
+    # rename bfdelsentence -> bf_randsentence
+    col_name_map = {
+        "m1_bfdelsentence_None_gen": "m1_randsentence_None_gen",
+        "m1_bfdelsentence_None_f1": "m1_randsentence_None_f1",
+        "m1_bfdelsentence_None_em": "m1_randsentence_None_em",
+        "fc_bfdelsentence": "fc_randsentence",
+    }
+    df = ds_got_worse_with_bf_add_sentence.to_pandas()
+    output_ds = df.rename(columns=col_name_map)
+    output_ds = Dataset.from_pandas(output_ds)
     return output_ds
-    
+
 
 def mask_None(example):
     return example
