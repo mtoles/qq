@@ -18,7 +18,12 @@ from datetime import datetime
 from time import sleep
 
 # from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
-from masking import adversarial_dataset, randsentence_dataset
+from masking import (
+    adversarial_dataset,
+    randsentence_dataset,
+    randdist_dataset,
+    retroactively_add_distractors,
+)
 import pandas as pd
 import os
 
@@ -119,30 +124,27 @@ def main(
     # assert m2_arch in (["repeater", "openai", "gt"]) or (m2_arch.starts)
     # assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
-    masking_str = f"fc_{masking_scheme}"
     # Evaluate the primary model
     m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
     # Receive and prepare the primary task
     metrics = {}
 
     if cached_adversarial_dataset_path is None:
-        raw_dataset = load_from_disk(pt_dataset_path)
+        ds = load_from_disk(pt_dataset_path)
         # filter out ids that don't appear in the gt dataset for speedup
         if m2_arch == "gt":
             gt_df = pd.read_csv("gt_data/non_adversarial/gt_labeled_100.csv")
             gt_ids = [x.split("_")[0] for x in gt_df["id"].tolist()]
-            len_before = len(raw_dataset)
-            raw_dataset = raw_dataset.filter(lambda x: x["id"].split("_")[0] in gt_ids)
-            print(f"reduce to {len(raw_dataset)} / {len_before} examples")
+            len_before = len(ds)
+            ds = ds.filter(lambda x: x["id"].split("_")[0] in gt_ids)
+            print(f"reduce to {len(ds)} / {len_before} examples")
 
         # downsample if a downsampling size is provided
         if str(downsample_pt_size) != "None":
-            raw_dataset = raw_dataset.select(
-                range(ds_shift, ds_shift + int(downsample_pt_size))
-            )
+            ds = ds.select(range(ds_shift, ds_shift + int(downsample_pt_size)))
 
-        original_raw_dataset_len = len(raw_dataset)
-        ds = raw_dataset
+        original_raw_dataset_len = len(ds)
+        ds = ds
 
         # first pass
         print("m1 first pass...")
@@ -161,7 +163,9 @@ def main(
         elif masking_scheme == "randsentence":
             ds = randsentence_dataset(ds, m1, max_adversarial_examples)
         elif masking_scheme == "randdistsentence":
-            ds = adversarial_dataset(ds, m1, -1, max_adversarial_examples) # set drop thresh to -1 so no filtering happens
+            ds = randdist_dataset(
+                ds, m1, max_adversarial_examples
+            )  # set drop thresh to -1 so no filtering happens
 
     else:
         # Load dataset from cache
@@ -173,13 +177,13 @@ def main(
         # Drop columns pertaining to the previous M2, which are created after this point
         drop_cols = [
             "__index_level_0__",
-            "q2_bfsentence",
-            "a2_bfsentence",
-            "a2_is_correct_bfsentence",
-            "prepped_bfsentence_a2",
-            "m1_bfsentence_a2_gen",
-            "m1_bfsentence_a2_f1",
-            "m1_bfsentence_a2_em",
+            "q2_masked",
+            "a2_masked",
+            "a2_is_correct_masked",
+            "prepped_masked_a2",
+            "m1_masked_a2_gen",
+            "m1_masked_a2_f1",
+            "m1_masked_a2_em",
         ]  # needs fixing
         for col in drop_cols:
             if col in ds.column_names:
@@ -187,13 +191,29 @@ def main(
     # select only ground truth examples if we are doing analysis using the ground truth model
     if m2_arch == "gt":
         # gt_df = pd.read_csv("q2_gt_dataset.csv")
-        gt_qs = set(gt_df["prepped_bfdelsentence_None"].tolist())
+        # gt_qs = set(gt_df["prepped_bfdelsentence_None"].tolist())
+        gt_masked_sentences = set(gt_df["masked_sentence"].tolist())
         before_len = len(ds)
         # filter based on the question cuz i forgot to include the full id in the labeling doc
         # and it wouldn't be ideal anyway cuz of suffix inconsistency
-        ds = ds.filter(lambda example: example["prepped_bfdelsentence_None"] in gt_qs)
-        print(f"Reduced to {len(ds)} / {before_len} examples")
-        # assert len(ds) == 100, "ground truth dataset should probably be exactly 100"
+        # ds = ds.filter(lambda example: example["prepped_masked_None"] in gt_qs)
+        ds = ds.filter(lambda x: x["masked_sentence"] in gt_masked_sentences)
+        # select a random set of questions with one distractor added that match the annotated examples' masked sentences
+        # df = ds.to_pandas()
+        # pd.concat(list(x[1].head(1) for x in df.groupby("masked_sentence")))
+        # dist_ds = retroactively_add_distractors(ds)
+        print(len(set(ds["masked_sentence"])))
+        print(len(set(ds["distractor_sentence"])))
+        print(len(set(ds["id"])))
+        # get only the first example of each masked sentence
+        used = set()
+        relevant_examples = []
+        for i, x in tqdm(enumerate(ds)):
+            if x["masked_sentence"] not in used:
+                relevant_examples.append(x)
+                used.add(x["masked_sentence"])
+        ds = Dataset.from_pandas(pd.DataFrame(data=relevant_examples))
+        print
     if profile_only:
         df = pd.DataFrame(ds)
         df.to_csv(f"{downsample_pt_size}_profile.csv")
@@ -212,7 +232,7 @@ def main(
     ds = m2.process(
         ds,
         q1_col="q1",
-        masking_scheme=masking_scheme,
+        masking_scheme="masked",
     )
     # Save memory by moving m1 to CPU
     m1.model.cpu()
@@ -228,18 +248,14 @@ def main(
     oracle = Oracle(model_size=oracle_size, batch_size=oracle_eval_batch_size)
     # Answer questions with the oracle
     print("oracle...")
-    ds = oracle.process(ds, q2_masking_scheme=masking_scheme)
+    ds = oracle.process(ds, q2_masking_scheme="masked")
     oracle.model.cpu()
     torch.cuda.empty_cache()  # free up memory
-    # print("sleeping...")
-    # sleep(30)  # wait for memory to be freed
 
     # Bring back the primary model
     m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
     print("m1 second pass...")
-    ds, metrics["answered"] = m1.evaluate(
-        masking_scheme=masking_scheme, ds=ds, a2_col="a2"
-    )
+    ds, metrics["answered"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col="a2")
 
     # Analysis
     df = pd.DataFrame(ds)
@@ -250,7 +266,7 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}_{oracle_arch}_{template_id}.hd5",
+        f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{template_id}.hd5",
     )
     df.to_hdf(save_path, "ds")
     print(f"dataset saved to {save_path}")

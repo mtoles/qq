@@ -7,9 +7,16 @@ from tqdm import tqdm
 import pandas as pd
 
 from dataset_utils import combine_adversarial_ds
+from datasets.utils.logging import disable_progress_bar, enable_progress_bar
 
 # Maximum number of adversarial examples given each unique example id.
 # Masked examples and distracted examples are counted separately.
+col_name_map = {
+    "m1_bfdelsentence_None_gen": "m1_masked_None_gen",
+    "m1_bfdelsentence_None_f1": "m1_masked_None_f1",
+    "m1_bfdelsentence_None_em": "m1_masked_None_em",
+    "fc_bfdelsentence": "fc_masked",
+}
 
 
 def flatten_context(example, masking_scheme):
@@ -30,6 +37,7 @@ def add_flat_contexts(
     for masking_scheme in list(masking_schemes):
         masking_str = f"context_{masking_scheme}"
         # print(f"Flattening context {masking_scheme}...")
+        disable_progress_bar()
         flat_col = new_ds.map(
             lambda x: flatten_context(x, masking_scheme),
             cache_file_name=cache_file_name,
@@ -37,6 +45,7 @@ def add_flat_contexts(
         )[
             f"fc_{masking_scheme}"
         ]  # fc == flattened context
+        enable_progress_bar()
         if f"fc_{masking_scheme}" not in new_ds.column_names:
             new_ds = new_ds.add_column(name=f"fc_{masking_scheme}", column=flat_col)
         # new_ds = new_ds.remove_columns([f"context_{masking_scheme}"])
@@ -46,6 +55,7 @@ def add_flat_contexts(
     # TODO: the list of three should be removed and sent in the call
     for masking_scheme in list(masking_schemes):
         # masking_str = f"context_{masking_scheme}"
+        disable_progress_bar()
         new_ds = new_ds.map(
             lambda x: {
                 f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())
@@ -53,6 +63,7 @@ def add_flat_contexts(
             cache_file_name=cache_file_name,
             load_from_cache_file=load_from_cache,
         )
+        enable_progress_bar()
     # Rename Columns
     if "question" in new_ds.column_names:
         assert (
@@ -67,9 +78,7 @@ def add_flat_contexts(
     return new_ds
 
 
-def adversarial_dataset(
-    ds, m1, adversarial_drop_thresh, max_adversarial_examples
-):
+def adversarial_dataset(ds, m1, adversarial_drop_thresh, max_adversarial_examples):
     # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
     ds = ds.add_column(
         "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
@@ -77,9 +86,6 @@ def adversarial_dataset(
     ds = ds.add_column(
         "context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))]
     )
-
-    def pp(ds):
-        print(f"total: {len(ds)}, ids: {len(set(ds['id']))}")
 
     # masking
 
@@ -105,9 +111,7 @@ def adversarial_dataset(
         lambda x: x["m1_bfdelsentence_None_f1"] > adversarial_drop_thresh,
         load_from_cache_file=False,
     )  # filtering not technically necessary but speeds things up
-    mini_dss_bfaddsentence = bf_add_sentences(
-        ds_got_right_masked, "context_bfdelsentence"
-    )
+    mini_dss_bfaddsentence = bf_add_sentences(ds_got_right_masked)
 
     mini_dss = []
     # mini_dss_from_sup = []
@@ -155,7 +159,7 @@ def adversarial_dataset(
     before = len(ds_got_worse_with_bf_add_sentence)
     ds_got_worse_with_bf_add_sentence = ds_got_worse_with_bf_add_sentence.filter(
         lambda x: x["m1_suppbfaddsentence_None_f1"] - x["m1_bfaddsentence_None_f1"]
-        >= adversarial_drop_thresh
+        > adversarial_drop_thresh
     )
     print(
         f"filtered out {before - len(ds_got_worse_with_bf_add_sentence)} examples compared to supp+distractor"
@@ -240,7 +244,7 @@ def bf_del_sentences(ds):
     return new_ds
 
 
-def distract_bf_sentence(example, src_col):
+def distract_bf_sentence(example):
     # new_example = example.copy()
     new_examples = []
     n_distractors_sentences = len(example["context_distractor"]["sentences"])
@@ -292,20 +296,24 @@ def distract_bf_sentence(example, src_col):
     # these examples are derived
     bf_mini_dataset = bf_mini_dataset.remove_columns(
         [
-            "m1_bfdelsentence_None_gen",
-            "m1_bfdelsentence_None_f1",
-            "m1_bfdelsentence_None_em",
-            "prepped_bfdelsentence_None",
-            "fc_bfdelsentence",
+            x
+            for x in [
+                "m1_bfdelsentence_None_gen",
+                "m1_bfdelsentence_None_f1",
+                "m1_bfdelsentence_None_em",
+                "prepped_bfdelsentence_None",
+                "fc_bfdelsentence",
+            ]
+            if x in bf_mini_dataset.column_names
         ]
     )
     return bf_mini_dataset
 
 
-def bf_add_sentences(ds, src_col):
+def bf_add_sentences(ds):
     """Return a list of datasets where examples in each dataset have a different sentence masked.
     Every example in each dataset will have a different distractor sentence added"""
-    bf_mini_datasets = [distract_bf_sentence(example, src_col) for example in ds]
+    bf_mini_datasets = [distract_bf_sentence(example) for example in ds]
     # concatenate and merge dataset who share an id
     tmp_ds = concatenate_datasets(bf_mini_datasets)
     id_dict = dict()
@@ -317,7 +325,12 @@ def bf_add_sentences(ds, src_col):
         id_dict[id].append(example)
         return example
 
-    _ = tmp_ds.map(add_to_dict, batched=False)
+    disable_progress_bar()
+    _ = tmp_ds.map(
+        add_to_dict,
+        batched=False,
+    )
+    enable_progress_bar()
 
     output_dss = [Dataset.from_list(id_dict[id]) for id in id_dict]
     return output_dss
@@ -383,21 +396,71 @@ def randsentence_dataset(ds, m1, max_adversarial_examples):
     )
 
     # reduce to n=max_examples of each id
-    # df = pd.DataFrame(ds_got_worse_with_bf_add_sentence)
-    # df_list = list(x[1].head(max_adversarial_examples) for x in df.groupby("id"))
-    # df = pd.concat(df_list)
-    # output_ds = Dataset.from_pandas(df)
+    df = pd.DataFrame(ds_got_worse_with_bf_add_sentence)
+    df_list = list(x[1].head(max_adversarial_examples) for x in df.groupby("id"))
+    df = pd.concat(df_list)
+    output_ds = Dataset.from_pandas(df)
 
     # rename bfdelsentence -> bf_randsentence
-    col_name_map = {
-        "m1_bfdelsentence_None_gen": "m1_randsentence_None_gen",
-        "m1_bfdelsentence_None_f1": "m1_randsentence_None_f1",
-        "m1_bfdelsentence_None_em": "m1_randsentence_None_em",
-        "fc_bfdelsentence": "fc_randsentence",
-    }
+
     df = ds_got_worse_with_bf_add_sentence.to_pandas()
+    df.rename(columns=col_name_map, inplace=True)
     output_ds = df.rename(columns=col_name_map)
     output_ds = Dataset.from_pandas(output_ds)
+    return output_ds
+
+
+def randdist_dataset(ds, m1, max_adversarial_examples):
+    # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
+    ds = ds.add_column(
+        "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
+    )
+    ds = ds.add_column(
+        "context_bfaddsentence", [{"sentences": []} for _ in range(len(ds))]
+    )
+
+    # masking
+
+    ds_bfdelsentence = bf_del_sentences(ds)
+    # Don't run masking in adversarial mode so that we get a more
+    # even distribution once we run it again in distractor mode.
+    # print("m1 masking...")
+    # ds_bfdelsentence, _metrics = m1.evaluate(
+    #     masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
+    # )
+    # distracting
+
+    mini_dss_bfaddsentence = bf_add_sentences(ds_bfdelsentence)
+
+    ds_bfaddsentence = concatenate_datasets(mini_dss_bfaddsentence)
+
+    # reduce masked dataset to at most `adversarial_drop_thresh` examples of each `id`
+    # also drop examples where the delta between baseline and masked or distracted is less than adversarial_drop_thresh
+    # we do nothing with `ds_got_worse_with_bf_add_sentence` because it is already reduced
+    # in m1.evaluate
+    df = ds_bfaddsentence.to_pandas()
+    # df.rename(columns=col_name_map, inplace=True)
+    df.rename(
+        columns={
+            "fc_bfaddsentence": "fc_masked",
+            "context_bfaddsentence": "context_masked",
+        },
+        inplace=True,
+    )
+    # delete unused columns
+    df = df.drop(
+        columns=[
+            "fc_suppbfaddsentence",
+            "context_suppbfaddsentence",
+            "context_bfdelsentence",
+        ]
+    )
+    df_list = list(x[1].head(max_adversarial_examples) for x in df.groupby("id"))
+    df = pd.concat(df_list)
+    output_ds = Dataset.from_pandas(df)
+    output_ds, _metrics = m1.evaluate(
+        masking_scheme="masked", ds=output_ds, a2_col=None
+    )
     return output_ds
 
 
@@ -425,4 +488,11 @@ def reduce_to_n(
     df = pd.concat(df_list)
     ds = Dataset.from_pandas(df)
     ds = ds.remove_columns(["__index_level_0__", "delta", "rand"])
+    return ds
+
+
+def retroactively_add_distractors(ds):
+    ds = ds.add_column("context_bfdelsentence", ds["context_masked"])
+    ds = ds.add_column("context_bfaddsentence", [{"sentences": None} for _ in range(len(ds))])
+    ex = distract_bf_sentence(ds[0])
     return ds

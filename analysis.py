@@ -41,44 +41,33 @@ def main(hdfs_dir):
         df_raw = pd.read_hdf(hdf_ds_path, "ds")
         interesting_cols = [
             "id",
-            "prepped_bfsentence_None",
+            "prepped_masked_None",
             "masked_sentence",
             "a1",
-            "q2_bfsentence",
-            "a2_bfsentence",
-            "m1_bfsentence_None_f1",
-            "m1_bfsentence_a2_f1",
-            "a2_is_correct_bfsentence",
-            "m1_bfsentence_a2_gen",
+            "q2_masked",
+            "a2_masked",
+            "m1_masked_None_f1",
+            "m1_masked_a2_f1",
+            "a2_is_correct_masked",
+            "m1_masked_a2_gen",
         ]
         # df = df_raw[interesting_cols]
         df = df_raw
-        # rename randsentence col to bfsentence col
-        df.rename(
-            columns={
-                "prepped_randsentence_None": "prepped_bfsentence_None",
-                "q2_randsentence": "q2_bfsentence",
-                "a2_randsentence": "a2_bfsentence",
-                "m1_randsentence_None_f1": "m1_bfsentence_None_f1",
-                "m1_randsentence_a2_f1": "m1_bfsentence_a2_f1",
-                "a2_is_correct_randsentence": "a2_is_correct_bfsentence",
-                "m1_randsentence_a2_gen": "m1_bfsentence_a2_gen",
-            },
-            inplace=True,
-        )
-        df["did_improve"] = df["m1_bfsentence_None_f1"] < df["m1_bfsentence_a2_f1"]
-        df["wrong_answer_but_improved"] = (
-            df["a2_is_correct_bfsentence"] == False
-        ) & df["did_improve"]
-        df["delta_l"] = df["m1_bfsentence_a2_f1"] - df["m1_bfsentence_None_f1"]
+        # rename randsentence col to masked col
+
+        df["did_improve"] = df["m1_masked_None_f1"] < df["m1_masked_a2_f1"]
+        df["wrong_answer_but_improved"] = (df["a2_is_correct_masked"] == False) & df[
+            "did_improve"
+        ]
+        df["delta_l"] = df["m1_masked_a2_f1"] - df["m1_masked_None_f1"]
         # separate id from add/delete type
         # df["type"] = df["id"].apply(lambda x: x.split("_")[1][0])
         df["id"] = df["id"].apply(lambda x: x.split("_")[0])
         df["a2_is_masked_sentence"] = df.apply(
-            lambda x: x["masked_sentence"] in x["a2_bfsentence"], axis=1
+            lambda x: x["masked_sentence"] in x["a2_masked"], axis=1
         )
         # df["a2_type"] = df.apply(get_answer_type, axis=1)
-        df["a2_in_a1"] = df.apply(lambda x: x["a2_bfsentence"] in x["a1"], axis=1)
+        df["a2_in_a1"] = df.apply(lambda x: x["a2_masked"] in x["a1"], axis=1)
         num_questions = len(df)
         num_a2_is_masked_sentence = sum(df["a2_is_masked_sentence"])
         num_a2_is_distractor = num_questions - num_a2_is_masked_sentence
@@ -105,14 +94,12 @@ def main(hdfs_dir):
         print
 
         # reorder columns for saving df
-        first_cols = ["id", "q1", "a1", "masked_sentence", "fc_randsentence"]
+        first_cols = ["id", "q1", "a1", "masked_sentence", "fc_masked"]
         column_order = first_cols + [col for col in df.columns if col not in first_cols]
         df = df[column_order]
         # sample the df for gt annotation
         # save the df
-        df.sample(100).to_csv("gt_data/non_adversarial/gt_source_100.csv", index=False)
         print
-        
 
 
 def get_answer_type(example):
@@ -121,14 +108,15 @@ def get_answer_type(example):
     supporting = [item for sublist in supporting for item in sublist]
     distractor = example["context_distractor"]["sentences"]
     distractor = [item for sublist in distractor for item in sublist]
-    if example["a2_is_correct_bfsentence"]:
+    if example["a2_is_correct_masked"]:
         return "correct"
-    elif example["a2_bfsentence"] in supporting:
+    elif example["a2_masked"] in supporting:
         return "supporting"
-    elif example["a2_bfsentence"] in distractor:
+    elif example["a2_masked"] in distractor:
         return "distractor"
     else:
-        raise ValueError("a2_bfsentence not found in supporting or distractor")
+        raise ValueError("a2_masked not found in supporting or distractor")
+
 
 if __name__ == "__main__":
     main()
