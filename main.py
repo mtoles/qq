@@ -37,7 +37,7 @@ import os
     "--template_id",
     help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
 )
-@click.option("--oracle_arch", help="oracle architecture {t5, bloom}")
+@click.option("--oracle_arch", default="t5", help="oracle architecture {t5, bloom}")
 @click.option(
     "--oracle_size",
     help="oracle size, t5: {small, base, large, xl, xxl}, bloom: {560m, 1b1, 1b7, 3b, 7b1}",
@@ -144,7 +144,6 @@ def main(
             ds = ds.select(range(ds_shift, ds_shift + int(downsample_pt_size)))
 
         original_raw_dataset_len = len(ds)
-        ds = ds
 
         # first pass
         print("m1 first pass...")
@@ -270,7 +269,9 @@ def main(
     )
     df.to_hdf(save_path, "ds")
     print(f"dataset saved to {save_path}")
-    # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
+    # complete the metrics
+    metrics_df = df[["m1_masked_None_f1", "m1_masked_a2_f1", "m1_supporting_None_f1", "m1_masked_None_em", "m1_masked_a2_em", "m1_supporting_None_em"]].describe()
+    metrics_df.describe().to_csv(os.path.join(save_dir, results_filename+".csv"))
     # # print(metrics)
     # drop_cols = [
     #     "supporting_"

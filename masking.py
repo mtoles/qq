@@ -196,7 +196,7 @@ def adversarial_dataset(ds, m1, adversarial_drop_thresh, max_adversarial_example
     return output_ds
 
 
-def mask_bf_sentence(example):
+def mask_bf_sentence(example, do_single_example=False):
     # new_example = example.copy()
     new_examples = []
     # """Mask random useful sentence in example."""
@@ -210,9 +210,12 @@ def mask_bf_sentence(example):
             sentences
         ):  # actually len(sentences) = 1 so j is always 0
             fact_keys.append((i, j))
+    # shuffle the fact keys
+    random.shuffle(fact_keys)
 
     # create an example for each masked fact
-    for i in range(len(fact_keys)):
+    limit = 1 if do_single_example else len(fact_keys)
+    for i in range(limit):
         new_example = deepcopy(example)
         rand_keys = fact_keys[i]
         new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
@@ -237,14 +240,14 @@ def mask_bf_sentence(example):
     return bf_mini_dataset
 
 
-def bf_del_sentences(ds):
-    bf_mini_datasets = [mask_bf_sentence(example) for example in ds]
+def bf_del_sentences(ds, do_single_example=False):
+    bf_mini_datasets = [mask_bf_sentence(example, do_single_example) for example in ds]
     new_ds = concatenate_datasets(bf_mini_datasets)
     new_ds = add_flat_contexts(new_ds, ["bfdelsentence"], load_from_cache=False)
     return new_ds
 
 
-def distract_bf_sentence(example):
+def distract_bf_sentence(example, do_single_example):
     # new_example = example.copy()
     new_examples = []
     n_distractors_sentences = len(example["context_distractor"]["sentences"])
@@ -257,9 +260,15 @@ def distract_bf_sentence(example):
             sentences
         ):  # actually len(sentences) = 1 so j is always 0
             distractor_keys.append((i, j))
+    # shuffle the distractor keys
+    random.shuffle(distractor_keys)
 
     # create an example for each distractor
-    for i in range(len(distractor_keys)):
+    if do_single_example:
+        limit = 1
+    else:
+        limit = len(distractor_keys)
+    for i in range(limit):
         new_example = deepcopy(example)
         # delete the "fc_bfdelsentence" field since it will be out of date.
         # it will be added back byt he add_flat_contexts function
@@ -310,10 +319,14 @@ def distract_bf_sentence(example):
     return bf_mini_dataset
 
 
-def bf_add_sentences(ds):
+def bf_add_sentences(ds, do_single_example):
     """Return a list of datasets where examples in each dataset have a different sentence masked.
-    Every example in each dataset will have a different distractor sentence added"""
-    bf_mini_datasets = [distract_bf_sentence(example) for example in ds]
+    Every example in each dataset will have a different distractor sentence added. If `do_single_example`, run in non-brute force mode and only return a single distracted example
+    """
+    print("adding distractors...")
+    bf_mini_datasets = [
+        distract_bf_sentence(example, do_single_example) for example in tqdm(ds)
+    ]
     # concatenate and merge dataset who share an id
     tmp_ds = concatenate_datasets(bf_mini_datasets)
     id_dict = dict()
@@ -384,7 +397,7 @@ def randsentence_dataset(ds, m1, max_adversarial_examples):
     )
 
     # masking
-    ds_bfdelsentence = bf_del_sentences(ds)
+    ds_bfdelsentence = bf_del_sentences(ds, do_single_example=True)
 
     # evaluate the reference col
     ds_got_worse_with_bf_add_sentence, _metrics = m1.evaluate(
@@ -421,7 +434,7 @@ def randdist_dataset(ds, m1, max_adversarial_examples):
 
     # masking
 
-    ds_bfdelsentence = bf_del_sentences(ds)
+    ds_bfdelsentence = bf_del_sentences(ds, do_single_example=True)
     # Don't run masking in adversarial mode so that we get a more
     # even distribution once we run it again in distractor mode.
     # print("m1 masking...")
@@ -430,7 +443,7 @@ def randdist_dataset(ds, m1, max_adversarial_examples):
     # )
     # distracting
 
-    mini_dss_bfaddsentence = bf_add_sentences(ds_bfdelsentence)
+    mini_dss_bfaddsentence = bf_add_sentences(ds_bfdelsentence, do_single_example=True)
 
     ds_bfaddsentence = concatenate_datasets(mini_dss_bfaddsentence)
 
@@ -493,6 +506,8 @@ def reduce_to_n(
 
 def retroactively_add_distractors(ds):
     ds = ds.add_column("context_bfdelsentence", ds["context_masked"])
-    ds = ds.add_column("context_bfaddsentence", [{"sentences": None} for _ in range(len(ds))])
+    ds = ds.add_column(
+        "context_bfaddsentence", [{"sentences": None} for _ in range(len(ds))]
+    )
     ex = distract_bf_sentence(ds[0])
     return ds
