@@ -16,6 +16,7 @@ from secondary_model import (
 from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
 from time import sleep
+import numpy as np
 
 # from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 from masking import (
@@ -24,9 +25,11 @@ from masking import (
     randdist_dataset,
     retroactively_add_distractors,
 )
+from pathlib import PurePath
 import pandas as pd
 import os
 
+np.random.seed(42)
 
 @click.command()
 @click.option("--pt_dataset_path", help="path to primary task dataset")
@@ -52,7 +55,7 @@ import os
 )
 @click.option(
     "--max_adversarial_examples",
-    default=3,
+    default=1,
     help="create at most this many adversarial examples per example",
 )
 @click.option(
@@ -152,6 +155,7 @@ def main(
         )
         # select and mask examples where the primary
         if masking_scheme == "bfsentence":
+            raise NotImplementedError
             print("generating adversarial data...")
             ds = adversarial_dataset(
                 ds,
@@ -160,7 +164,8 @@ def main(
                 max_adversarial_examples,
             )
         elif masking_scheme == "randsentence":
-            ds = randsentence_dataset(ds, m1, max_adversarial_examples)
+            do_gt = m2_arch == "gt"
+            ds = randsentence_dataset(ds, m1, do_gt)
         elif masking_scheme == "randdistsentence":
             ds = randdist_dataset(
                 ds, m1, max_adversarial_examples
@@ -202,7 +207,7 @@ def main(
         # pd.concat(list(x[1].head(1) for x in df.groupby("masked_sentence")))
         # dist_ds = retroactively_add_distractors(ds)
         print(len(set(ds["masked_sentence"])))
-        print(len(set(ds["distractor_sentence"])))
+        # print(len(set(ds["distractor_sentence"])))
         print(len(set(ds["id"])))
         # get only the first example of each masked sentence
         used = set()
@@ -213,10 +218,6 @@ def main(
                 used.add(x["masked_sentence"])
         ds = Dataset.from_pandas(pd.DataFrame(data=relevant_examples))
         print
-    if profile_only:
-        df = pd.DataFrame(ds)
-        df.to_csv(f"{downsample_pt_size}_profile.csv")
-        quit()
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
@@ -265,13 +266,15 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{template_id}.hd5",
+        f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}.hd5",
     )
-    df.to_hdf(save_path, "ds")
-    print(f"dataset saved to {save_path}")
-    # complete the metrics
-    metrics_df = df[["m1_masked_None_f1", "m1_masked_a2_f1", "m1_supporting_None_f1", "m1_masked_None_em", "m1_masked_a2_em", "m1_supporting_None_em"]].describe()
-    metrics_df.describe().to_csv(os.path.join(save_dir, results_filename+".csv"))
+    desrcribe_path = PurePath(save_path+"_"+str(datetime.now())).with_suffix(".csv")
+    describe_df = df[["m1_supporting_None_f1", "m1_masked_None_f1", "m1_masked_a2_f1", "m1_supporting_None_em", "m1_masked_None_em", "m1_masked_a2_em", "a2_is_correct_masked"]].astype(float).describe()
+    describe_df.to_csv(desrcribe_path)
+
+    # df.to_hdf(save_path, "ds")
+    # print(f"dataset saved to {save_path}")
+    # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
     # # print(metrics)
     # drop_cols = [
     #     "supporting_"
