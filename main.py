@@ -167,6 +167,7 @@ def main(
             do_gt = m2_arch == "gt"
             ds = randsentence_dataset(ds, m1, do_gt)
         elif masking_scheme == "randdistsentence":
+            raise NotImplementedError
             ds = randdist_dataset(
                 ds, m1, max_adversarial_examples
             )  # set drop thresh to -1 so no filtering happens
