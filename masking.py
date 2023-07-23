@@ -5,9 +5,11 @@ from datasets import Dataset, concatenate_datasets
 from tqdm import tqdm
 
 import pandas as pd
+import numpy as np
 
 from dataset_utils import combine_adversarial_ds
 from datasets.utils.logging import disable_progress_bar, enable_progress_bar
+
 
 # Maximum number of adversarial examples given each unique example id.
 # Masked examples and distracted examples are counted separately.
@@ -377,36 +379,43 @@ def split_distractor(example):
     return new_example
 
 
-def randsentence_dataset(ds, m1, max_adversarial_examples):
+def randsentence_dataset(ds, m1, do_gt):
     # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
     ds = ds.add_column(
         "context_bfdelsentence", [{"sentences": []} for _ in range(len(ds))]
     )
 
     # masking
-    ds_bfdelsentence = bf_del_sentences(ds)
+    # mask one random sentence from each example
 
-    # evaluate the reference col
-    ds_got_worse_with_bf_add_sentence, _metrics = m1.evaluate(
-        masking_scheme="bfdelsentence",
-        ds=ds_bfdelsentence,
-        a2_col=None,
-        max_adversarial_examples=max_adversarial_examples,
-        threshold=-1,
+    if do_gt:
+        bf_mini_datasets = [
+            mask_bf_sentence(example).shuffle(seed=0) for example in ds
+        ]
+    else:
+        bf_mini_datasets = [
+            mask_bf_sentence(example).shuffle(seed=0).select([0]) for example in ds
+        ]
+    ds_delsentence = concatenate_datasets(bf_mini_datasets)
+    ds_delsentence = add_flat_contexts(
+        ds_delsentence, ["bfdelsentence"], load_from_cache=False
     )
 
-    # reduce to n=max_examples of each id
-    df = pd.DataFrame(ds_got_worse_with_bf_add_sentence)
-    df_list = list(x[1].head(max_adversarial_examples) for x in df.groupby("id"))
-    df = pd.concat(df_list)
-    output_ds = Dataset.from_pandas(df)
+    # evaluate the reference col
+    output_ds, _metrics = m1.evaluate(
+        masking_scheme="bfdelsentence",
+        ds=ds_delsentence,
+        a2_col=None,
+        # max_adversarial_examples=max_adversarial_examples,
+        # threshold=-1,
+    )
 
     # rename bfdelsentence -> bf_randsentence
 
-    df = ds_got_worse_with_bf_add_sentence.to_pandas()
-    df.rename(columns=col_name_map, inplace=True)
-    output_ds = df.rename(columns=col_name_map)
-    output_ds = Dataset.from_pandas(output_ds)
+    # df = output_ds.to_pandas()
+    # df.rename(columns=col_name_map, inplace=True)
+    for k, v in col_name_map.items():
+        output_ds = output_ds.rename_column(k, v)
     return output_ds
 
 
@@ -493,6 +502,8 @@ def reduce_to_n(
 
 def retroactively_add_distractors(ds):
     ds = ds.add_column("context_bfdelsentence", ds["context_masked"])
-    ds = ds.add_column("context_bfaddsentence", [{"sentences": None} for _ in range(len(ds))])
+    ds = ds.add_column(
+        "context_bfaddsentence", [{"sentences": None} for _ in range(len(ds))]
+    )
     ex = distract_bf_sentence(ds[0])
     return ds

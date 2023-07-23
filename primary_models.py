@@ -229,6 +229,7 @@ class T5_PM(Primary_Model):
                 not max_adversarial_examples and not threshold
             ), "Must specify both max_adversarial_examples and threshold (adversarial mode) or neither (normal mode)"
             adversarial_mode = max_adversarial_examples is not None
+            assert adversarial_mode == False, "Adversarial mode no longer supported. Change your inputs such that you are no longer in adversarial mode."
             # adversarial_mode = False
             # If in adversarial mode, shuffle the dataset to remove biases
             if adversarial_mode:
@@ -255,10 +256,10 @@ class T5_PM(Primary_Model):
 
             num_adversarial_examples = 0
             # only use tqdm if not in adversarial mode
-            if adversarial_mode:
-                it = range(num_batches)
-            else:
-                it = tqdm(range(num_batches))
+            # if adversarial_mode:
+            #     it = range(num_batches)
+            # else:
+            it = tqdm(range(num_batches))
             # it = tqdm(range(num_batches))
             for batch_idx in it:
                 start_idx = batch_idx * self.batch_size
