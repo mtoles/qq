@@ -236,7 +236,8 @@ def main(
         masking_scheme="masked",
     )
     # Save memory by moving m1 to CPU
-    m1.model.cpu()
+    if m1.model == T5ForConditionalGeneration:
+        m1.model.cpu()
     # del m1
     torch.cuda.empty_cache()  # free up memory
     # Create the oracle
