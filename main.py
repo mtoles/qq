@@ -31,6 +31,7 @@ import os
 
 np.random.seed(42)
 
+
 @click.command()
 @click.option("--pt_dataset_path", help="path to primary task dataset")
 @click.option("--m1_path", help="path to primary model")
@@ -123,9 +124,6 @@ def main(
     now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
         results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
-
-    # assert m2_arch in (["repeater", "openai", "gt"]) or (m2_arch.starts)
-    # assert oracle_arch.startswith("t5") or oracle_arch == "dummy"
 
     # Evaluate the primary model
     m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
@@ -241,9 +239,9 @@ def main(
     # del m1
     torch.cuda.empty_cache()  # free up memory
     # Create the oracle
-    oracle_name = f"{oracle_arch}-{oracle_size}"
     Oracle = {
         "t5": T5_Bool_Oracle,
+        "openai": OpenAI_Oracle,
         # "bloom": Bloom_Bool_Oracle,
         # "dolly": Dolly_Bool_Oracle,
     }[oracle_arch]
@@ -251,7 +249,8 @@ def main(
     # Answer questions with the oracle
     print("oracle...")
     ds = oracle.process(ds, q2_masking_scheme="masked")
-    oracle.model.cpu()
+    if m1.model == T5ForConditionalGeneration:
+        oracle.model.cpu()
     torch.cuda.empty_cache()  # free up memory
 
     # Bring back the primary model
@@ -270,19 +269,34 @@ def main(
         save_dir,
         f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}.hd5",
     )
-    desrcribe_path = PurePath(save_path+"_"+str(datetime.now())).with_suffix(".csv")
-    describe_df = df[["m1_supporting_None_f1", "m1_masked_None_f1", "m1_masked_a2_f1", "m1_supporting_None_em", "m1_masked_None_em", "m1_masked_a2_em", "a2_is_correct_masked"]].astype(float).describe()
+    desrcribe_path = PurePath(save_path + "_" + str(datetime.now())).with_suffix(".csv")
+    describe_df = (
+        df[
+            [
+                "m1_supporting_None_f1",
+                "m1_masked_None_f1",
+                "m1_masked_a2_f1",
+                "m1_supporting_None_em",
+                "m1_masked_None_em",
+                "m1_masked_a2_em",
+                "a2_is_correct_masked",
+            ]
+        ]
+        .astype(float)
+        .describe()
+    )
     describe_df.to_csv(desrcribe_path)
 
-    # df.to_hdf(save_path, "ds")
-    # print(f"dataset saved to {save_path}")
+    df.to_hdf(save_path, "ds")
+    print(f"dataset saved to {save_path}")
     # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
-    # # print(metrics)
-    # drop_cols = [
-    #     "supporting_"
-    # ]
+    # print(metrics)
+    drop_cols = [
+        "supporting_"
+    ]
 
-    # df.to_csv(f"analysis_dataset_{len(raw_dataset)}_{m1_arch}.csv")
+    df.to_csv(f"analysis_dataset_{len(df)}_{m1_arch}.csv")
+    print
 
 
 if __name__ == "__main__":
