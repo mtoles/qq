@@ -1,6 +1,10 @@
-from transformers import AutoTokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, T5ForConditionalGeneration, AutoModelForCausalLM
 import torch
 import math
+import random
+import openai
+import time
+import string
 
 from metrics import get_metrics
 from prepare_data import prepare_inputs_hp
@@ -29,98 +33,16 @@ class Oracle:
         print("subclass this method")
 
 
-# class T5_Gen_Oracle(Oracle):
-#     def __init__(
-#         self,
-#         model_name,
-#         batch_size=1,
-#         # raw_val_dataset=None,
-#     ):
-#         self.model_name = model_name
-#         self.batch_size = batch_size
-#         self.model_name = f"google/flan-{self.model_name}"
-#         self.tk = AutoTokenizer.from_pretrained(
-#             self.model_name, cache_dir="./.model_cache"
-#         )
-#         self.model = T5ForConditionalGeneration.from_pretrained(
-#             self.model_name, cache_dir="./.model_cache"
-#         ).cuda()
-#         self.model.eval()
-
-#     def forward(self, example, q2_masking_scheme):
-#         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
-#         with torch.no_grad():
-#             q2 = example[f"q2_{q2_masking_scheme}"]
-#             masked_sentence = example["masked_sentence"]
-#             # Build the corpus
-#             # First answer is correct. The rest are distractor.
-#             corpus_strs = masked_sentence + [
-#                 distractor
-#                 for sublist in example["context_distractor"][0]["sentences"]
-#                 for distractor in sublist
-#             ]
-#             corpus_ids = self.tk(corpus_strs, return_tensors="pt", padding=True)[
-#                 "input_ids"
-#             ].cuda()
-#             max_answer_len = max([len(x) for x in corpus_ids])
-#             c = len(corpus_strs)
-
-#             prompt_encoding = self.tk(q2, return_tensors="pt", padding=True)
-#             input_ids = prompt_encoding.input_ids.cuda().repeat(c, 1)
-#             input_attention_masks = (
-#                 prompt_encoding.attention_mask.cuda().repeat(c, 1),
-#             )
-
-#             # copy input_ids for each possible answer
-#             label_encoding = self.tk(corpus_strs, return_tensors="pt", padding=True)
-#             label_ids, label_attention_masks = (
-#                 label_encoding.input_ids.cuda(),
-#                 label_encoding.attention_mask.cuda(),
-#             )
-
-#             # process logits in batches
-#             num_batches = math.ceil(c / self.batch_size)
-#             probs = []
-#             for i in range(num_batches):
-#                 start = i * self.batch_size
-#                 end = min((i + 1) * self.batch_size, c)
-#                 batch_logits = self.model(
-#                     input_ids=input_ids[start:end], labels=label_ids[start:end]
-#                 ).logits
-#                 batch_prob = (
-#                     batch_logits.softmax(dim=2)
-#                     .view((end - start) * max_answer_len, -1)[
-#                         torch.arange((end - start) * max_answer_len),
-#                         label_ids[start:end].flatten(),
-#                     ]
-#                     .view(end - start, -1)
-#                     .log()
-#                     .mul(label_attention_masks[start:end])
-#                     .sum(dim=1)
-#                 )
-#                 probs.append(batch_prob)
-
-#             probs = torch.cat(probs, dim=0)
-
-#             best_index = probs.argmax()
-
-#             oracle_answer = corpus_strs[best_index]
-#             oracle_answer_is_correct = bool(best_index == 0)
-#             example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
-#             example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
-#             return example
-
-
 class T5_Bool_Oracle(Oracle):
     def __init__(
         self,
-        model_name,
+        model_size,
         batch_size,
         # raw_val_dataset=None,
     ):
-        self.model_name = model_name
         self.batch_size = batch_size
-        self.model_name = f"google/flan-{self.model_name}"
+        self.model_size = model_size
+        self.model_name = f"google/flan-t5-{self.model_size}"
         self.tk = AutoTokenizer.from_pretrained(
             self.model_name, cache_dir="./.model_cache"
         )
@@ -143,14 +65,23 @@ class T5_Bool_Oracle(Oracle):
             #     for distractor in sublist
             # ]
             cs_template = "%s: %s"
-            corpus_strs = [cs_template % (masked_sentence_title, masked_sentence)]  # make sure a2 is always at index 0
+            corpus_strs = [
+                cs_template % (masked_sentence_title, masked_sentence)
+            ]  # make sure a2 is always at index 0
+            # add distractors
             for i, sublist in enumerate(example["context_distractor"][0]["sentences"]):
                 for distractor in sublist:
                     title = example["context_None"][0]["title"][i]
-                    # corpus_str = f"{title}: {distractor}"
-                    corpus_str = cs_template % (title, distractor)
+                    # corpus_str = cs_template % (title, distractor)
+                    corpus_str = distractor
                     corpus_strs.append(corpus_str)
-
+            # add supporting facts
+            for i, sublist in enumerate(example["context_supporting"][0]["sentences"]):
+                for supporting in sublist:
+                    title = example["context_None"][0]["title"][i]
+                    # corpus_str = cs_template % (title, supporting)
+                    corpus_str = supporting
+                    corpus_strs.append(corpus_str)
             input_strs = [
                 f"question: {q2}\ncontext: {cs}\nprompt: Does the context answer the question, yes or no?"
                 for cs in corpus_strs
@@ -167,7 +98,9 @@ class T5_Bool_Oracle(Oracle):
             label_encoding = self.tk(label_strs, return_tensors="pt", padding=True)
             max_answer_len = 1  # must change if label_strs is edited
             label_ids = label_encoding.input_ids[:, :-1].cuda()
-            label_attention_masks = label_encoding.attention_mask[:, :-1].cuda()
+            label_attention_masks = label_encoding.attention_mask[
+                :, :-1
+            ].cuda()  # different from bloom
 
             # process logits in batches
             num_batches = math.ceil(c / self.batch_size)
@@ -190,43 +123,100 @@ class T5_Bool_Oracle(Oracle):
             probs = torch.cat(probs, dim=0)
 
             best_index = probs[:, 0].argmax()
-
+            best_prob = probs[:, 0].max()
+            # always answer mode
             oracle_answer = corpus_strs[best_index]
             oracle_answer_is_correct = bool(best_index == 0)
+
             example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
             example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
             return example
 
 
-# class Word_Overlap_Oracle(Oracle):
-#     def __init__(self, eval_batch_size=1):
-#         self.eval_batch_size = eval_batch_size
+class OpenAI_Oracle(Oracle):
+    def __init__(self, model_size, batch_size):
+        # model_size and batch_size are unused but are here for compatibility with T5_Oracle
+        self.model_name = "chatGPT"
+        self.model = "gpt-3.5-turbo"
 
-#     def forward(self, example, q2_masking_scheme):
-#         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
-#         with torch.no_grad():
-#             q2 = example[f"q2_{q2_masking_scheme}"][0]  # assume batch size 1
-#             masked_sentence = example["masked_sentence"]
-#             # Build the corpus
-#             # First answer is correct. The rest are distractor.
-#             corpus_strs = masked_sentence + [
-#                 distractor
-#                 for sublist in example["context_distractor"][0]["sentences"]
-#                 for distractor in sublist
-#             ]
+    def forward(self, example, q2_masking_scheme):
+        q2 = example[f"q2_{q2_masking_scheme}"][0]
+        masked_sentence = example["masked_sentence"][0]
+        masked_sentence_title = example["masked_sentence_title"][0]
+        # Build the corpus
+        # First answer is correct. The rest are distractor.
+        cs_template = "%s: %s"
+        corpus_strs = [
+            cs_template % (masked_sentence_title, masked_sentence)
+        ]  # make sure a2 is always at index 0
+        # add distractors
+        for i, sublist in enumerate(example["context_distractor"][0]["sentences"]):
+            for distractor in sublist:
+                title = example["context_None"][0]["title"][i]
+                # corpus_str = cs_template % (title, distractor)
+                corpus_str = distractor
+                corpus_strs.append(corpus_str)
+        # add supporting facts
+        for i, sublist in enumerate(example["context_supporting"][0]["sentences"]):
+            for supporting in sublist:
+                title = example["context_None"][0]["title"][i]
+                # corpus_str = cs_template % (title, supporting)
+                corpus_str = supporting
+                corpus_strs.append(corpus_str)
+        input_strs = [
+            f"question: {q2}\ncontext: {cs}\nprompt: Does the context answer the question, yes or no?"
+            for cs in corpus_strs
+        ]
+        ### end copy paste from the other oracle ###
 
-#             def _bow_f1(a: str, b: str):
-#                 a = set(a.split()) - sw_set
-#                 b = set(b.split()) - sw_set
-#                 # drop stop words from a and b
+        # shuffle the strings to remove possible bias from ChatGPT
+        # but remember the place where the correct answer is
+        correct_answer = corpus_strs[0]
+        random.shuffle(corpus_strs)
+        correct_index = corpus_strs.index(correct_answer)
 
-#                 return 2 * len(a & b) / (len(a) + len(set(b)))
+        answers_block = ""
+        for i, cs in enumerate(corpus_strs):
+            answers_block += f"{i}. {cs}\n"
 
-#             f1_scores = [_bow_f1(q2, a) for a in corpus_strs]
-#             best_index = f1_scores.index(max(f1_scores))
+        prompt = f"Question: {q2}\n\n{answers_block}\n\nWhich answer is correct? Only say the number of the answer, nothing else."
 
-#             oracle_answer = corpus_strs[best_index]
-#             oracle_answer_is_correct = bool(best_index == 0)
-#             example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
-#             example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
-#             return example
+        def call_oai_api(prompt):
+            while True:
+                try:
+                    response = openai.ChatCompletion.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "user", "content": prompt},
+                        ],
+                    )
+                    break
+                except Exception as e:
+                    print(e)
+                    print("Retrying...")
+                    # pause a second
+                    time.sleep(1)
+                    continue
+
+            a1 = response["choices"][0]["message"]["content"].strip()
+            self.oai_model_id = response.model
+            idx = f"{self.oai_model_id} {prompt}"
+            return a1
+
+        generation = call_oai_api(prompt)
+        # strip punctuation from generation
+        generation = "".join(
+            char for char in generation if char in string.digits
+        )
+        generation_idx = None
+        try:
+            generation_idx = int(generation)
+            assert generation_idx < len(corpus_strs)
+        except (ValueError, AssertionError):
+            print("OpenAI returned a non-integer answer. Returning random index.")
+            generation_idx = random.randint(0, len(corpus_strs) - 1)
+        oracle_answer = corpus_strs[generation_idx]
+        oracle_answer_is_correct = bool(generation_idx == correct_index)
+        example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
+        example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
+        return example

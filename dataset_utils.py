@@ -146,16 +146,16 @@ def combine_adversarial_ds(ds_add: Dataset, ds_del: Dataset) -> Dataset:
     # df_add["masked_sentence"] = ["" for _ in range(len(df_add))]
     df_del["distractor_sentence"] = ["" for _ in range(len(df_del))]
     col_name_map = {
-        "m1_bfaddsentence_None_gen": "m1_bfsentence_None_gen",
-        "m1_bfdelsentence_None_gen": "m1_bfsentence_None_gen",
-        "prepped_bfaddsentence_None": "prepped_bfsentence_None",
-        "prepped_bfdelsentence_None": "prepped_bfsentence_None",
-        "fc_bfdelsentence": "fc_bfsentence",
-        "fc_bfaddsentence": "fc_bfsentence",
-        "m1_bfaddsentence_None_f1": "m1_bfsentence_None_f1",
-        "m1_bfdelsentence_None_f1": "m1_bfsentence_None_f1",
-        "m1_bfaddsentence_None_em": "m1_bfsentence_None_em",
-        "m1_bfdelsentence_None_em": "m1_bfsentence_None_em",
+        "m1_bfaddsentence_None_gen": "m1_masked_None_gen",
+        "m1_bfdelsentence_None_gen": "m1_masked_None_gen",
+        "prepped_bfaddsentence_None": "prepped_masked_None",
+        "prepped_bfdelsentence_None": "prepped_masked_None",
+        "fc_bfdelsentence": "fc_masked",
+        "fc_bfaddsentence": "fc_masked",
+        "m1_bfaddsentence_None_f1": "m1_masked_None_f1",
+        "m1_bfdelsentence_None_f1": "m1_masked_None_f1",
+        "m1_bfaddsentence_None_em": "m1_masked_None_em",
+        "m1_bfdelsentence_None_em": "m1_masked_None_em",
     }
 
     df_del = df_del.rename(columns=col_name_map)

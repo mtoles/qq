@@ -6,6 +6,7 @@ import openai
 import configparser
 import os
 import h5py
+import time
 from tqdm import tqdm
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForCausalLM
 
@@ -229,15 +230,10 @@ class OpenAI_Secondary_Model(Secondary_Model):
         pass
 
     def forward(self, example, question_col, context_col):
+        idx = None
+
         def call_oai_api(prompt):
-            try:
-                response = openai.ChatCompletion.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "user", "content": prompt},
-                    ],
-                )
-            except Exception as e:
+            while True:
                 try:
                     response = openai.ChatCompletion.create(
                         model=self.model,
@@ -245,41 +241,45 @@ class OpenAI_Secondary_Model(Secondary_Model):
                             {"role": "user", "content": prompt},
                         ],
                     )
+                    break
                 except Exception as e:
-                    try:
-                        response = openai.ChatCompletion.create(
-                            model=self.model,
-                            messages=[
-                                {"role": "user", "content": prompt},
-                            ],
-                        )
-                    except Exception as e:
-                        print(f"OpenAI API call failed: {e}")
-                        return "OpenAI API call failed"
+                    print(e)
+                    print("Retrying...")
+                    # pause a second
+                    time.sleep(1)
+                    continue
+
             q2 = response["choices"][0]["message"]["content"].strip()
             self.oai_model_id = response.model
             idx = f"{self.oai_model_id} {prompt}"
             # Cache the response in ram
-            new_line = pd.DataFrame(columns=["response"], index=[idx], data=[q2])
-            self.cache_df = pd.concat([self.cache_df, new_line])
-            new_line.to_csv(self.cache_path, mode="a", header=False, escapechar="🦆")
+            if idx in self.cache_df.index:
+                self.cache_df.loc[idx, "response"] = q2
+                self.cache_df.to_csv(self.cache_path)
+            else:
+                new_line = pd.DataFrame(columns=["response"], index=[idx], data=[q2])
+                self.cache_df = pd.concat([self.cache_df, new_line])
+                new_line.to_csv(self.cache_path, mode="a", header=False, escapechar="🦆")
             return q2
 
-        # If we don't yet know the current OpenAi model id, get it
         q1 = example[question_col]
         context = example[context_col]
         # prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
         prompt = self.template.format(context=context, q1=q1)
 
-        if self.oai_model_id is not None:
-            idx = f"{self.oai_model_id} {prompt}"
-        else:
-            return call_oai_api(prompt)
-        # Check if the response is cached
-        if idx in self.cache_df.index and self.oai_model_id is not None:
-            return self.cache_df.loc[idx, "response"]
-        else:
-            return call_oai_api(prompt)
+        # if self.oai_model_id is not None:
+        #     idx = f"{self.oai_model_id} {prompt}"
+        # else:
+        #     # Check if the response is cached
+        #     # If not, call the API to get the model id
+        #     output = call_oai_api(prompt)
+        # if idx in self.cache_df.index and self.oai_model_id is not None:
+        #     output = self.cache_df.loc[idx, "response"]
+        # else:
+        #     output = call_oai_api(prompt)
+        output = call_oai_api(prompt)
+        # assert type(output) == str, f"OpenAI API call failed: {output}"
+        return output
 
     def process(self, ds, q1_col, masking_scheme):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
@@ -292,7 +292,7 @@ class OpenAI_Secondary_Model(Secondary_Model):
 
         ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
         # for i in tqdm(range(len(ds))):
-        #     ds[i] = _add_q2(ds[i])
+        #     _add_q2(ds[i])  # debugging
         ds = ds.map(
             lambda x: _add_q2(x),
             load_from_cache_file=False,
@@ -311,7 +311,7 @@ class Gt_Secondary_Model(Secondary_Model):
         # Always return the original question q1
         id = example["id"].split("_")[0]
         if id in self.gt_df["id"].values:
-            gt_q2 = self.gt_df[self.gt_df["id"] == id]["gt_q2"].values[0]
+            gt_q2 = self.gt_df[self.gt_df["id"] == id]["q2_gt"].values[0]
             if gt_q2 is not np.nan:
                 return gt_q2
             else:

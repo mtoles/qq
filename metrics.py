@@ -22,11 +22,6 @@ def compute_metrics_bb(x, tk, log_path):
     metrics = get_metrics(
         str_pred,
         str_gt,
-        cls_pred,
-        cls_gt,
-        input_ids,
-        tk,
-        log_path,
     )
     return metrics
 
@@ -34,11 +29,6 @@ def compute_metrics_bb(x, tk, log_path):
 def get_metrics(
     str_pred,
     str_gt,
-    cls_pred,
-    cls_gt,
-    input_ids,
-    tk,
-    log_path,
 ):
     matches = []
     f1s = []
@@ -48,11 +38,6 @@ def get_metrics(
         m, f, p, r = get_metrics_single(
             str_pred=str_pred[i],
             str_gt=str_gt[i],
-            tk=tk,
-            cls_pred=cls_pred[i],
-            cls_gt=cls_gt[i],
-            input_ids=input_ids[i],
-            log_path=log_path,
         )
         matches.append(m)
         f1s.append(f)
@@ -69,66 +54,7 @@ def get_metrics(
 def get_metrics_single(
     str_pred,
     str_gt,
-    tk,
-    cls_pred=None,
-    cls_gt=None,
-    input_ids=None,
-    log_path=None,
 ):
-    # if cls_pred is not None:
-    #     cat_pred = INVERSE_CATEGORY_MAPPING[cls_pred.item()]
-    #     # get ground truth answers
-    #     category = INVERSE_CATEGORY_MAPPING[cls_gt]
-    #     if category in ["yes", "no"]:
-    #         answer_gt = category
-    #         answer_gt_expanded = set([category])
-    #     # get predicted answers
-    #     if cat_pred in ["yes", "no"]:
-    #         str_pred = cat_pred
-
     match = str_pred == str_gt
     f1, precision, recall = f1_score(str_pred, str_gt)
-    if log_path is not None:
-        log_results(
-            str_pred,
-            str_gt,
-            cls_pred,
-            cls_gt,
-            match,
-            f1,
-            precision,
-            recall,
-            input_ids,
-            tk,
-            log_path,
-        )
     return match, f1, precision, recall
-
-
-def log_results(
-    str_pred,
-    str_gt,
-    cls_pred,
-    cls_gt,
-    match,
-    f1,
-    precision,
-    recall,
-    input_ids,
-    tk,
-    log_path,
-):
-    context = tk.decode(input_ids)
-    log_entry = f"""{context}
-answer: {str_pred}
-prediction: {str_gt}
-cls_pred: {cls_pred}
-cls_gt: {cls_gt}
-match: {match}
-f1: {str(f1)[:5]}
-precision: {str(precision)[:5]}
-recall: {str(recall)[:5]}
-======================================
-"""
-    with open(log_path, "a") as f:
-        f.write(log_entry)
