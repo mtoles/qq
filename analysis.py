@@ -56,6 +56,8 @@ def main(hdfs_dir):
         # rename randsentence col to masked col
 
         df["did_improve"] = df["m1_masked_None_f1"] < df["m1_masked_a2_f1"]
+        df["got_worse"] = df["m1_masked_None_f1"] > df["m1_masked_a2_f1"]
+        df["stayed_same"] = df["m1_masked_None_f1"] == df["m1_masked_a2_f1"]
         df["wrong_answer_but_improved"] = (df["a2_is_correct_masked"] == False) & df[
             "did_improve"
         ]
@@ -74,20 +76,26 @@ def main(hdfs_dir):
         num_masked_sentence_improved = sum(
             df["a2_is_masked_sentence"] & df["did_improve"]
         )
-        num_masked_sentence_not_improved = sum(
-            df["a2_is_masked_sentence"] & ~df["did_improve"]
+        num_masked_sentence_stayed_same = sum(
+            df["a2_is_masked_sentence"] & df["stayed_same"]
+        )
+        num_masked_sentence_got_worse = sum(
+            df["a2_is_masked_sentence"] & df["got_worse"]
         )
         num_distractor_improved = sum(~df["a2_is_masked_sentence"] & df["did_improve"])
-        num_distractor_not_improved = sum(
-            ~df["a2_is_masked_sentence"] & ~df["did_improve"]
+        num_distractor_stayed_same = sum(
+            ~df["a2_is_masked_sentence"] & df["stayed_same"]
         )
+        num_distractor_got_worse = sum(~df["a2_is_masked_sentence"] & df["got_worse"])
         print(f"num_questions: {num_questions}")
         print(f"num_a2_is_masked_sentence: {num_a2_is_masked_sentence}")
         print(f"num_a2_is_distractor: {num_a2_is_distractor}")
         print(f"num_masked_sentence_improved: {num_masked_sentence_improved}")
-        print(f"num_masked_sentence_not_improved: {num_masked_sentence_not_improved}")
+        print(f"num_masked_sentence_stayed_same: {num_masked_sentence_stayed_same}")
+        print(f"num_masked_sentence_got_worse: {num_masked_sentence_got_worse}")
         print(f"num_distractor_improved: {num_distractor_improved}")
-        print(f"num_distractor_not_improved: {num_distractor_not_improved}")
+        print(f"num_distractor_stayed_same: {num_distractor_stayed_same}")
+        print(f"num_distractor_got_worse: {num_distractor_got_worse}")
         print(hdf_ds_path)
         print(f"delta l: {df['delta_l'].mean()}")
         # print(f"percent improved: {sum(df['did_improve']) / len(df)}")
