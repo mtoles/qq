@@ -72,16 +72,18 @@ class T5_Bool_Oracle(Oracle):
             for i, sublist in enumerate(example["context_distractor"][0]["sentences"]):
                 for distractor in sublist:
                     title = example["context_None"][0]["title"][i]
-                    # corpus_str = cs_template % (title, distractor)
-                    corpus_str = distractor
+                    corpus_str = cs_template % (title, distractor)
+                    # corpus_str = distractor
                     corpus_strs.append(corpus_str)
             # add supporting facts
             for i, sublist in enumerate(example["context_supporting"][0]["sentences"]):
                 for supporting in sublist:
                     title = example["context_None"][0]["title"][i]
-                    # corpus_str = cs_template % (title, supporting)
-                    corpus_str = supporting
-                    corpus_strs.append(corpus_str)
+                    corpus_str = cs_template % (title, supporting)
+                    # corpus_str = supporting
+                    if corpus_str != masked_sentence:
+                        corpus_strs.append(corpus_str)
+            # drop the masked sentence from corpus_strs
             input_strs = [
                 f"question: {q2}\ncontext: {cs}\nprompt: Does the context answer the question, yes or no?"
                 for cs in corpus_strs
