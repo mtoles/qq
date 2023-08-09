@@ -211,7 +211,7 @@ def main(
         masking_scheme="masked",
     )
     # Save memory by moving m1 to CPU
-    if m1.model == T5ForConditionalGeneration:
+    if type(m1.model) == T5ForConditionalGeneration:
         m1.model.cpu()
     # del m1
     torch.cuda.empty_cache()  # free up memory
@@ -226,7 +226,7 @@ def main(
     # Answer questions with the oracle
     print("oracle...")
     ds = oracle.process(ds, q2_masking_scheme="masked")
-    if m1.model == T5ForConditionalGeneration:
+    if type(m1.model) == T5ForConditionalGeneration:
         oracle.model.cpu()
     torch.cuda.empty_cache()  # free up memory
 
