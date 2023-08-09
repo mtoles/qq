@@ -11,7 +11,14 @@ pd.options.mode.chained_assignment = None  # default='warn'
     "--hdfs_dir",
     help="Path to cached dataset file generated at end of main.py",
 )
-def main(hdfs_dir):
+@click.option(
+    "--gt_only",
+    flag_value=True,
+    help="Filter out all examples not present in ground truth"
+)
+def main(hdfs_dir, gt_only):
+
+ 
     # get a list of all files in hdfs_dir
     if os.path.isdir(hdfs_dir):
         for root, dirs, files in os.walk(hdfs_dir):
@@ -53,6 +60,20 @@ def main(hdfs_dir):
         ]
         # df = df_raw[interesting_cols]
         df = df_raw
+
+        if gt_only:
+            # filter out all examples not present in ground truth
+            gt_df = pd.read_csv("gt_data/non_adversarial/gt_labeled_100.csv")
+            gt_ids = gt_df["id"].tolist()
+            len_before = len(df)
+            gt_masked_sentences = set(gt_df["masked_sentence"].tolist())
+            df = df[df.apply(lambda x: x["masked_sentence"] in gt_masked_sentences, axis=1)]
+
+            # filter based on the question cuz i forgot to include the full id in the labeling doc
+            # and it wouldn't be ideal anyway cuz of suffix inconsistency
+            # ds = ds.filter(lambda example: example["prepped_masked_None"] in gt_qs)
+            # df = df[df["masked_sentence"] in gt_masked_sentences]
+
         # rename randsentence col to masked col
 
         df["did_improve"] = df["m1_masked_None_f1"] < df["m1_masked_a2_f1"]

@@ -39,10 +39,7 @@ class Primary_Model:
         return self.forward(**inputs)
 
     def forward(self, **inputs):
-        """Forward pass must return
-            start_logits, end_logits, cls_pred, tokens_pred, input_ids = x[0]
-            cls_gt, start_gt, end_gt, tokens_gt = x[1]
-        Check `compute_metrics` function for actual requirements"""
+        """Check `compute_metrics` function for actual requirements"""
         return self.model(**inputs)
 
     def prepare_data(self, masking_scheme, a2_col, raw_ds):
@@ -74,12 +71,11 @@ class OpenAI_PM(Primary_Model):
     ):
         """
         Args:
-            masking_scheme (str): The masking scheme to use. Usually "bfsentence"
+            masking_scheme (str): The masking scheme to use. 
             ds (Dataset): The dataset to evaluate on. Must have a column named "prepped_{masking_scheme}_{str(a2_col)}"
             a2_col (str): The name of the column containing the answer to the question. If None, then no answer is given.
             max_adversarial_examples (int): The maximum number of adversarial examples to evaluate. If None, then as many as possible will be evaluated.
         """
-        adversarial_mode = max_adversarial_examples is not None
 
         masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
         # ds = self.prepare_data(masking_scheme, ds, a2_col)
@@ -125,8 +121,7 @@ class OpenAI_PM(Primary_Model):
 
         # ds = ds.select(range(min(max_adversarial_examples, len(ds))))
         # Get aggregate metrics
-        # Note that aggregate metrics are not very meaningful if in adversarial mode
-        # Since the dataset is filtered to only include examples where the model was damaged
+        
         agg_f1 = np.mean(ds[f"m1_{masking_scheme}_{str(a2_col)}_f1"])
         agg_em = np.mean(ds[f"m1_{masking_scheme}_{str(a2_col)}_em"])
 
@@ -254,7 +249,7 @@ class T5_PM(Primary_Model):
     ):
         """
         Args:
-            masking_scheme (str): The masking scheme to use. Usually "bfsentence"
+            masking_scheme (str): The masking scheme to use. 
             ds (Dataset): The dataset to evaluate on. Must have a column named "prepped_{masking_scheme}_{str(a2_col)}"
             a2_col (str): The name of the column containing the answer to the question. If None, then no answer is given.
             max_adversarial_examples (int): The maximum number of adversarial examples to evaluate. If None, then as many as possible will be evaluated.
@@ -269,8 +264,6 @@ class T5_PM(Primary_Model):
             ), "Adversarial mode no longer supported. Change your inputs such that you are no longer in adversarial mode."
             # adversarial_mode = False
             # If in adversarial mode, shuffle the dataset to remove biases
-            if adversarial_mode:
-                ds = ds.shuffle()
             masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
             # ds = self.prepare_data(masking_scheme, ds, a2_col)
             ds = self.prepare_data(masking_scheme, ds, a2_col)
@@ -291,7 +284,6 @@ class T5_PM(Primary_Model):
             if len(ds) % self.batch_size != 0:
                 num_batches += 1
 
-            num_adversarial_examples = 0
             it = tqdm(range(num_batches))
             for batch_idx in it:
                 start_idx = batch_idx * self.batch_size
@@ -325,13 +317,7 @@ class T5_PM(Primary_Model):
             # Reduce to only the first max_adversarial_examples examples where the model was damaged
             if adversarial_mode:
                 raise NotImplementedError
-                ds = ds.filter(
-                    lambda x: x[f"m1_supporting_{str(a2_col)}_f1"]
-                    - x[f"m1_{masking_scheme}_{str(a2_col)}_f1"]
-                    > threshold,
-                    num_proc=1,
-                )  # .shuffle()
-                # ds = ds.select(range(min(max_adversarial_examples, len(ds))))
+
             # Get aggregate metrics
             # Note that aggregate metrics are not very meaningful if in adversarial mode
             # Since the dataset is filtered to only include examples where the model was damaged

@@ -236,8 +236,8 @@ def mask_bf_sentence(example, do_single_example=False):
         new_examples.append(new_example)
 
     # create an example for each added distractor
-    for i in range(len(example["context_distractor"]["sentences"])):
-        new_example = deepcopy(example)
+    # for i in range(len(example["context_distractor"]["sentences"])):
+    #     new_example = deepcopy(example)
     bf_mini_dataset = Dataset.from_list(new_examples)
     return bf_mini_dataset
 
@@ -513,10 +513,10 @@ def reduce_to_n(
     return ds
 
 
-def retroactively_add_distractors(ds):
-    ds = ds.add_column("context_bfdelsentence", ds["context_masked"])
-    ds = ds.add_column(
-        "context_bfaddsentence", [{"sentences": None} for _ in range(len(ds))]
-    )
-    ex = distract_bf_sentence(ds[0])
-    return ds
+# def retroactively_add_distractors(ds):
+#     ds = ds.add_column("context_bfdelsentence", ds["context_masked"])
+#     ds = ds.add_column(
+#         "context_bfaddsentence", [{"sentences": None} for _ in range(len(ds))]
+#     )
+#     ex = distract_bf_sentence(ds[0])
+#     return ds

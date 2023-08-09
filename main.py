@@ -23,7 +23,6 @@ from masking import (
     adversarial_dataset,
     randsentence_dataset,
     randdist_dataset,
-    retroactively_add_distractors,
 )
 from pathlib import PurePath
 import pandas as pd
@@ -70,11 +69,6 @@ np.random.seed(42)
     help="Shift the dataset by this many examples before downsampling. Useful for debugging specific examples.",
 )
 @click.option(
-    "--cached_adversarial_dataset_path",
-    default=None,
-    help="Path to save/load cached adversarial dataset. If included, skip adversarial dataset generation.",
-)
-@click.option(
     "--oai_cache_path",
     default=None,
     help="Path to save/load cached chatGPT responses.",
@@ -87,6 +81,7 @@ np.random.seed(42)
     help="only profile the primary model on dataset, then exit",
 )
 @click.option("--save_dir", help="directory to save results to", default="results/")
+@click.option("--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons")
 def main(
     pt_dataset_path,
     m1_path,
@@ -102,8 +97,8 @@ def main(
     max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
-    cached_adversarial_dataset_path,
     oai_cache_path,
+    gt_subset,
     results_filename,
     profile_only,
     save_dir,
@@ -130,69 +125,45 @@ def main(
     # Receive and prepare the primary task
     metrics = {}
 
-    if cached_adversarial_dataset_path is None:
-        ds = load_from_disk(pt_dataset_path)
-        # filter out ids that don't appear in the gt dataset for speedup
-        if m2_arch == "gt":
-            gt_df = pd.read_csv("gt_data/non_adversarial/gt_labeled_100.csv")
-            gt_ids = [x.split("_")[0] for x in gt_df["id"].tolist()]
-            len_before = len(ds)
-            ds = ds.filter(lambda x: x["id"].split("_")[0] in gt_ids)
-            print(f"reduce to {len(ds)} / {len_before} examples")
+    ds = load_from_disk(pt_dataset_path)
+    # filter out ids that don't appear in the gt dataset for speedup
+    if m2_arch == "gt" or gt_subset:
+        # gt_df = pd.read_csv("gt_data/1/non_adversarial/gt_labeled_100.csv") # 1.0
+        gt_df = pd.read_csv("gt_data/2/gt_dataset_v2_300_of_300.csv") # 3.0
+        # drop any gt without an m2
+        gt_df = gt_df.dropna(subset=["q2_gt"])
+        gt_ids = [x.split("_")[0] for x in gt_df["id"].tolist()]
+        len_before = len(ds)
+        ds = ds.filter(lambda x: x["id"].split("_")[0] in gt_ids)
+        print(f"reduce to {len(ds)} / {len_before} examples")
+        
+        
 
-        # downsample if a downsampling size is provided
-        if str(downsample_pt_size) != "None":
-            ds = ds.select(range(ds_shift, ds_shift + int(downsample_pt_size)))
+    # downsample if a downsampling size is provided
+    if str(downsample_pt_size) != "None":
+        ds = ds.select(range(ds_shift, ds_shift + int(downsample_pt_size)))
 
-        original_raw_dataset_len = len(ds)
+    original_raw_dataset_len = len(ds)
 
-        # first pass
-        print("m1 first pass...")
-        ds, metrics["supporting"] = m1.evaluate(
-            masking_scheme="supporting", ds=ds, a2_col=None
-        )
-        # select and mask examples where the primary
-        if masking_scheme == "bfsentence":
-            raise NotImplementedError
-            print("generating adversarial data...")
-            ds = adversarial_dataset(
-                ds,
-                m1,
-                adversarial_drop_thresh,
-                max_adversarial_examples,
-            )
-        elif masking_scheme == "randsentence":
-            do_gt = m2_arch == "gt"
-            ds = randsentence_dataset(ds, m1, do_gt)
-        elif masking_scheme == "randdistsentence":
-            raise NotImplementedError
-            ds = randdist_dataset(
-                ds, m1, max_adversarial_examples
-            )  # set drop thresh to -1 so no filtering happens
+    # first pass
+    print("m1 first pass...")
+    ds, metrics["supporting"] = m1.evaluate(
+        masking_scheme="supporting", ds=ds, a2_col=None
+    )
+    # select and mask examples where the primary
+    if masking_scheme == "bfsentence":
+        raise NotImplementedError
+    elif masking_scheme == "randsentence":
+        do_gt = m2_arch == "gt" or gt_subset
+        ds = randsentence_dataset(ds, m1, do_gt)
+    elif masking_scheme == "randdistsentence":
+        raise NotImplementedError
+        ds = randdist_dataset(
+            ds, m1, max_adversarial_examples
+        )  # set drop thresh to -1 so no filtering happens
 
-    else:
-        # Load dataset from cache
-        # assert m2_arch != "gt", "gt is not supported with cached datasets and is likely to cause errors"
-        cached_adv_df = pd.read_hdf(cached_adversarial_dataset_path)
-        ds = Dataset.from_pandas(cached_adv_df)
-        if str(downsample_pt_size) != "None":
-            ds = ds.select(range(ds_shift, ds_shift + int(downsample_pt_size)))
-        # Drop columns pertaining to the previous M2, which are created after this point
-        drop_cols = [
-            "__index_level_0__",
-            "q2_masked",
-            "a2_masked",
-            "a2_is_correct_masked",
-            "prepped_masked_a2",
-            "m1_masked_a2_gen",
-            "m1_masked_a2_f1",
-            "m1_masked_a2_em",
-        ]  # needs fixing
-        for col in drop_cols:
-            if col in ds.column_names:
-                ds = ds.remove_columns([col])
     # select only ground truth examples if we are doing analysis using the ground truth model
-    if m2_arch == "gt":
+    if m2_arch == "gt" or gt_subset:
         # gt_df = pd.read_csv("q2_gt_dataset.csv")
         # gt_qs = set(gt_df["prepped_bfdelsentence_None"].tolist())
         gt_masked_sentences = set(gt_df["masked_sentence"].tolist())
@@ -217,6 +188,12 @@ def main(
                 used.add(x["masked_sentence"])
         ds = Dataset.from_pandas(pd.DataFrame(data=relevant_examples))
         print
+    # for gt dataset gen
+    tmp_df = ds.to_pandas()
+    tmp_df = tmp_df[[
+        "id", "q1", "a1", "fc_masked", "masked_sentence", "masked_sentence_title"
+    ]].head(300)
+    # tmp_df.to_csv("gt_dataset_source_v2_300.csv", index=False)
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
@@ -267,7 +244,7 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}.hd5",
+        f"analysis_dataset_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}.hd5",
     )
     desrcribe_path = PurePath(save_path + "_" + str(datetime.now())).with_suffix(".csv")
     describe_df = (
@@ -289,11 +266,7 @@ def main(
 
     df.to_hdf(save_path, "ds")
     print(f"dataset saved to {save_path}")
-    # percent_oracle_correct = df[f"a2_is_correct_{masking_scheme}"].mean()
-    # print(metrics)
-    drop_cols = [
-        "supporting_"
-    ]
+
 
     df.to_csv(f"analysis_dataset_{len(df)}_{m1_arch}.csv")
     print
