@@ -129,7 +129,7 @@ def main(
     # filter out ids that don't appear in the gt dataset for speedup
     if m2_arch == "gt" or gt_subset:
         # gt_df = pd.read_csv("gt_data/1/non_adversarial/gt_labeled_100.csv") # 1.0
-        gt_df = pd.read_csv("gt_data/2/gt_dataset_v2_300_of_300.csv") # 3.0
+        gt_df = pd.read_csv("gt_data/2/gt_dataset_v2_400_of_600.csv") # 3.0
         # drop any gt without an m2
         gt_df = gt_df.dropna(subset=["q2_gt"])
         gt_ids = [x.split("_")[0] for x in gt_df["id"].tolist()]
@@ -192,8 +192,8 @@ def main(
     tmp_df = ds.to_pandas()
     tmp_df = tmp_df[[
         "id", "q1", "a1", "fc_masked", "masked_sentence", "masked_sentence_title"
-    ]].head(300)
-    # tmp_df.to_csv("gt_dataset_source_v2_300.csv", index=False)
+    ]].head(600)
+    # tmp_df.to_csv("gt_dataset_source_v2_600.csv", index=False)
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
