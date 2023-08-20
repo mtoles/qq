@@ -35,6 +35,11 @@ class OpenAIDecodingArguments(object):
     logprobs: Optional[int] = None
     echo: bool = False
 
+import sys
+print("Python version")
+print (sys.version)
+print("Version info.")
+print (sys.version_info)
 
 def openai_completion(
     prompts: Union[str, Sequence[str], Sequence[dict[str, str]], dict[str, str]],

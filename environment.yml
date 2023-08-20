@@ -14,14 +14,8 @@ dependencies:
   - numpy
   - tqdm
   - pip
-  - huggingface_hub=0.10.1
-  - sentencepiece
-  - joblib
-  - urllib3
   - ujson
-  # BigBird (vasudevgupta)
-  # - jsonlines=3.1.0
-  # - openssl=1.1.1
+
   # matt
   - ipykernel
   - black
@@ -32,10 +26,6 @@ dependencies:
   - nltk
   - pytables=3.7.0 # df.to_hdf()
   - fire
-  - tokenizers=0.13.3
-  # - h5py
+
   - pip:
-    # - transformers==4.21.3 # Later versions fail during distributed training
     - transformers==4.28.1 # new version which include tokenizer for alpaca
-    # BigBird (vasudevgupta)
-    - apache-beam

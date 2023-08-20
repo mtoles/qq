@@ -9,9 +9,9 @@ import string
 from metrics import get_metrics
 from prepare_data import prepare_inputs_hp
 from tqdm import tqdm
-from nltk.corpus import stopwords
+# from nltk.corpus import stopwords
 
-sw_set = set(stopwords.words("english"))
+# sw_set = set(stopwords.words("english"))
 
 
 class Oracle:
