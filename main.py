@@ -12,7 +12,10 @@ from secondary_model import (
     Repeater_Secondary_Model,
     OpenAI_Secondary_Model,
     Gt_Secondary_Model,
+    Flan_Secondary_Model,
+    Alpaca_Secondary_Model,
 )
+from utils import set_random_seed
 from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
 from time import sleep
@@ -80,6 +83,11 @@ np.random.seed(42)
     default=False,
     help="only profile the primary model on dataset, then exit",
 )
+@click.option(
+    "--alpaca_model_path",
+    default=None,
+    help="Path to save/load cached alpaca model.",
+)
 @click.option("--save_dir", help="directory to save results to", default="results/")
 @click.option("--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons")
 def main(
@@ -101,8 +109,10 @@ def main(
     gt_subset,
     results_filename,
     profile_only,
+    alpaca_model_path,
     save_dir,
 ):
+    set_random_seed(0)
     if max_adversarial_examples is None:
         max_adversarial_examples = float("inf")
         print(

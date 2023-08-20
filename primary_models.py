@@ -24,6 +24,7 @@ import time
 import torch
 import pandas as pd
 import numpy as np
+from datasets.utils.logging import disable_progress_bar, enable_progress_bar
 
 
 class Primary_Model:
@@ -195,9 +196,11 @@ class T5_PM(Primary_Model):
         model_name=None,
     ):
         model_name = f"google/flan-{model_name}"
-        self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
+        # self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
+        self.tk = AutoTokenizer.from_pretrained(model_name)
         self.model = T5ForConditionalGeneration.from_pretrained(
-            model_name, cache_dir="./.model_cache"
+            # model_name, cache_dir="./.model_cache"
+            model_name, 
         ).cuda()
         super(T5_PM, self).__init__(
             model_path=None,
@@ -245,7 +248,7 @@ class T5_PM(Primary_Model):
         return prepped_val_dataset
 
     def evaluate(
-        self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None
+        self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None, display=True
     ):
         """
         Args:
@@ -266,6 +269,7 @@ class T5_PM(Primary_Model):
             # If in adversarial mode, shuffle the dataset to remove biases
             masking_str = f"prepped_{masking_scheme}_{str(a2_col)}"
             # ds = self.prepare_data(masking_scheme, ds, a2_col)
+            disable_progress_bar()
             ds = self.prepare_data(masking_scheme, ds, a2_col)
 
             # Data used for computing aggregate metrics
@@ -331,6 +335,7 @@ class T5_PM(Primary_Model):
             # assert (not max_adversarial_examples) or (
             #     len(ds) <= max_adversarial_examples
             # )
+        enable_progress_bar()
         return ds, metrics
 
 

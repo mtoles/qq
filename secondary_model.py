@@ -1,4 +1,5 @@
-from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model
+import torch
+from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model, LlamaForCausalLM
 import pandas as pd
 import numpy as np
 import openai
@@ -7,6 +8,8 @@ import os
 import h5py
 import time
 from tqdm import tqdm
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForCausalLM
+
 
 # Set up the API once for all models
 config = configparser.ConfigParser()
@@ -53,10 +56,10 @@ Who starred in the 1988 American comedy film, The Great Outdoors?"""
 class Secondary_Model:
     def __init__(
         self,
-        prompt_id,
+        prompt_id="p1",
     ):
         self.model_name = "dummy"
-        self.prompt_id = "p1"  # the id of the prompt to use for this model
+        self.prompt_id = prompt_id  # the id of the prompt to use for this model
         self.prompt_dict = {
             "p1": "Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}",
             "p2": "Some information is missing from this context. Ask a simpler question that would help you answer it.\n\nContext:\n\n{context}\n\nMain Question:\n\n{q1}\n\nSimpler question:",
@@ -119,10 +122,94 @@ class Repeater_Secondary_Model(Secondary_Model):
         return example[question_col]
 
 
+class Alpaca_Secondary_Model(Secondary_Model):
+    def __init__(self, model_name,
+                 model_path,
+                 max_length=4096,
+                 prompt_id="p1",
+                 device="cuda",
+                 precision="bf16"):
+        super(Alpaca_Secondary_Model, self).__init__(prompt_id)
+        self.model_name = model_name
+        self.device = device
+
+        if precision == "int8":
+            self.model = AutoModelForCausalLM.from_pretrained(model_path,
+                                                               device_map="auto", load_in_8bit=True)
+        elif precision == "bf16":
+            self.model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16)
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(model_path)
+        self.model.to(self.device)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.max_length = max_length
+        self.alpaca_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+        self.device = self.device
+
+    def forward(self, example, question_col, context_col):
+        q1 = example[question_col]
+        context = example[context_col]
+        instruction = "Ask another question that would help you answer the following question:"
+        input = f"Question: {q1}\nContext: {context}"
+
+        # instruction = "".join(["What question can you ask to help you answer the final question?\n\n",
+        #                        in_context_examples])
+        # input = "{context}\nQuestion:\n{q1}".format(context=context, q1=q1)
+        # instruction = instruction.replace("Context:\n", "### Input:\n")
+        # instruction = instruction.replace("Question 1:\n", "Question:\n")
+        # instruction = instruction.replace("Question 2:\n", "\n\n### Response:\n")
+
+        prompt = self.alpaca_template.format(instruction=instruction, input=input)
+
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
+        inputs = {k: v.to(self.device) for k, v in inputs.items() if k != 'token_type_ids'}
+        with torch.no_grad():
+            outputs = self.model.generate(**inputs, max_length=self.max_length)
+        q2 = self.tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):], skip_special_tokens=True)
+
+        return q2
+
+
+class Flan_Secondary_Model(Secondary_Model):
+    def __init__(self, model_name="flan-t5-small",
+                 prompt_id="p1",
+                 max_length=4096,
+                 device="cuda",
+                 precision="bf16"):
+        super(Flan_Secondary_Model, self).__init__(prompt_id)
+        self.model_name = model_name
+        self.device = device
+        model_path = f"google/{model_name}"
+        if precision == "int8":
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path,
+                                                               device_map="auto", load_in_8bit=True)
+        elif precision == "bf16":
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path, torch_dtype=torch.bfloat16)
+        else:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
+        self.model.to(self.device)
+
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.max_length = max_length
+
+    def forward(self, example, question_col, context_col):
+        q1 = example[question_col]
+        context = example[context_col]
+        prompt = self.template.format(context=context, q1=q1)
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self.model.generate(**inputs)
+        q2 = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
+        return q2
+
+
+
 class OpenAI_Secondary_Model(Secondary_Model):
-    def __init__(self, cache_path, prompt_id):
-        # call the parent constructor
-        super().__init__(prompt_id)
+    def __init__(self, cache_path, prompt_id="p1"):
+        super(OpenAI_Secondary_Model, self).__init__(prompt_id)
         self.model_name = "chatGPT"
         self.model = "gpt-3.5-turbo"
         self.cache_path = cache_path

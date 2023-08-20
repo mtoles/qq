@@ -1,12 +1,21 @@
 import torch
 import os
 from sklearn.model_selection import train_test_split
-
+import random
+import numpy as np
 
 BB_MODEL_ID = "google/bigbird-base-trivia-itc"
 GPT_NEO_MODEL_ID = "EleutherAI/gpt-neo-2.7B"
 CATEGORY_MAPPING = {"null": 0, "short": 1, "long": 2, "yes": 3, "no": 4}
 INVERSE_CATEGORY_MAPPING = {v: k for k, v in CATEGORY_MAPPING.items()}
+
+
+def set_random_seed(seed=0):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.device_count() > 0:
+        torch.cuda.manual_seed_all(seed)
 
 
 def get_downsample_dataset_size_str(downsample_data_size):

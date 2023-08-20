@@ -102,6 +102,7 @@ def adversarial_dataset(ds, m1, adversarial_drop_thresh, max_adversarial_example
         masking_scheme="bfdelsentence", ds=ds_bfdelsentence, a2_col=None
     )
 
+    disable_progress_bar()
     ds_got_worse_with_bfdelsentence = ds_bfdelsentence.filter(
         lambda x: x["m1_supporting_None_f1"] - x["m1_bfdelsentence_None_f1"]
         > adversarial_drop_thresh
@@ -116,6 +117,7 @@ def adversarial_dataset(ds, m1, adversarial_drop_thresh, max_adversarial_example
     mini_dss_bfaddsentence = bf_add_sentences(ds_got_right_masked)
 
     mini_dss = []
+
     # mini_dss_from_sup = []
     print("m1 distracting...")
     # for mini, li in [
@@ -130,6 +132,7 @@ def adversarial_dataset(ds, m1, adversarial_drop_thresh, max_adversarial_example
             a2_col=None,
             max_adversarial_examples=max_adversarial_examples,
             threshold=adversarial_drop_thresh,
+            display=False
         )
         mini_dss.append(mini_ds_bf_add_sentence)
     ds_got_worse_with_bf_add_sentence = concatenate_datasets(mini_dss)
