@@ -30,6 +30,7 @@ from masking import (
 from pathlib import PurePath
 import pandas as pd
 import os
+from preprocess import get_preprocessed_ds
 
 np.random.seed(42)
 
@@ -135,13 +136,19 @@ def main(
     # Receive and prepare the primary task
     metrics = {}
 
-    ds = load_from_disk(pt_dataset_path)
+    # ds = load_from_disk(pt_dataset_path)
+    print("preprocessing...")
+    ds = get_preprocessed_ds("validation", downsample_pt_size)
+
+
     # filter out ids that don't appear in the gt dataset for speedup
     if m2_arch == "gt" or gt_subset:
         # gt_df = pd.read_csv("gt_data/1/non_adversarial/gt_labeled_100.csv") # 1.0
-        gt_df = pd.read_csv("gt_data/2/gt_dataset_v2_400_of_600.csv") # 3.0
+        # gt_df = pd.read_csv("gt_data/3/gt_dataset_v3_400_of_600.csv") # 3.0
+        gt_df = pd.read_excel("gt_data/3/gt_dataset_v3_400_of_600.xlsx") # excel
         # drop any gt without an m2
         gt_df = gt_df.dropna(subset=["q2_gt"])
+        gt_df["masked_sentence"] = gt_df["masked_sentence"].apply(lambda x: x.strip())
         gt_ids = [x.split("_")[0] for x in gt_df["id"].tolist()]
         len_before = len(ds)
         ds = ds.filter(lambda x: x["id"].split("_")[0] in gt_ids)
@@ -177,6 +184,10 @@ def main(
         # gt_df = pd.read_csv("q2_gt_dataset.csv")
         # gt_qs = set(gt_df["prepped_bfdelsentence_None"].tolist())
         gt_masked_sentences = set(gt_df["masked_sentence"].tolist())
+
+        # gt_df["masked_sentence"][~gt_df["masked_sentence"].isin(set(ds["masked_sentence"]))] # 36 issues
+        # df = ds.to_pandas()
+        df = ds.to_pandas()
         before_len = len(ds)
         # filter based on the question cuz i forgot to include the full id in the labeling doc
         # and it wouldn't be ideal anyway cuz of suffix inconsistency
@@ -199,11 +210,12 @@ def main(
         ds = Dataset.from_pandas(pd.DataFrame(data=relevant_examples))
         print
     # for gt dataset gen
-    tmp_df = ds.to_pandas()
-    tmp_df = tmp_df[[
-        "id", "q1", "a1", "fc_masked", "masked_sentence", "masked_sentence_title"
-    ]].head(600)
+    # tmp_df = ds.to_pandas()
+    # tmp_df = tmp_df[[
+    #     "id", "q1", "a1", "fc_masked", "masked_sentence", "masked_sentence_title"
+    # ]].head(600)
     # tmp_df.to_csv("gt_dataset_source_v2_600.csv", index=False)
+    # tmp_df.to_excel("gt_dataset_source_v2_600.xlsx", index=False)
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
@@ -212,7 +224,8 @@ def main(
     elif m2_arch == "gt":
         m2 = Gt_Secondary_Model(gt_df)
     else:
-        raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
+        # raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
+        m2 = Alpaca_Secondary_Model("alpaca", ".model_cache/alpaca/tuned", )
     # Apply the secondary model
     print("m2...")
     ds = m2.process(

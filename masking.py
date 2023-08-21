@@ -225,7 +225,7 @@ def mask_bf_sentence(example, do_single_example=False):
         rand_keys = fact_keys[i]
         new_example["masked_sentence"] = new_example["context_supporting"]["sentences"][
             rand_keys[0]
-        ][rand_keys[1]]
+        ][rand_keys[1]].strip()
         new_example["masked_sentence_title"] = new_example["context_None"]["title"][
             rand_keys[0]
         ]
@@ -359,14 +359,6 @@ def split_distractor(example):
 
     new_example = example.copy()
 
-    # Sort the titles
-    all_titles = example["context_None"]["title"]
-    supporting_titles = example["supporting_facts"]["title"]
-    # new_example["context_supporting"]["title"] = supporting_titles
-    # new_example["context_distractor"]["title"] = [
-    # x for x in all_titles if x not in supporting_titles
-    # ]
-
     # Sort the sentences
     new_example["context_supporting"]["sentences"] = [
         [] for _ in range(len(example["context_None"]["sentences"]))
@@ -386,14 +378,17 @@ def split_distractor(example):
         zip(example["context_None"]["title"], example["context_None"]["sentences"])
     ):
         for i, sent in enumerate(sentences):
+            # clean up the sentences
+            clean_sent = sent.replace("\u200a", "") # remove unicode bullshit
+            clean_sent = " ".join(clean_sent.split()) # remove extra whitespace
+
             if i in supporting_sentences[title]:
-                new_example["context_supporting"]["sentences"][j].append(sent)
+                new_example["context_supporting"]["sentences"][j].append(clean_sent)
                 # new_example["context_supporting"]["title"].append(title)
             else:
-                new_example["context_distractor"]["sentences"][j].append(sent)
+                new_example["context_distractor"]["sentences"][j].append(clean_sent)
                 # new_example["context_distractor"]["title"].append(title)
     return new_example
-
 
 def randsentence_dataset(ds, m1, do_gt):
     # if you use {} instead of {"sentences": []} you encounter a bug in datasets.Dataset.map() version 2.10.1
