@@ -20,7 +20,7 @@ from utils import (
 # # @click.option("--load_from_cache", type=bool, default=True)
 def get_preprocessed_ds(
     split,
-    downsample_data_size,
+    # downsample_data_size,
     # distract_or_focus,
     # cache_dir,
     # load_from_cache,
@@ -39,7 +39,8 @@ def get_preprocessed_ds(
         "hotpot_qa",
         "distractor",
         cache_dir=".cache",
-        split=f"{split}{get_downsample_dataset_size_str(downsample_data_size)}",
+        # split=f"{split}{get_downsample_dataset_size_str(downsample_data_size)}",
+        split=f"{split}",
     )
     new_ds = raw_dataset.rename_column("context", "context_None")
 

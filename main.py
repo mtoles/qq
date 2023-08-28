@@ -36,7 +36,6 @@ np.random.seed(42)
 
 
 @click.command()
-@click.option("--pt_dataset_path", help="path to primary task dataset")
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
 @click.option("--m2_arch", help="secondary model architecture")
@@ -52,11 +51,6 @@ np.random.seed(42)
 @click.option("--pm_eval_batch_size", help="batch size for eval", type=int)
 @click.option("--oracle_eval_batch_size", help="batch size for eval", type=int)
 @click.option("--masking_scheme", help="{randomsentence,  bfdelsentence, None")
-@click.option(
-    "--adversarial_drop_thresh",
-    default=0.5,
-    help="include only examples in the adversarially generated examples where the delta between baseline and masked or distracted is greater than this threshold",
-)
 @click.option(
     "--max_adversarial_examples",
     default=1,
@@ -78,21 +72,11 @@ np.random.seed(42)
     help="Path to save/load cached chatGPT responses.",
 )
 @click.option("--results_filename", help="path to save results")
-@click.option(
-    "--profile_only",
-    is_flag=True,
-    default=False,
-    help="only profile the primary model on dataset, then exit",
-)
-@click.option(
-    "--alpaca_model_path",
-    default=None,
-    help="Path to save/load cached alpaca model.",
-)
 @click.option("--save_dir", help="directory to save results to", default="results/")
-@click.option("--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons")
+@click.option(
+    "--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons"
+)
 def main(
-    pt_dataset_path,
     m1_path,
     m1_arch,
     m2_arch,
@@ -102,15 +86,12 @@ def main(
     pm_eval_batch_size,
     oracle_eval_batch_size,
     masking_scheme,
-    adversarial_drop_thresh,
     max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
     oai_cache_path,
     gt_subset,
     results_filename,
-    profile_only,
-    alpaca_model_path,
     save_dir,
 ):
     set_random_seed(0)
@@ -136,16 +117,15 @@ def main(
     # Receive and prepare the primary task
     metrics = {}
 
-    # ds = load_from_disk(pt_dataset_path)
     print("preprocessing...")
-    ds = get_preprocessed_ds("validation", downsample_pt_size)
-
+    # ds = get_preprocessed_ds("validation", downsample_pt_size)
+    ds = get_preprocessed_ds("validation")
 
     # filter out ids that don't appear in the gt dataset for speedup
     if m2_arch == "gt" or gt_subset:
         # gt_df = pd.read_csv("gt_data/1/non_adversarial/gt_labeled_100.csv") # 1.0
         # gt_df = pd.read_csv("gt_data/3/gt_dataset_v3_400_of_600.csv") # 3.0
-        gt_df = pd.read_excel("gt_data/3/gt_dataset_v3_400_of_600.xlsx") # excel
+        gt_df = pd.read_excel("gt_data/3/gt_dataset_v3_400_of_600.xlsx")  # excel
         # drop any gt without an m2
         gt_df = gt_df.dropna(subset=["q2_gt"])
         gt_df["masked_sentence"] = gt_df["masked_sentence"].apply(lambda x: x.strip())
@@ -153,8 +133,6 @@ def main(
         len_before = len(ds)
         ds = ds.filter(lambda x: x["id"].split("_")[0] in gt_ids)
         print(f"reduce to {len(ds)} / {len_before} examples")
-        
-        
 
     # downsample if a downsampling size is provided
     if str(downsample_pt_size) != "None":
@@ -225,7 +203,10 @@ def main(
         m2 = Gt_Secondary_Model(gt_df)
     else:
         # raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
-        m2 = Alpaca_Secondary_Model("alpaca", ".model_cache/alpaca/tuned", )
+        m2 = Alpaca_Secondary_Model(
+            "alpaca",
+            ".model_cache/alpaca/tuned",
+        )
     # Apply the secondary model
     print("m2...")
     ds = m2.process(
@@ -249,7 +230,7 @@ def main(
     # Answer questions with the oracle
     print("oracle...")
     ds = oracle.process(ds, q2_masking_scheme="masked")
-    if type(m1.model) == T5ForConditionalGeneration:
+    if type(oracle.model) == T5ForConditionalGeneration:
         oracle.model.cpu()
     torch.cuda.empty_cache()  # free up memory
 
@@ -289,7 +270,6 @@ def main(
 
     df.to_hdf(save_path, "ds")
     print(f"dataset saved to {save_path}")
-
 
     df.to_csv(f"analysis_dataset_{len(df)}_{m1_arch}.csv")
     print

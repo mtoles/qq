@@ -19,7 +19,7 @@ def set_random_seed(seed=0):
 
 
 def get_downsample_dataset_size_str(downsample_data_size):
-    if downsample_data_size is not None:
+    if str(downsample_data_size) != "None":
         downsample_str = f"[:{downsample_data_size}]"
     else:
         downsample_str = ""

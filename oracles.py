@@ -121,8 +121,8 @@ class T5_Bool_Oracle(Oracle):
                 ).scores[0]
                 yn_scores = batch_logits[:, label_ids.T.squeeze()].softmax(dim=1)
                 probs.append(yn_scores)
-
             probs = torch.cat(probs, dim=0)
+            assert len(probs) == len(corpus_strs)
 
             best_index = probs[:, 0].argmax()
             best_prob = probs[:, 0].max()

@@ -5,7 +5,6 @@ import numpy as np
 import openai
 import configparser
 import os
-import h5py
 import time
 from tqdm import tqdm
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForCausalLM

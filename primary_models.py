@@ -199,8 +199,8 @@ class T5_PM(Primary_Model):
         # self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
         self.tk = AutoTokenizer.from_pretrained(model_name)
         self.model = T5ForConditionalGeneration.from_pretrained(
-            # model_name, cache_dir="./.model_cache"
-            model_name, 
+            model_name, cache_dir="./.model_cache"
+            # model_name, 
         ).cuda()
         super(T5_PM, self).__init__(
             model_path=None,
