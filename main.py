@@ -125,7 +125,7 @@ def main(
     if m2_arch == "gt" or gt_subset:
         # gt_df = pd.read_csv("gt_data/1/non_adversarial/gt_labeled_100.csv") # 1.0
         # gt_df = pd.read_csv("gt_data/3/gt_dataset_v3_400_of_600.csv") # 3.0
-        gt_df = pd.read_excel("gt_data/3/gt_dataset_v3_400_of_600.xlsx")  # excel
+        gt_df = pd.read_excel("gt_data/gt_dataset_v3_400_of_600.xlsx")  # excel
         # drop any gt without an m2
         gt_df = gt_df.dropna(subset=["q2_gt"])
         gt_df["masked_sentence"] = gt_df["masked_sentence"].apply(lambda x: x.strip())
