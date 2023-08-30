@@ -192,7 +192,7 @@ class OpenAI_PM(Primary_Model):
 class T5_PM(Primary_Model):
     def __init__(
         self,
-        batch_size=2,
+        batch_size=1,
         model_name=None,
     ):
         model_name = f"google/flan-{model_name}"

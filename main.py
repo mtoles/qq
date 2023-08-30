@@ -34,7 +34,6 @@ from preprocess import get_preprocessed_ds
 
 np.random.seed(42)
 
-
 @click.command()
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
@@ -46,11 +45,12 @@ np.random.seed(42)
 @click.option("--oracle_arch", default="t5", help="oracle architecture {t5, bloom}")
 @click.option(
     "--oracle_size",
-    help="oracle size, t5: {small, base, large, xl, xxl}, bloom: {560m, 1b1, 1b7, 3b, 7b1}",
+    help="oracle size, t5: {small, base, large, xl, xxl}",
 )
-@click.option("--pm_eval_batch_size", help="batch size for eval", type=int)
-@click.option("--oracle_eval_batch_size", help="batch size for eval", type=int)
-@click.option("--masking_scheme", help="{randomsentence,  bfdelsentence, None")
+@click.option("--pm_eval_batch_size", help="batch size for eval", default=1, type=int)
+@click.option(
+    "--oracle_eval_batch_size", help="batch size for eval", default=1, type=int
+)
 @click.option(
     "--max_adversarial_examples",
     default=1,
@@ -85,7 +85,6 @@ def main(
     oracle_size,
     pm_eval_batch_size,
     oracle_eval_batch_size,
-    masking_scheme,
     max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
@@ -94,6 +93,7 @@ def main(
     results_filename,
     save_dir,
 ):
+    masking_scheme = "randsentence"
     set_random_seed(0)
     if max_adversarial_examples is None:
         max_adversarial_examples = float("inf")
