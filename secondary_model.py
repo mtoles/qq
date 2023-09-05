@@ -50,6 +50,35 @@ The 1988 American comedy film, The Great Outdoors, starred a four-time Academy A
 Question 2:
 Who starred in the 1988 American comedy film, The Great Outdoors?"""
 
+EXAMPLES = [
+    {
+        "context": 'House of Anubis: House of Anubis is a mystery television series developed for Nickelodeon based on the Dutch-Belgian television series "Het Huis Anubis".',
+        "q1": 'The Dutch-Belgian television series that "House of Anubis" was based on first aired in what year?',
+        "q2": 'In what year did "Het Huis Anubis" air?'
+    },
+
+    {
+        "context": 'TOberoi family: The Oberoi family is an Indian family that is famous for its involvement in hotels, namely through The Oberoi Group.',
+        "q1": 'The Oberoi family is part of a hotel company that has a head office in what city?',
+        "q2": 'What city holds the head office of The Oberoi Group?',
+    },
+
+    {
+        "context": 'Zilpo Road: The nine mile byway starts south of Morehead, Kentucky and can be accessed by U.S. Highway 60. Arkansas Highway 113: The route runs 29.48 mi from Arkansas Highway 10 to Morrilton.',
+        "q1": 'What U.S Highway gives access to Zilpo Road, and is also known as Midland Trail?',
+        "q2": 'what U.S. Highway is also known as Midland Trail?',
+    },
+    {
+        "context": 'My Finale: "My Finale" is the hour-long season finale for season eight of the American sitcom "Scrubs". Human Error (House): "Human Error" is the twenty-fourth episode and season finale of the third season of "House" and the seventieth episode overall.',
+        "q1": 'Human Error" is the season finale of the third season of a tv show that aired on what network?',
+        "q2": 'What network aired the season finale of the third season of "House"?',
+    },
+    {
+        "context": 'Annette Bening: Annette Carol Bening (born May 29, 1958) is an American actress. She is a four-time Academy Award nominee; for "The Grifters" (1990), "American Beauty" (1999), "Being Julia" (2004) and "The Kids Are All Right" (2010). In 2006, she received a star on the Hollywood Walk of Fame. The Great Outdoors (film): The Great Outdoors is a 1988 American comedy film directed by Howard Deutch, and written and produced by John Hughes. John Lithgow: John Arthur Lithgow ( ; born October 19 , 1945) is an American actor, musician, singer, comedian, voice actor, and author.',
+        "q1": 'The 1988 American comedy film, The Great Outdoors, starred a four-time Academy Award nominee, who received a star on the Hollywood Walk of Fame in what year?',
+        "q2": 'Who starred in the 1988 American comedy film, The Great Outdoors?',
+    },
+]
 
 # Abstract class for secondary models
 class Secondary_Model:
@@ -144,22 +173,51 @@ class Alpaca_Secondary_Model(Secondary_Model):
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.max_length = max_length
         self.alpaca_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+        self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
         self.device = self.device
+
+    def fit_template(self, q1, context):
+        instruction_templates = {
+            "p1": "Ask another question that would help you answer the following question:",
+            "p2": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
+            "p3": "What question can you ask to help you answer the final question?",
+            "p4": "Ask another question that would help you answer the following question:",
+            "p5": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
+            "p6": "What question can you ask to help you answer the final question?"
+        }
+        input_templates = {
+            "p1": "Question:\n{q1}\nContext:\n{context}",
+            "p2": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
+            "p3": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
+            "p4": "Question:\n{q1}\nContext:\n{context}",
+            "p5": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
+            "p6": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
+        }
+
+        if self.prompt_id in ["p1","p2", "p3", "p4", "p5", "p6"] :
+            instruction = instruction_templates[self.prompt_id]
+            input = input_templates[self.prompt_id].format(context=context, q1=q1)
+            prompt = self.alpaca_template.format(instruction=instruction, input=input)
+            if self.prompt_id in ["p4", "p5", "p6"]:
+                inputs = []
+                for i, ex in enumerate(EXAMPLES):
+                    input = input_templates[self.prompt_id].format(context=ex['context'], q1=ex['q1'])
+                    # inputs.append(self.alpaca_template.format(instruction=instruction, input=input) + "\n" + ex['q2'])
+                    inputs.append(input + "\nResponse:\n" + ex['q2'])
+                inputs.append(input_templates[self.prompt_id].format(context=context, q1=q1))
+                inputs = "\n\n".join(inputs)
+                prompt = self.alpaca_template.format(instruction=instruction, input=inputs)
+
+        else:
+            raise Exception("No such prompt")
+
+        return prompt
+
 
     def forward(self, example, question_col, context_col):
         q1 = example[question_col]
         context = example[context_col]
-        instruction = "Ask another question that would help you answer the following question:"
-        input = f"Question: {q1}\nContext: {context}"
-
-        # instruction = "".join(["What question can you ask to help you answer the final question?\n\n",
-        #                        in_context_examples])
-        # input = "{context}\nQuestion:\n{q1}".format(context=context, q1=q1)
-        # instruction = instruction.replace("Context:\n", "### Input:\n")
-        # instruction = instruction.replace("Question 1:\n", "Question:\n")
-        # instruction = instruction.replace("Question 2:\n", "\n\n### Response:\n")
-
-        prompt = self.alpaca_template.format(instruction=instruction, input=input)
+        prompt = self.fit_template(q1, context)
 
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
         inputs = {k: v.to(self.device) for k, v in inputs.items() if k != 'token_type_ids'}
