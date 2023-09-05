@@ -9,6 +9,7 @@ import string
 from metrics import get_metrics
 from prepare_data import prepare_inputs_hp
 from tqdm import tqdm
+
 # from nltk.corpus import stopwords
 
 # sw_set = set(stopwords.words("english"))
@@ -36,7 +37,7 @@ class Oracle:
 class T5_Bool_Oracle(Oracle):
     def __init__(
         self,
-        model_size,
+        model_size="base",
         batch_size=1,
         # raw_val_dataset=None,
     ):
@@ -105,12 +106,12 @@ class T5_Bool_Oracle(Oracle):
             ].cuda()  # different from bloom
 
             # process logits in batches
-            example0 = self._fw0(c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme)
-            example1 = self._fw1(c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme)
-            assert example0["a2_is_correct_masked"] == example1["a2_is_correct_masked"]
-
-
+            example = self._fw0(
+                c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme
+            )
+            # example1 = self._fw1(c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme)
             return example
+
     def _fw0(self, c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme):
         # normal
         num_batches = math.ceil(c / self.batch_size)
@@ -141,44 +142,13 @@ class T5_Bool_Oracle(Oracle):
         example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
         example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
         return example
-    def _fw1(self, c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme):
-        # normal
-        new_bs = self.batch_size + 1
-        num_batches = math.ceil(c / new_bs)
-        probs = []
-        for i in range(num_batches):
-            start = i * new_bs
-            end = min((i + 1) * new_bs, c)
-            # batch_logits = self.model(
-            #     input_ids=input_ids[start:end], labels=label_ids
-            # ).logits
-            batch_logits = self.model.generate(
-                input_ids[start:end],
-                max_new_tokens=1,
-                output_scores=True,
-                return_dict_in_generate=True,
-            ).scores[0]
-            yn_scores = batch_logits[:, label_ids.T.squeeze()].softmax(dim=1)
-            probs.append(yn_scores)
-        probs = torch.cat(probs, dim=0)
-        assert len(probs) == len(corpus_strs)
 
-        best_index = probs[:, 0].argmax()
-        best_prob = probs[:, 0].max()
-        # always answer mode
-        oracle_answer = corpus_strs[best_index]
-        oracle_answer_is_correct = bool(best_index == 0)
 
-        example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
-        example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
-        return example
-     
-        # batch size + 1
 class OpenAI_Oracle(Oracle):
-    def __init__(self, model_size, batch_size):
+    def __init__(self, model):
         # model_size and batch_size are unused but are here for compatibility with T5_Oracle
-        self.model_name = "chatGPT"
-        self.model = "gpt-3.5-turbo"
+        assert model in ["gpt-3.5-turbo", "gpt-4"]
+        self.model = model
 
     def forward(self, example, q2_masking_scheme):
         q2 = example[f"q2_{q2_masking_scheme}"][0]
@@ -246,9 +216,7 @@ class OpenAI_Oracle(Oracle):
 
         generation = call_oai_api(prompt)
         # strip punctuation from generation
-        generation = "".join(
-            char for char in generation if char in string.digits
-        )
+        generation = "".join(char for char in generation if char in string.digits)
         generation_idx = None
         try:
             generation_idx = int(generation)

@@ -60,11 +60,12 @@ class Primary_Model:
 
 
 class OpenAI_PM(Primary_Model):
-    def __init__(self):
+    def __init__(self, model):
+        assert model in ["gpt-3.5-turbo", "gpt-4"]
         # call the parent constructor
         super().__init__()
-        self.model_name = "chatGPT"
-        self.model = "gpt-3.5-turbo"
+        # self.model_name = "chatGPT"
+        self.model = model
         self.batch_size = 1
 
     def evaluate(
@@ -72,7 +73,7 @@ class OpenAI_PM(Primary_Model):
     ):
         """
         Args:
-            masking_scheme (str): The masking scheme to use. 
+            masking_scheme (str): The masking scheme to use.
             ds (Dataset): The dataset to evaluate on. Must have a column named "prepped_{masking_scheme}_{str(a2_col)}"
             a2_col (str): The name of the column containing the answer to the question. If None, then no answer is given.
             max_adversarial_examples (int): The maximum number of adversarial examples to evaluate. If None, then as many as possible will be evaluated.
@@ -122,7 +123,7 @@ class OpenAI_PM(Primary_Model):
 
         # ds = ds.select(range(min(max_adversarial_examples, len(ds))))
         # Get aggregate metrics
-        
+
         agg_f1 = np.mean(ds[f"m1_{masking_scheme}_{str(a2_col)}_f1"])
         agg_em = np.mean(ds[f"m1_{masking_scheme}_{str(a2_col)}_em"])
 
@@ -199,8 +200,9 @@ class T5_PM(Primary_Model):
         # self.tk = AutoTokenizer.from_pretrained(model_name, cache_dir="./.model_cache")
         self.tk = AutoTokenizer.from_pretrained(model_name)
         self.model = T5ForConditionalGeneration.from_pretrained(
-            model_name, cache_dir="./.model_cache"
-            # model_name, 
+            model_name,
+            cache_dir="./.model_cache"
+            # model_name,
         ).cuda()
         super(T5_PM, self).__init__(
             model_path=None,
@@ -248,11 +250,17 @@ class T5_PM(Primary_Model):
         return prepped_val_dataset
 
     def evaluate(
-        self, masking_scheme, ds, a2_col, max_adversarial_examples=None, threshold=None, display=True
+        self,
+        masking_scheme,
+        ds,
+        a2_col,
+        max_adversarial_examples=None,
+        threshold=None,
+        display=True,
     ):
         """
         Args:
-            masking_scheme (str): The masking scheme to use. 
+            masking_scheme (str): The masking scheme to use.
             ds (Dataset): The dataset to evaluate on. Must have a column named "prepped_{masking_scheme}_{str(a2_col)}"
             a2_col (str): The name of the column containing the answer to the question. If None, then no answer is given.
             max_adversarial_examples (int): The maximum number of adversarial examples to evaluate. If None, then as many as possible will be evaluated.
@@ -341,15 +349,23 @@ class T5_PM(Primary_Model):
 
 def get_m1(m1_path, m1_arch, batch_size):
     # Unit Tests
-    assert m1_arch in ["t5-small", "t5-base", "t5-large", "t5-xl", "t5-xxl", "openai"]
+    assert m1_arch in [
+        "t5-small",
+        "t5-base",
+        "t5-large",
+        "t5-xl",
+        "t5-xxl",
+        "gpt-3.5-turbo",
+        "gpt-4",
+    ]
     # Load primary model
     if m1_arch.startswith("t5"):
         m1 = T5_PM(
             batch_size=batch_size,
             model_name=m1_arch,
         )
-    elif m1_arch == "openai":
-        m1 = OpenAI_PM()
+    elif m1_arch in ["gpt-3.5-turbo", "gpt-4"]:
+        m1 = OpenAI_PM(m1_arch)
     else:
         raise NotImplementedError
     return m1

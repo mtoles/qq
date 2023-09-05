@@ -37,7 +37,7 @@ np.random.seed(42)
 @click.command()
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
-@click.option("--m2_arch", help="secondary model architecture")
+@click.option("--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, gt}")
 @click.option(
     "--template_id",
     help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
@@ -197,8 +197,8 @@ def main(
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
-    elif m2_arch == "openai":
-        m2 = OpenAI_Secondary_Model(oai_cache_path, template_id)
+    elif m2_arch in ["gpt-3.5-turbo", "gpt-4"]:
+        m2 = OpenAI_Secondary_Model(oai_cache_path, m2_arch, template_id)
     elif m2_arch == "gt":
         m2 = Gt_Secondary_Model(gt_df)
     else:
@@ -220,13 +220,15 @@ def main(
     # del m1
     torch.cuda.empty_cache()  # free up memory
     # Create the oracle
-    Oracle = {
-        "t5": T5_Bool_Oracle,
-        "openai": OpenAI_Oracle,
-        # "bloom": Bloom_Bool_Oracle,
-        # "dolly": Dolly_Bool_Oracle,
-    }[oracle_arch]
-    oracle = Oracle(model_size=oracle_size, batch_size=oracle_eval_batch_size)
+    if oracle_arch == "t5":
+        oracle = T5_Bool_Oracle(model_size=oracle_size, batch_size=oracle_eval_batch_size)
+    elif oracle_arch == "gpt-3.5-turbo":
+        oracle = OpenAI_Oracle("gpt-3.5-turbo")
+    elif oracle_arch == "gpt-4":
+        oracle = OpenAI_Oracle("gpt-4")
+    else:
+        raise NotImplementedError
+    
     # Answer questions with the oracle
     print("oracle...")
     ds = oracle.process(ds, q2_masking_scheme="masked")

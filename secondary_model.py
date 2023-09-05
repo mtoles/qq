@@ -207,10 +207,11 @@ class Flan_Secondary_Model(Secondary_Model):
 
 
 class OpenAI_Secondary_Model(Secondary_Model):
-    def __init__(self, cache_path, prompt_id="p1"):
+    def __init__(self, cache_path, model_name, prompt_id="p1"):
         super(OpenAI_Secondary_Model, self).__init__(prompt_id)
-        self.model_name = "chatGPT"
-        self.model = "gpt-3.5-turbo"
+        # self.model_name = "chatGPT"
+        self.model_name = model_name
+        # self.model = "gpt-3.5-turbo"
         self.cache_path = cache_path
         self.oai_model_id = (
             None  # the current openai model id. set on the first api call
@@ -235,7 +236,7 @@ class OpenAI_Secondary_Model(Secondary_Model):
             while True:
                 try:
                     response = openai.ChatCompletion.create(
-                        model=self.model,
+                        model=self.model_name,
                         messages=[
                             {"role": "user", "content": prompt},
                         ],
