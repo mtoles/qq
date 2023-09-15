@@ -23,25 +23,11 @@ def main(hdfs_dir, gt_only):
             hdf_ds_paths = [os.path.join(root, f) for f in files]
     else:
         hdf_ds_paths = [hdfs_dir]
-
-        # old code for finding the best prompt
-        # delta_l = []
-        # find the prompt with the best delta_l
-        # for i, hdf_ds_path in enumerate(hdf_ds_paths):
-        #     df_raw = pd.read_hdf(hdf_ds_path, "ds")
-
-        #     df_raw["delta_l"] = (
-        #         df_raw["m1_bfsentence_a2_f1"] - df_raw["m1_bfsentence_None_f1"]
-        #     )  # mean: -0.422
-
-        #     delta_l.append(df_raw["delta_l"].mean())
-        # clen up the prompt with the best delta_l
-        # best_delta_l = max(delta_l)
-        # i_best_delta_l = delta_l.index(best_delta_l)
-        # print(f"Best delta_l: {best_delta_l} at index {i_best_delta_l}")
-        # df = pd.read_hdf(hdf_ds_paths[i_best_delta_l], "ds")
-    # sort them
     hdf_ds_paths = sorted(hdf_ds_paths)
+    # keep only the hdf files
+    hdf_ds_paths = [f for f in hdf_ds_paths if f.endswith(".hd5")]
+
+    sankey_txts = []
     for hdf_ds_path in hdf_ds_paths:
         df_raw = pd.read_hdf(hdf_ds_path, "ds")
         interesting_cols = [
@@ -108,28 +94,100 @@ def main(hdfs_dir, gt_only):
             ~df["a2_is_masked_sentence"] & df["stayed_same"]
         )
         num_distractor_got_worse = sum(~df["a2_is_masked_sentence"] & df["got_worse"])
-        print(f"num_questions: {num_questions}")
-        print(f"num_a2_is_masked_sentence: {num_a2_is_masked_sentence}")
-        print(f"num_a2_is_distractor: {num_a2_is_distractor}")
-        print(f"num_masked_sentence_improved: {num_masked_sentence_improved}")
-        print(f"num_masked_sentence_stayed_same: {num_masked_sentence_stayed_same}")
-        print(f"num_masked_sentence_got_worse: {num_masked_sentence_got_worse}")
-        print(f"num_distractor_improved: {num_distractor_improved}")
-        print(f"num_distractor_stayed_same: {num_distractor_stayed_same}")
-        print(f"num_distractor_got_worse: {num_distractor_got_worse}")
-        print(hdf_ds_path)
-        print(f"delta l: {df['delta_l'].mean()}")
-        # print(f"percent improved: {sum(df['did_improve']) / len(df)}")
-        print
 
+        # print for csv file
+        print(f"{hdf_ds_path},,")
+        print(f",num_questions,{num_questions}")
+        print(f",num_a2_is_masked_sentence,{num_a2_is_masked_sentence}")
+        print(f",num_a2_is_distractor,{num_a2_is_distractor}")
+        print(f",num_masked_sentence_improved,{num_masked_sentence_improved}")
+        print(f",num_masked_sentence_stayed_same,{num_masked_sentence_stayed_same}")
+        print(f",num_masked_sentence_got_worse,{num_masked_sentence_got_worse}")
+        print(f",num_distractor_improved,{num_distractor_improved}")
+        print(f",num_distractor_stayed_same,{num_distractor_stayed_same}")
+        print(f",num_distractor_got_worse,{num_distractor_got_worse}")
+        print(f",delta_l,{df['delta_l'].mean()}")
+        # print(f"percent improved: {sum(df['did_improve']) / len(df)}")
+        print()
         # reorder columns for saving df
         first_cols = ["id", "q1", "a1", "masked_sentence", "fc_masked"]
         column_order = first_cols + [col for col in df.columns if col not in first_cols]
         df = df[column_order]
         # sample the df for gt annotation
-        # save the df
-        print
 
+        # print the sankey file
+        sankey_txt = f"""// SankeyMATIC diagram inputs - Saved: 9/12/2023, 8:32:27 PM
+// https://sankeymatic.com/build/
+
+// === Nodes and Flows ===
+
+// Sample Job Search diagram:
+
+
+Questions [{num_a2_is_masked_sentence}] Masked Sentence
+Questions [{num_a2_is_distractor}] Distractor
+
+Masked Sentence [{num_masked_sentence_improved}] Improved
+Masked Sentence [{num_masked_sentence_stayed_same}] Equal
+Masked Sentence [{num_masked_sentence_got_worse}] Worse
+
+Distractor [{num_distractor_improved}] Improved
+Distractor [{num_distractor_stayed_same}] Equal
+Distractor [{num_distractor_got_worse}] Worse
+
+// === Settings ===
+
+size w 500
+  h 400
+margin l 0
+  r 0
+  t 0
+  b 0
+bg color #ffffff
+  transparent N
+node w 5
+  h 50
+  spacing 50
+  border 0
+  theme none
+  color #5cb8ff
+  opacity 1
+flow curvature 0.5
+  inheritfrom target
+  color #999999
+  opacity 0.45
+layout order automatic
+  justifyorigins N
+  justifyends N
+  reversegraph N
+  attachincompletesto nearest
+labels color #000000
+  highlight 0.55
+  fontface sans-serif
+labelname appears Y
+  size 14
+  weight 400
+labelvalue appears Y
+  fullprecision Y
+labelposition first after
+  breakpoint 2
+value format ',.'
+  prefix ''
+  suffix ''
+themeoffset a 9
+  b 0
+  c 0
+  d 0
+meta mentionsankeymatic N
+  listimbalances Y
+"""
+        sankey_txts.append(sankey_txt)
+        print
+    for i, sankey_txts in enumerate(sankey_txts):
+        # write to a txt file
+        sankey_path = hdf_ds_paths[i].replace(".hd5", ".txt")
+        with open(sankey_path, "w") as f:
+            f.write(sankey_txts)
 
 def get_answer_type(example):
     supporting = example["context_supporting"]["sentences"]
@@ -145,6 +203,7 @@ def get_answer_type(example):
         return "distractor"
     else:
         raise ValueError("a2_masked not found in supporting or distractor")
+
 
 
 if __name__ == "__main__":

@@ -34,10 +34,16 @@ from preprocess import get_preprocessed_ds
 
 np.random.seed(42)
 
+
 @click.command()
+@click.option(
+    "--split", default="validation", help="HotpotQA split {train, validation}"
+)
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
-@click.option("--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, gt}")
+@click.option(
+    "--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, gt}"
+)
 @click.option(
     "--template_id",
     help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
@@ -77,6 +83,7 @@ np.random.seed(42)
     "--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons"
 )
 def main(
+    split,
     m1_path,
     m1_arch,
     m2_arch,
@@ -119,7 +126,11 @@ def main(
 
     print("preprocessing...")
     # ds = get_preprocessed_ds("validation", downsample_pt_size)
-    ds = get_preprocessed_ds("validation")
+    assert split in ["train", "validation"]
+    assert not (
+        split == "train" and gt_subset
+    ), "gt subset only works for validation since there are no ground truth examples in the training set"
+    ds = get_preprocessed_ds(split)
 
     # filter out ids that don't appear in the gt dataset for speedup
     if m2_arch == "gt" or gt_subset:
@@ -201,12 +212,15 @@ def main(
         m2 = OpenAI_Secondary_Model(oai_cache_path, m2_arch, template_id)
     elif m2_arch == "gt":
         m2 = Gt_Secondary_Model(gt_df)
-    else:
-        # raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
+    elif m2_arch == "alpaca":
         m2 = Alpaca_Secondary_Model(
             "alpaca",
             ".model_cache/alpaca/tuned",
+            prompt_id=template_id,
         )
+    else:
+        raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
+
     # Apply the secondary model
     print("m2...")
     ds = m2.process(
@@ -221,14 +235,16 @@ def main(
     torch.cuda.empty_cache()  # free up memory
     # Create the oracle
     if oracle_arch == "t5":
-        oracle = T5_Bool_Oracle(model_size=oracle_size, batch_size=oracle_eval_batch_size)
+        oracle = T5_Bool_Oracle(
+            model_size=oracle_size, batch_size=oracle_eval_batch_size
+        )
     elif oracle_arch == "gpt-3.5-turbo":
         oracle = OpenAI_Oracle("gpt-3.5-turbo")
     elif oracle_arch == "gpt-4":
         oracle = OpenAI_Oracle("gpt-4")
     else:
         raise NotImplementedError
-    
+
     # Answer questions with the oracle
     print("oracle...")
     ds = oracle.process(ds, q2_masking_scheme="masked")
@@ -273,7 +289,6 @@ def main(
     df.to_hdf(save_path, "ds")
     print(f"dataset saved to {save_path}")
 
-    df.to_csv(f"analysis_dataset_{len(df)}_{m1_arch}.csv")
     print
 
 
