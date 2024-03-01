@@ -29,5 +29,9 @@ dependencies:
   # - h5py
   - fire
 
+  # alpaca
+  - peft
+  - bitsandbytes
+  
   - pip:
     - transformers==4.28.1 # new version which include tokenizer for alpaca

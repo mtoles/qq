@@ -95,6 +95,13 @@ def main(hdfs_dir, gt_only):
         )
         num_distractor_got_worse = sum(~df["a2_is_masked_sentence"] & df["got_worse"])
 
+        # answer stuff for reviewers
+        avg_num_answer_chars = df["m1_supporting_None_gen"].apply(len).mean()
+        avg_num_answer_words = df["m1_supporting_None_gen"].apply(
+            lambda x: len(x.split())
+        ).mean()
+        print(f"avg_num_words: {avg_num_answer_words}")
+
         # print for csv file
         print(f"{hdf_ds_path},,")
         print(f",num_questions,{num_questions}")
@@ -124,16 +131,16 @@ def main(hdfs_dir, gt_only):
 // Sample Job Search diagram:
 
 
-Questions [{num_a2_is_masked_sentence}] Masked Sentence
-Questions [{num_a2_is_distractor}] Distractor
+Q [{num_a2_is_masked_sentence}] MS
+Q [{num_a2_is_distractor}] D
 
-Masked Sentence [{num_masked_sentence_improved}] Improved
-Masked Sentence [{num_masked_sentence_stayed_same}] Equal
-Masked Sentence [{num_masked_sentence_got_worse}] Worse
+MS [{num_masked_sentence_improved}] + ‎
+MS [{num_masked_sentence_stayed_same}] = ‎
+MS [{num_masked_sentence_got_worse}] - ‎
 
-Distractor [{num_distractor_improved}] Improved
-Distractor [{num_distractor_stayed_same}] Equal
-Distractor [{num_distractor_got_worse}] Worse
+D [{num_distractor_improved}] + ‎
+D [{num_distractor_stayed_same}] = ‎
+D [{num_distractor_got_worse}] - ‎
 
 // === Settings ===
 
@@ -165,7 +172,7 @@ labels color #000000
   highlight 0.55
   fontface sans-serif
 labelname appears Y
-  size 14
+  size 32
   weight 400
 labelvalue appears Y
   fullprecision Y
@@ -189,6 +196,7 @@ meta mentionsankeymatic N
         with open(sankey_path, "w") as f:
             f.write(sankey_txts)
 
+
 def get_answer_type(example):
     supporting = example["context_supporting"]["sentences"]
     # flatten the supporting list of lists
@@ -203,7 +211,6 @@ def get_answer_type(example):
         return "distractor"
     else:
         raise ValueError("a2_masked not found in supporting or distractor")
-
 
 
 if __name__ == "__main__":

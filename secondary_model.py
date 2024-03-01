@@ -1,5 +1,5 @@
 import torch
-from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model, LlamaForCausalLM
+from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model, LlamaForCausalLM, BitsAndBytesConfig
 import pandas as pd
 import numpy as np
 import openai
@@ -54,19 +54,17 @@ EXAMPLES = [
     {
         "context": 'House of Anubis: House of Anubis is a mystery television series developed for Nickelodeon based on the Dutch-Belgian television series "Het Huis Anubis".',
         "q1": 'The Dutch-Belgian television series that "House of Anubis" was based on first aired in what year?',
-        "q2": 'In what year did "Het Huis Anubis" air?'
+        "q2": 'In what year did "Het Huis Anubis" air?',
     },
-
     {
-        "context": 'TOberoi family: The Oberoi family is an Indian family that is famous for its involvement in hotels, namely through The Oberoi Group.',
-        "q1": 'The Oberoi family is part of a hotel company that has a head office in what city?',
-        "q2": 'What city holds the head office of The Oberoi Group?',
+        "context": "TOberoi family: The Oberoi family is an Indian family that is famous for its involvement in hotels, namely through The Oberoi Group.",
+        "q1": "The Oberoi family is part of a hotel company that has a head office in what city?",
+        "q2": "What city holds the head office of The Oberoi Group?",
     },
-
     {
-        "context": 'Zilpo Road: The nine mile byway starts south of Morehead, Kentucky and can be accessed by U.S. Highway 60. Arkansas Highway 113: The route runs 29.48 mi from Arkansas Highway 10 to Morrilton.',
-        "q1": 'What U.S Highway gives access to Zilpo Road, and is also known as Midland Trail?',
-        "q2": 'what U.S. Highway is also known as Midland Trail?',
+        "context": "Zilpo Road: The nine mile byway starts south of Morehead, Kentucky and can be accessed by U.S. Highway 60. Arkansas Highway 113: The route runs 29.48 mi from Arkansas Highway 10 to Morrilton.",
+        "q1": "What U.S Highway gives access to Zilpo Road, and is also known as Midland Trail?",
+        "q2": "what U.S. Highway is also known as Midland Trail?",
     },
     {
         "context": 'My Finale: "My Finale" is the hour-long season finale for season eight of the American sitcom "Scrubs". Human Error (House): "Human Error" is the twenty-fourth episode and season finale of the third season of "House" and the seventieth episode overall.',
@@ -75,10 +73,11 @@ EXAMPLES = [
     },
     {
         "context": 'Annette Bening: Annette Carol Bening (born May 29, 1958) is an American actress. She is a four-time Academy Award nominee; for "The Grifters" (1990), "American Beauty" (1999), "Being Julia" (2004) and "The Kids Are All Right" (2010). In 2006, she received a star on the Hollywood Walk of Fame. The Great Outdoors (film): The Great Outdoors is a 1988 American comedy film directed by Howard Deutch, and written and produced by John Hughes. John Lithgow: John Arthur Lithgow ( ; born October 19 , 1945) is an American actor, musician, singer, comedian, voice actor, and author.',
-        "q1": 'The 1988 American comedy film, The Great Outdoors, starred a four-time Academy Award nominee, who received a star on the Hollywood Walk of Fame in what year?',
-        "q2": 'Who starred in the 1988 American comedy film, The Great Outdoors?',
+        "q1": "The 1988 American comedy film, The Great Outdoors, starred a four-time Academy Award nominee, who received a star on the Hollywood Walk of Fame in what year?",
+        "q2": "Who starred in the 1988 American comedy film, The Great Outdoors?",
     },
 ]
+
 
 # Abstract class for secondary models
 class Secondary_Model:
@@ -151,21 +150,42 @@ class Repeater_Secondary_Model(Secondary_Model):
 
 
 class Alpaca_Secondary_Model(Secondary_Model):
-    def __init__(self, model_name,
-                 model_path,
-                 max_length=4096,
-                 prompt_id="p1",
-                 device="cuda",
-                 precision="bf16"):
+    def __init__(
+        self,
+        model_name,
+        model_path,
+        max_length=4096,
+        prompt_id="p1",
+        device="cuda",
+        precision="bf16",
+    ):
         super(Alpaca_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
         self.device = device
 
         if precision == "int8":
-            self.model = AutoModelForCausalLM.from_pretrained(model_path,
-                                                               device_map="auto", load_in_8bit=True)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path, device_map="auto", load_in_8bit=True
+            )
         elif precision == "bf16":
-            self.model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path, torch_dtype=torch.bfloat16
+            )
+        # low-memory fine tuning option
+        elif precision == "bnb_4":
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path,  
+                quantization_config=bnb_config,  # Same quantization config as before
+                device_map="auto",
+                trust_remote_code=True,
+            )
+
         else:
             self.model = AutoModelForCausalLM.from_pretrained(model_path)
         self.model.to(self.device)
@@ -183,7 +203,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
             "p3": "What question can you ask to help you answer the final question?",
             "p4": "Ask another question that would help you answer the following question:",
             "p5": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
-            "p6": "What question can you ask to help you answer the final question?"
+            "p6": "What question can you ask to help you answer the final question?",
         }
         input_templates = {
             "p1": "Question:\n{q1}\nContext:\n{context}",
@@ -194,59 +214,75 @@ class Alpaca_Secondary_Model(Secondary_Model):
             "p6": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
         }
 
-        if self.prompt_id in ["p1","p2", "p3", "p4", "p5", "p6"] :
+        if self.prompt_id in ["p1", "p2", "p3", "p4", "p5", "p6"]:
             instruction = instruction_templates[self.prompt_id]
             input = input_templates[self.prompt_id].format(context=context, q1=q1)
             prompt = self.alpaca_template.format(instruction=instruction, input=input)
             if self.prompt_id in ["p4", "p5", "p6"]:
                 inputs = []
                 for i, ex in enumerate(EXAMPLES):
-                    input = input_templates[self.prompt_id].format(context=ex['context'], q1=ex['q1'])
+                    input = input_templates[self.prompt_id].format(
+                        context=ex["context"], q1=ex["q1"]
+                    )
                     # inputs.append(self.alpaca_template.format(instruction=instruction, input=input) + "\n" + ex['q2'])
-                    inputs.append(input + "\nResponse:\n" + ex['q2'])
-                inputs.append(input_templates[self.prompt_id].format(context=context, q1=q1))
+                    inputs.append(input + "\nResponse:\n" + ex["q2"])
+                inputs.append(
+                    input_templates[self.prompt_id].format(context=context, q1=q1)
+                )
                 inputs = "\n\n".join(inputs)
-                prompt = self.alpaca_template.format(instruction=instruction, input=inputs)
+                prompt = self.alpaca_template.format(
+                    instruction=instruction, input=inputs
+                )
 
         else:
             raise Exception("No such prompt")
 
         return prompt
 
-
     def forward(self, example, question_col, context_col):
         q1 = example[question_col]
         context = example[context_col]
         prompt = self.fit_template(q1, context)
 
-        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
-        inputs = {k: v.to(self.device) for k, v in inputs.items() if k != 'token_type_ids'}
-        with torch.no_grad():
-            outputs = self.model.generate(**inputs, max_length=self.max_length)
-        q2 = self.tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):], skip_special_tokens=True)
+        inputs = self.tokenizer(
+            prompt, return_tensors="pt", truncation=True, max_length=self.max_length
+        )
+        inputs = {
+            k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
+        }
+        # with torch.no_grad():
+        outputs = self.model.generate(**inputs, max_length=self.max_length)
+        q2 = self.tokenizer.decode(
+            outputs[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True
+        )
 
         return q2
 
 
 class Flan_Secondary_Model(Secondary_Model):
-    def __init__(self, model_name="flan-t5-small",
-                 prompt_id="p1",
-                 max_length=4096,
-                 device="cuda",
-                 precision="bf16"):
+    def __init__(
+        self,
+        model_name="flan-t5-small",
+        prompt_id="p1",
+        max_length=4096,
+        device="cuda",
+        precision="bf16",
+    ):
         super(Flan_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
         self.device = device
         model_path = f"google/{model_name}"
         if precision == "int8":
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path,
-                                                               device_map="auto", load_in_8bit=True)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(
+                model_path, device_map="auto", load_in_8bit=True
+            )
         elif precision == "bf16":
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path, torch_dtype=torch.bfloat16)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(
+                model_path, torch_dtype=torch.bfloat16
+            )
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
         self.model.to(self.device)
-
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.max_length = max_length
@@ -255,13 +291,14 @@ class Flan_Secondary_Model(Secondary_Model):
         q1 = example[question_col]
         context = example[context_col]
         prompt = self.template.format(context=context, q1=q1)
-        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.max_length)
+        inputs = self.tokenizer(
+            prompt, return_tensors="pt", truncation=True, max_length=self.max_length
+        )
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             outputs = self.model.generate(**inputs)
         q2 = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
         return q2
-
 
 
 class OpenAI_Secondary_Model(Secondary_Model):
@@ -317,7 +354,9 @@ class OpenAI_Secondary_Model(Secondary_Model):
             else:
                 new_line = pd.DataFrame(columns=["response"], index=[idx], data=[q2])
                 self.cache_df = pd.concat([self.cache_df, new_line])
-                new_line.to_csv(self.cache_path, mode="a", header=False, escapechar="🦆")
+                new_line.to_csv(
+                    self.cache_path, mode="a", header=False, escapechar="🦆"
+                )
             return q2
 
         q1 = example[question_col]

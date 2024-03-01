@@ -413,20 +413,22 @@ def randsentence_dataset(ds, m1, do_gt):
     )
 
     # evaluate the reference col
-    output_ds, _metrics = m1.evaluate(
-        masking_scheme="bfdelsentence",
-        ds=ds_delsentence,
-        a2_col=None,
-        # max_adversarial_examples=max_adversarial_examples,
-        # threshold=-1,
-    )
+    # output_ds, _metrics = m1.evaluate(
+    #     masking_scheme="bfdelsentence",
+    #     ds=ds_delsentence,
+    #     a2_col=None,
+    #     # max_adversarial_examples=max_adversarial_examples,
+    #     # threshold=-1,
+    # )
 
     # rename bfdelsentence -> bf_randsentence
 
     # df = output_ds.to_pandas()
     # df.rename(columns=col_name_map, inplace=True)
+    output_ds = ds_delsentence
     for k, v in col_name_map.items():
-        output_ds = output_ds.rename_column(k, v)
+        if k in output_ds.column_names:
+            output_ds = output_ds.rename_column(k, v)
     return output_ds
 
 
