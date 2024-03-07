@@ -158,6 +158,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
         prompt_id="p1",
         device="cuda",
         precision="bf16",
+        quantization_config=None,
     ):
         super(Alpaca_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
@@ -165,7 +166,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
 
         if precision == "int8":
             self.model = AutoModelForCausalLM.from_pretrained(
-                model_path, device_map="auto", load_in_8bit=True
+                model_path, device_map="auto", load_in_8bit=True, quantization_config=quantization_config
             )
         elif precision == "bf16":
             self.model = AutoModelForCausalLM.from_pretrained(

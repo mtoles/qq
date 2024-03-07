@@ -1,4 +1,4 @@
-name: qq
+name: qq2
 channels: 
   - huggingface
   - conda-forge
@@ -29,9 +29,10 @@ dependencies:
   # - h5py
   - fire
 
-  # alpaca
+  # alpaca training
   - peft
   - bitsandbytes
+  - trl
   
   - pip:
     - transformers==4.28.1 # new version which include tokenizer for alpaca
