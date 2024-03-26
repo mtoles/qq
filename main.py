@@ -218,6 +218,14 @@ def main(
             ".model_cache/alpaca/tuned",
             prompt_id=template_id,
         )
+    elif m2_arch == "alexpaca":
+        m2 = Alpaca_Secondary_Model(
+            "alpaca",
+            ".model_cache/alpaca/tuned",
+            tokenizer_path=".model_cache/alpaca/tuned", # use the original alpaca tokenizer
+            prompt_id="p1", # always use p1 since thats what it was trained on
+            precision="bnb_4"
+        )
     else:
         raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
 

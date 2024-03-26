@@ -1,5 +1,11 @@
 import torch
-from transformers import PreTrainedModel, GPT2Tokenizer, GPT2Model, LlamaForCausalLM, BitsAndBytesConfig
+from transformers import (
+    PreTrainedModel,
+    GPT2Tokenizer,
+    GPT2Model,
+    LlamaForCausalLM,
+    BitsAndBytesConfig,
+)
 import pandas as pd
 import numpy as np
 import openai
@@ -8,6 +14,8 @@ import os
 import time
 from tqdm import tqdm
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForCausalLM
+from peft import PeftModel
+from trl import SFTTrainer
 
 
 # Set up the API once for all models
@@ -154,48 +162,77 @@ class Alpaca_Secondary_Model(Secondary_Model):
         self,
         model_name,
         model_path,
-        max_length=4096,
+        max_length=512,
         prompt_id="p1",
         device="cuda",
         precision="bf16",
         quantization_config=None,
+        tokenizer_path=None,
     ):
         super(Alpaca_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
         self.device = device
 
+        # if loading the alepaca model you need to manually pass in the original tokenizer
+        # because i forgot to save the tokenzier with the model
+        if tokenizer_path is None:
+            self.tokenizer_path = model_path
+        else:
+            self.tokenizer_path = tokenizer_path
+
         if precision == "int8":
             self.model = AutoModelForCausalLM.from_pretrained(
-                model_path, device_map="auto", load_in_8bit=True, quantization_config=quantization_config
+                model_path,
+                device_map="auto",
+                load_in_8bit=True,
+                quantization_config=quantization_config,
             )
         elif precision == "bf16":
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path, torch_dtype=torch.bfloat16
             )
         # low-memory fine tuning option
-        elif precision == "bnb_4":
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16
-            )
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_path,  
-                quantization_config=bnb_config,  # Same quantization config as before
-                device_map="auto",
-                trust_remote_code=True,
-            )
+        elif precision == "bnb_4": 
+            raise NotImplementedError("matt, go back and copy the experimental code into here")
+            # bnb_config = BitsAndBytesConfig(
+            #     load_in_4bit=True,
+            #     bnb_4bit_use_double_quant=True,
+            #     bnb_4bit_quant_type="nf4",
+            #     bnb_4bit_compute_dtype=torch.bfloat16,
+            # )
+
+            # normal_model = AutoModelForCausalLM.from_pretrained(
+            #     model_path,
+            #     quantization_config=bnb_config,  # Same quantization config as before
+            #     device_map="auto",
+            #     trust_remote_code=True,
+            # )
+            
+            # self.model = PeftModel.from_pretrained(
+            #     normal_model, "models/alpaca-jeopardy-1-epoch"
+            # )
+
+            # # trainer = SFTTrainer(
+            # #     model=self.model,
+            # #     # peft_config=peft_config,
+            # #     dataset_text_field="training_example",
+            # #     max_seq_length=max_seq_length,
+            # #     tokenizer=tokenizer,
+            # #     args=training_arguments,
+            # #     packing=packing,
+            # # )
 
         else:
             self.model = AutoModelForCausalLM.from_pretrained(model_path)
-        self.model.to(self.device)
+        if str(self.model.device) == "cpu":
+            self.model.to(self.device)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "right"
         self.max_length = max_length
         self.alpaca_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
         self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
-        self.device = self.device
 
     def fit_template(self, q1, context):
         instruction_templates = {
@@ -217,16 +254,16 @@ class Alpaca_Secondary_Model(Secondary_Model):
 
         if self.prompt_id in ["p1", "p2", "p3", "p4", "p5", "p6"]:
             instruction = instruction_templates[self.prompt_id]
-            input = input_templates[self.prompt_id].format(context=context, q1=q1)
-            prompt = self.alpaca_template.format(instruction=instruction, input=input)
+            inpt = input_templates[self.prompt_id].format(context=context, q1=q1)
+            prompt = self.alpaca_template.format(instruction=instruction, input=inpt)
             if self.prompt_id in ["p4", "p5", "p6"]:
                 inputs = []
                 for i, ex in enumerate(EXAMPLES):
-                    input = input_templates[self.prompt_id].format(
+                    inpt = input_templates[self.prompt_id].format(
                         context=ex["context"], q1=ex["q1"]
                     )
                     # inputs.append(self.alpaca_template.format(instruction=instruction, input=input) + "\n" + ex['q2'])
-                    inputs.append(input + "\nResponse:\n" + ex["q2"])
+                    inputs.append(inpt + "\nResponse:\n" + ex["q2"])
                 inputs.append(
                     input_templates[self.prompt_id].format(context=context, q1=q1)
                 )
@@ -251,11 +288,12 @@ class Alpaca_Secondary_Model(Secondary_Model):
         inputs = {
             k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
         }
-        # with torch.no_grad():
-        outputs = self.model.generate(**inputs, max_length=self.max_length)
-        q2 = self.tokenizer.decode(
-            outputs[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True
-        )
+        with torch.no_grad():
+            eos_token_id = self.tokenizer.eos_token_id
+            outputs = self.model.generate(**inputs, max_length=self.max_length, eos_token_id=eos_token_id)
+            q2 = self.tokenizer.decode(
+                outputs[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False
+            )
 
         return q2
 

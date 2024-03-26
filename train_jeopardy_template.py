@@ -15,6 +15,9 @@ from trl import SFTTrainer
 from secondary_model import Alpaca_Secondary_Model
 import pandas as pd
 from datasets import Dataset
+from pathlib import PurePath
+from datetime import datetime
+
 
 # The model that you want to train from the Hugging Face hub
 # model_name = "NousResearch/Llama-2-7b-chat-hf"
@@ -24,14 +27,24 @@ from datasets import Dataset
 
 # Fine-tuned model name
 # new_model = "llama-2-7b-miniguanaco"
-new_model = "alpaca-jeopardy"
+
+# Number of training epochs
+# num_train_epochs = 1
+num_train_epochs = 200
+
+now = datetime.now()
+new_model = f"alpaca-jeopardy"
+
+# Output directory where the model predictions and checkpoints will be stored
+output_dir = f"./models/{new_model}"
 
 ################################################################################
 # QLoRA parameters
 ################################################################################
 
 # LoRA attention dimension
-lora_r = 64
+# lora_r = 64
+lora_r = 8
 
 # Alpha parameter for LoRA scaling
 lora_alpha = 32
@@ -59,79 +72,50 @@ use_nested_quant = False
 # TrainingArguments parameters
 ################################################################################
 
-# Output directory where the model predictions and checkpoints will be stored
-output_dir = "./results/alpaca-jeopardy"
-
-# Number of training epochs
-num_train_epochs = 3
-
-# Enable fp16/bf16 training (set bf16 to True with an A100)
-fp16 = False
+fp16 = False  # Enable fp16/bf16 training (set bf16 to True with an A100)
 bf16 = False
 
-# Batch size per GPU for training
-# per_device_train_batch_size = 4
-per_device_train_batch_size = 12
+per_device_train_batch_size = 12  # Batch size per GPU for training
+per_device_eval_batch_size = 3
 
-# Batch size per GPU for evaluation
-# per_device_eval_batch_size = 4
-per_device_eval_batch_size = per_device_train_batch_size
+gradient_accumulation_steps = (
+    1  # Number of update steps to accumulate the gradients for
+)
+gradient_checkpointing = True  # Enable gradient checkpointing
+max_grad_norm = 0.3  # Maximum gradient normal (gradient clipping)
 
-# Number of update steps to accumulate the gradients for
-gradient_accumulation_steps = 1
+# learning_rate = 2e-4  # Initial learning rate (AdamW optimizer)
+learning_rate = 2e-4  # testing
+weight_decay = (
+    0.001  # Weight decay to apply to all layers except bias/LayerNorm weights
+)
 
-# Enable gradient checkpointing
-gradient_checkpointing = True
+optim = "paged_adamw_32bit"  # Optimizer to use
+lr_scheduler_type = "cosine"  # Learning rate schedule
 
-# Maximum gradient normal (gradient clipping)
-max_grad_norm = 0.3
+max_steps = -1  # Number of training steps (overrides num_train_epochs)
+warmup_ratio = 0.03  # Ratio of steps for a linear warmup (from 0 to learning rate)
 
-# Initial learning rate (AdamW optimizer)
-learning_rate = 2e-4
+group_by_length = True  # Group sequences into batches with same length. Saves memory and speeds up training considerably
 
-# Weight decay to apply to all layers except bias/LayerNorm weights
-weight_decay = 0.001
-
-# Optimizer to use
-optim = "paged_adamw_32bit"
-
-# Learning rate schedule
-lr_scheduler_type = "cosine"
-
-# Number of training steps (overrides num_train_epochs)
-max_steps = -1
-
-# Ratio of steps for a linear warmup (from 0 to learning rate)
-warmup_ratio = 0.03
-
-# Group sequences into batches with same length
-# Saves memory and speeds up training considerably
-group_by_length = True
-
-# Save checkpoint every X updates steps
-save_steps = 1000
-
-# Log every X updates steps
-logging_steps = 25
+save_steps = 1000  # Save checkpoint every X updates steps
+logging_steps = 25  # Log every X updates steps
 
 
 ################################################################################
 # SFT parameters
 ################################################################################
 
-# Maximum sequence length to use
-max_seq_length = None
+# # Maximum sequence length to use
+# max_seq_length = None
+# custom dataset
+CUTOFF_LEN = 512
 
 # Pack multiple short examples in the same input sequence to increase efficiency
 packing = False
 
 # Load the entire model on the GPU 0
 device_map = {"": 0}
-
-
-# Load dataset (you can process it here)
-# dataset = load_dataset(dataset_name, split="train")
-
 
 # Load tokenizer and model with QLoRA configuration
 compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
@@ -151,20 +135,15 @@ if compute_dtype == torch.float16 and use_4bit:
         print("Your GPU supports bfloat16: accelerate training with bf16=True")
         print("=" * 80)
 
-# Load base model
-# model = AutoModelForCausalLM.from_pretrained(
-#     # model_name, quantization_config=bnb_config, device_map=device_map
-#     model_name,
-#     device_map=device_map,
-# )
-
 alpaca = Alpaca_Secondary_Model(
     "alpaca",
     ".model_cache/alpaca/tuned",
-    # precision="bnb_4",
-    precision="bf16",
+    precision="bnb_4",
+    # precision="bf16",
     quantization_config=bnb_config,
 )
+
+alpaca.model.eval()
 
 alpaca.model.config.use_cache = False
 alpaca.model.config.pretraining_tp = 1
@@ -175,24 +154,26 @@ tokenizer = alpaca.tokenizer
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"  # Fix weird overflow issue with fp16 training
 
-# custom dataset
-CUTOFF_LEN = 512
-
 # train data
-custom_data_train = Dataset.from_pandas(
-    pd.read_json("data/jeopardy/jeopardy_full_train.jsonl", lines=True)
-)
-custom_data_train = custom_data_train.filter(lambda x: x["jeopardy_q"] is not None)
-ds_train = custom_data_train.map(
-    lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
-)
-ds_train = ds_train.map(
-    lambda x: {"training_example": x["prompt"] + " " + x["jeopardy_q"]}
-)
+# custom_data_train = Dataset.from_pandas(
+#     pd.read_json("data/jeopardy/jeopardy_full_train.jsonl", lines=True)
+# )
+# custom_data_train = custom_data_train.filter(lambda x: x["jeopardy_q"] is not None)
+# ds_train = custom_data_train.map(
+#     lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
+# )
+# ds_train = ds_train.map(
+#     lambda x: {
+#         "training_example": x["prompt"]
+#         + " "
+#         + x["jeopardy_q"]
+#         + " "
+#         + tokenizer.eos_token
+#     }
+# )
 
-eval_steps = len(ds_train) // per_device_train_batch_size // 8
 
-# test data
+# # test data
 custom_data_test = Dataset.from_pandas(
     pd.read_hdf(
         "data/jeopardy/jeopardy_full_validation.hd5"
@@ -203,11 +184,22 @@ ds_test = custom_data_test.map(
     lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
 )
 ds_test = ds_test.map(
-    lambda x: {"training_example": x["prompt"] + " " + x["jeopardy_q"]}
+    lambda x: {
+        "training_example": x["prompt"]
+        + " "
+        + x["jeopardy_q"]
+        + " "
+        + tokenizer.eos_token
+    }
 )
 
+
 # downsample (prototyping)
-# ds_train = ds_train.shuffle(seed=42).select(range(per_device_train_batch_size * 2))
+ds_test = ds_test.shuffle(seed=42).select(range(per_device_train_batch_size * 2))
+ds_train = ds_test.shuffle(seed=42).select(range(per_device_train_batch_size * 2))
+
+eval_steps = len(ds_train) // per_device_train_batch_size
+# eval_steps = 2
 
 # Load LoRA configuration
 peft_config = LoraConfig(
@@ -216,12 +208,26 @@ peft_config = LoraConfig(
     r=lora_r,
     bias="none",
     task_type="CAUSAL_LM",
+    target_modules=[
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        # "gate_proj",
+        # "up_proj",
+        # "down_proj",
+        # "lm_head",
+    ],
+    # modules_to_save=["embed_tokens"],
 )
 
 # Set training parameters
 training_arguments = TrainingArguments(
     output_dir=output_dir,
     num_train_epochs=num_train_epochs,
+    # num_train_epochs=num_train_epochs
+    # / len(ds_train)
+    # * 3,  # testing, force 1 train step
     per_device_train_batch_size=per_device_train_batch_size,
     gradient_accumulation_steps=gradient_accumulation_steps,
     optim=optim,
@@ -230,6 +236,7 @@ training_arguments = TrainingArguments(
     evaluation_strategy="steps",
     eval_steps=eval_steps,
     learning_rate=learning_rate,
+    # learning_rate=0, # testing
     weight_decay=weight_decay,
     fp16=fp16,
     bf16=bf16,
@@ -241,21 +248,64 @@ training_arguments = TrainingArguments(
     report_to="tensorboard",
 )
 
+
+def compute_perplexity(eval_preds):
+    logits = torch.tensor(eval_preds.predictions)
+    batch_size, seq_length, vocab_size = logits.shape
+    labels = torch.tensor(eval_preds.label_ids)
+    # logits = torch.nn.functional.softmax(logits, dim=-1)
+    # p_true_tokens = logits.view(-1, vocab_size)[
+    #     torch.arange(batch_size * seq_length), labels.view(-1)
+    # ].view(batch_size, seq_length)
+
+    # nll = -torch.log(p_true_tokens + 1e-10)
+    # mean_nll = nll.mean()
+    # perplexity = torch.exp(mean_nll)
+
+    l2 = torch.nn.functional.cross_entropy(logits.view(-1, vocab_size), labels.view(-1))
+    ppl = torch.exp(l2)
+    # compute percentage of correct tokens
+    correct_tokens = (logits.argmax(-1) == labels).float().mean()
+
+    return {"perplexity": ppl, "correct_tokens": correct_tokens.item()}
+
+
 # Set supervised fine-tuning parameters
 trainer = SFTTrainer(
     model=alpaca.model,
     train_dataset=ds_train,
-    eval_dataset=ds_test,
+    eval_dataset=ds_train,
     peft_config=peft_config,
     dataset_text_field="training_example",
-    max_seq_length=max_seq_length,
     tokenizer=tokenizer,
     args=training_arguments,
     packing=packing,
+    max_seq_length=CUTOFF_LEN,
+    compute_metrics=compute_perplexity,
 )
 
+
 # Train model
+trainer.model.cuda()
 trainer.train()
 
-# Save trained model
-trainer.model.save_pretrained(new_model)
+trainer.model.save_pretrained(PurePath("models") / new_model)
+
+# eval the model on the first 3 examples and print inputs and outputs
+trainer.model.eval()
+# for i in range(3):
+#     tokenized_input = tokenizer(ds_train[i]["prompt"], return_tensors="pt").to(
+#             "cuda"
+#         )
+#     til = tokenized_input["input_ids"].shape[1]
+#     generation = trainer.model.generate(
+#         **tokenized_input,
+#         max_new_tokens=100,
+#         eos_token_id=2,
+#         output_scores=True,
+#         return_dict_in_generate=True
+#     )
+#     generated_tokens = generation.sequences[:, til:]
+#     generated_seq = tokenizer.decode(generated_tokens.squeeze().tolist())
+#     print(f"Input: {ds_train[i]['prompt']}")  # noqa
+#     print(f"Output: {generated_sez}")  # noqa
