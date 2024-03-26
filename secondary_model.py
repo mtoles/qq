@@ -180,33 +180,26 @@ class Alpaca_Secondary_Model(Secondary_Model):
         else:
             self.tokenizer_path = tokenizer_path
 
-        if precision == "int8":
+        if precision == "bf16":
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path, torch_dtype=torch.bfloat16
+            )
+        elif precision == "int8":
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 device_map="auto",
                 load_in_8bit=True,
                 quantization_config=quantization_config,
             )
-        elif precision == "bf16":
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_path, torch_dtype=torch.bfloat16
-            )
         # low-memory fine tuning option
         elif precision == "bnb_4": 
-            raise NotImplementedError("matt, go back and copy the experimental code into here")
-            # bnb_config = BitsAndBytesConfig(
-            #     load_in_4bit=True,
-            #     bnb_4bit_use_double_quant=True,
-            #     bnb_4bit_quant_type="nf4",
-            #     bnb_4bit_compute_dtype=torch.bfloat16,
-            # )
-
-            # normal_model = AutoModelForCausalLM.from_pretrained(
-            #     model_path,
-            #     quantization_config=bnb_config,  # Same quantization config as before
-            #     device_map="auto",
-            #     trust_remote_code=True,
-            # )
+            print("loading alpaca in bnb_4 bit")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                quantization_config=quantization_config,  # Same quantization config as before
+                device_map="auto",
+                trust_remote_code=True,
+            )
             
             # self.model = PeftModel.from_pretrained(
             #     normal_model, "models/alpaca-jeopardy-1-epoch"
