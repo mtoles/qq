@@ -5,25 +5,21 @@
 
 import click
 import torch
-from datasets import load_from_disk, Dataset
-from oracles import *  # T5_Bool_Oracle, Bloom_Bool_Oracle, Dolly_Bool_Oracle
+from datasets import Dataset
+from oracles import *  
 from primary_models import get_m1
 from secondary_model import (
     Repeater_Secondary_Model,
     OpenAI_Secondary_Model,
     Gt_Secondary_Model,
-    Flan_Secondary_Model,
     Alpaca_Secondary_Model,
 )
 from utils import set_random_seed
-from dataset_utils import bf_filtering, combine_adversarial_ds
 from datetime import datetime
-from time import sleep
 import numpy as np
 
-# from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 from masking import (
-    adversarial_dataset,
+    # adversarial_dataset,
     randsentence_dataset,
     randdist_dataset,
 )
@@ -31,6 +27,7 @@ from pathlib import PurePath
 import pandas as pd
 import os
 from preprocess import get_preprocessed_ds
+from tqdm import tqdm
 
 np.random.seed(42)
 
@@ -58,11 +55,11 @@ np.random.seed(42)
 @click.option(
     "--oracle_eval_batch_size", help="batch size for eval", default=1, type=int
 )
-@click.option(
-    "--max_adversarial_examples",
-    default=1,
-    help="create at most this many adversarial examples per example",
-)
+# @click.option(
+#     "--max_adversarial_examples",
+#     default=1,
+#     help="create at most this many adversarial examples per example",
+# )
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -137,8 +134,6 @@ def main(
 
     # filter out ids that don't appear in the gt dataset for speedup
     if m2_arch == "gt" or gt_subset:
-        # gt_df = pd.read_csv("gt_data/1/non_adversarial/gt_labeled_100.csv") # 1.0
-        # gt_df = pd.read_csv("gt_data/3/gt_dataset_v3_400_of_600.csv") # 3.0
         gt_df = pd.read_excel("gt_data/gt_dataset_v3_400_of_600.xlsx")  # excel
         # drop any gt without an m2
         gt_df = gt_df.dropna(subset=["q2_gt"])
