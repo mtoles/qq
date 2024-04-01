@@ -42,8 +42,9 @@ np.random.seed(42)
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
 @click.option(
-    "--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, gt}"
+    "--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, alpaca, alexpaca, gt}"
 )
+@click.option("--alexpaca_path", help="path to trained alexpaca model", default=None)
 @click.option(
     "--template_id",
     help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
@@ -87,6 +88,7 @@ def main(
     m1_path,
     m1_arch,
     m2_arch,
+    alexpaca_path,
     template_id,
     oracle_arch,
     oracle_size,
@@ -100,6 +102,7 @@ def main(
     results_filename,
     save_dir,
 ):
+    assert alexpaca_path and m2_arch == "alexpaca", "alexpaca path required iff m2_arch is alexpaca"
     masking_scheme = "randsentence"
     set_random_seed(0)
     if max_adversarial_examples is None:
@@ -221,10 +224,9 @@ def main(
     elif m2_arch == "alexpaca":
         m2 = Alpaca_Secondary_Model(
             "alpaca",
-            ".model_cache/alpaca/tuned",
-            tokenizer_path=".model_cache/alpaca/tuned", # use the original alpaca tokenizer
+            alexpaca_path,
+            # tokenizer_path=".model_cache/alpaca/tuned", # use the original alpaca tokenizer
             prompt_id="p1", # always use p1 since thats what it was trained on
-            precision="bnb_4"
         )
     else:
         raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
@@ -262,7 +264,12 @@ def main(
 
     # Bring back the primary model
     m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
+    # Evaluate the primary model on the masked examples
     print("m1 second pass...")
+    ds, metrics["masked"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col=None)
+
+    # Evaluate the primary model on the answered examples
+    print("m1 third pass...")
     ds, metrics["answered"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col="a2")
 
     # Analysis

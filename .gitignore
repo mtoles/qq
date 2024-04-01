@@ -15,3 +15,7 @@ tmp.txt
 __pycache__/
 results/
 .env
+configures/
+configures/config.ini
+config.ini
+find_examples/

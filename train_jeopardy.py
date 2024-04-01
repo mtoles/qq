@@ -12,8 +12,9 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     GenerationConfig,
+    DataCollatorForLanguageModeling,
 )
-from trl import SFTTrainer
+from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -22,10 +23,6 @@ import pandas as pd
 
 from secondary_model import Alpaca_Secondary_Model
 
-# If you prefer to create/use an 8bit version of the model for faster loading instead, create/save it using the following code
-# model = AutoModelForCausalLM.from_pretrained('meta-llama/Llama-2-7b-hf', device_map={'': 0}, load_in_8bit=True)
-# model.save_pretrained('meta-llama-Llama-2-7b-hf-CausalLM-8bit') # save_pretrained is not currently supported for 4bit model
-# model_name = "meta-llama-Llama-2-7b-hf-CausalLM-8bit" # Saved 8bit model loads in 2 min, ~5x faster. Takes 50% more memory and 50% longer to train
 
 ######## Helper Functions ########
 
@@ -40,8 +37,8 @@ def compute_perplexity(eval_preds):
     shift_labels = labels[..., 1:].contiguous()
     # Flatten the tokens
     # loss_fct = CrossEntropyLoss()
-    shift_logits = shift_logits.view(-1, vocab_size)
-    shift_labels = shift_labels.view(-1)
+    # shift_logits = shift_logits.view(-1, vocab_size)
+    # shift_labels = shift_labels.view(-1)
 
     probs = torch.nn.functional.softmax(shift_logits, dim=-1)
     p_true_tokens = probs.view(-1, vocab_size)[
@@ -49,8 +46,11 @@ def compute_perplexity(eval_preds):
     ].view(batch_size, (seq_length - 1))
 
     nll = -torch.log(p_true_tokens)
-    mean_nll = nll.mean()
-    ppl = torch.exp(mean_nll)
+    # set likelihoods to 0 for padding tokens
+    nll[shift_labels == -100] = 0
+    num_non_pad = (shift_labels != -100).sum(axis=1)
+    mean_nll = nll.sum(axis=1) / num_non_pad
+    ppl = torch.exp(mean_nll).mean()
 
     correct_tokens = (shift_logits.argmax(-1) == shift_labels).float().mean()
 
@@ -62,23 +62,7 @@ def compute_perplexity(eval_preds):
 ### Model and Tokenizer Setup ###
 load_dotenv()
 now = datetime.now().strftime("%Y-%m-%d-%H-%M")
-# model_name = "meta-llama/Llama-2-7b-hf"
-# access_token = os.getenv("ACCESS_TOKEN")
-# tokenizer_model_name = (
-#     "meta-llama/Llama-2-7b-hf"  # Tokenizer (not saved with 8bit model)
-# )
-# tokenizer = AutoTokenizer.from_pretrained(
-# tokenizer_model_name, use_fast=True, token=access_token
-# )
-# Create a new token and add it to the tokenizer
-# tokenizer.add_special_tokens({"pad_token": "<pad>"})
-# compute_dtype = getattr(torch, "float16")
-# bnb_config = BitsAndBytesConfig(
-#     load_in_4bit=True,
-#     bnb_4bit_quant_type="nf4",
-#     bnb_4bit_compute_dtype=compute_dtype,
-#     bnb_4bit_use_double_quant=True,
-# )
+
 alpaca = Alpaca_Secondary_Model(
     "alpaca",
     ".model_cache/alpaca/tuned",
@@ -102,6 +86,7 @@ tokenizer.padding_side = "left"
 dataset_train = Dataset.from_pandas(
     pd.read_json("data/jeopardy/jeopardy_full_train.jsonl", lines=True)
 )
+# dataset_train = dataset_train.select(range(4))  # testing
 dataset_train = dataset_train.filter(lambda x: x["jeopardy_q"] is not None)
 dataset_train = dataset_train.map(
     lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
@@ -112,7 +97,8 @@ dataset_train = dataset_train.map(
 
 dataset_val = Dataset.from_pandas(
     pd.read_json("data/jeopardy/jeopardy_full_validation.jsonl", lines=True)
-)
+).select(range(1000))
+# dataset_val = dataset_val.select(range(4))  # testing
 dataset_val = dataset_val.filter(lambda x: x["jeopardy_q"] is not None)
 dataset_val = dataset_val.map(
     lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
@@ -120,6 +106,7 @@ dataset_val = dataset_val.map(
 dataset_val = dataset_val.map(
     lambda x: {"text": x["prompt"] + " " + x["jeopardy_q"] + " " + tokenizer.eos_token}
 )
+
 
 # %%
 
@@ -181,33 +168,48 @@ def print_trainable_parameters(model):
 
 print_trainable_parameters(model)
 
+
+class CustomCollator(DataCollatorForCompletionOnlyLM):
+    def __call__(self, examples):
+        batch = super().__call__(examples)
+        labels = batch["labels"].clone()
+        # reset the last token to 2
+        labels[:, -1] = 2
+        batch["labels"] = labels
+        return batch
+
+
+# data_collator = CustomDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="pt")
+response_template = "Response:"
+data_collator = collator = CustomCollator(response_template, tokenizer=tokenizer)
 # %%
 
 run_name = "alpaca-jeopardy"
 training_arguments = TrainingArguments(
     output_dir="./models",
     evaluation_strategy="steps",
-    # evaluation_strategy="no",
     do_eval=True,
-    per_device_train_batch_size=8,  # 8 works, but not faster on 4070
+    per_device_train_batch_size=8,
     gradient_accumulation_steps=1,
     per_device_eval_batch_size=8,
     log_level="debug",
     optim="paged_adamw_32bit",
-    save_steps=10000,  # change to 500
-    logging_steps=1000,  # change to 100
+    save_steps=3000,
+    # save_steps=300,
+    logging_steps=1000,
     logging_first_step=True,
     save_total_limit=2,
-    learning_rate=1e-3,
-    eval_steps=100,  # change to 200
-    # bf16=True, # Ampere+ architecture, comment out on non-Ampere+
+    learning_rate=1e-4,
+    eval_steps=1000,
+    # eval_steps=1,  # testing
     max_grad_norm=0.3,
     num_train_epochs=1,
-    # max_steps=100,
+    # max_steps=2,  # testing
     warmup_ratio=0.03,
-    lr_scheduler_type="cosine",
+    lr_scheduler_type="constant",
     report_to="tensorboard",
-    run_name=f"{run_name}-{now}",  # Name of the W&B run (optional)
+    run_name=f"{run_name}-{now}",
+    eval_accumulation_steps=1,
 )
 
 os.environ["WANDB_DISABLED"] = "true"
@@ -221,12 +223,19 @@ trainer = SFTTrainer(
     tokenizer=tokenizer,
     args=training_arguments,
     compute_metrics=compute_perplexity,
+    data_collator=data_collator,
 )
 
-for i in range(3):
-    generate(dataset_val["text"][i].split("### Response: ")[0] + "### Response: ")
+# %%
+
+# for i in range(3):
+#     generate(dataset_val["text"][i].split("### Response: ")[0] + "### Response: ")
+# trainer.evaluate()
 trainer.train()
 for i in range(3):
     generate(dataset_val["text"][i].split("### Response: ")[0] + "### Response: ")
+
+# save the model with a name containing the run_name and the current time and parameters
+model.save_pretrained(f"./models/alexpaca/{now}")
 
 # %%
