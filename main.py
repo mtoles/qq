@@ -91,7 +91,7 @@ def main(
     oracle_size,
     pm_eval_batch_size,
     oracle_eval_batch_size,
-    max_adversarial_examples,
+    # max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
     oai_cache_path,
@@ -102,11 +102,11 @@ def main(
     assert alexpaca_path and m2_arch == "alexpaca", "alexpaca path required iff m2_arch is alexpaca"
     masking_scheme = "randsentence"
     set_random_seed(0)
-    if max_adversarial_examples is None:
-        max_adversarial_examples = float("inf")
-        print(
-            "warning: failing to limit the number of adversarial examples may take a long time"
-        )
+    # if max_adversarial_examples is None:
+    #     max_adversarial_examples = float("inf")
+    #     print(
+    #         "warning: failing to limit the number of adversarial examples may take a long time"
+    #     )
     if ds_shift:
         assert (
             downsample_pt_size is not None
@@ -155,16 +155,17 @@ def main(
         masking_scheme="supporting", ds=ds, a2_col=None
     )
     # select and mask examples where the primary
-    if masking_scheme == "bfsentence":
-        raise NotImplementedError
-    elif masking_scheme == "randsentence":
-        do_gt = m2_arch == "gt" or gt_subset
-        ds = randsentence_dataset(ds, m1, do_gt)
-    elif masking_scheme == "randdistsentence":
-        raise NotImplementedError
-        ds = randdist_dataset(
-            ds, m1, max_adversarial_examples
-        )  # set drop thresh to -1 so no filtering happens
+    ds = randsentence_dataset(ds, m1, do_gt=False)
+    # if masking_scheme == "bfsentence":
+    #     raise NotImplementedError
+    # elif masking_scheme == "randsentence":
+    #     do_gt = m2_arch == "gt" or gt_subset
+    #     ds = randsentence_dataset(ds, m1, do_gt)
+    # elif masking_scheme == "randdistsentence":
+    #     raise NotImplementedError
+    #     # ds = randdist_dataset(
+    #     #     ds, m1, max_adversarial_examples
+    #     # )  # set drop thresh to -1 so no filtering happens
 
     # select only ground truth examples if we are doing analysis using the ground truth model
     if m2_arch == "gt" or gt_subset:
@@ -220,7 +221,7 @@ def main(
         m2 = Alpaca_Secondary_Model(
             "alpaca",
             alexpaca_path,
-            # tokenizer_path=".model_cache/alpaca/tuned", # use the original alpaca tokenizer
+            tokenizer_path=".model_cache/alpaca/tuned", # use the original alpaca tokenizer
             prompt_id="p1", # always use p1 since thats what it was trained on
         )
     else:
@@ -260,11 +261,11 @@ def main(
     # Bring back the primary model
     m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
     # Evaluate the primary model on the masked examples
-    print("m1 second pass...")
-    ds, metrics["masked"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col=None)
+    # print("m1 second pass...")
+    # ds, metrics["masked"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col=None)
 
     # Evaluate the primary model on the answered examples
-    print("m1 third pass...")
+    print("m1 second pass...")
     ds, metrics["answered"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col="a2")
 
     # Analysis
