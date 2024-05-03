@@ -59,7 +59,7 @@ def get_preprocessed_ds(
     new_ds = new_ds.add_column("context_supporting", [{} for _ in range(len(new_ds))])
     new_ds = new_ds.map(
         split_distractor,
-        load_from_cache_file=False,
+        load_from_cache_file=True,
     )
 
     # Flatten Each Context
@@ -73,7 +73,7 @@ def get_preprocessed_ds(
     before = len(new_ds)
     new_ds = new_ds.filter(
         lambda ex: max([len(x) for x in ex["context_distractor"]["sentences"]]) > 0,
-        load_from_cache_file=False,
+        load_from_cache_file=True,
     )
     print(f"Filtered out {before - len(new_ds)} examples with no distractors")
 

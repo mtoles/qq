@@ -289,6 +289,22 @@ class Alpaca_Secondary_Model(Secondary_Model):
             )
 
         return q2
+    
+class Alpaca_Secondary_Model_Jeopardy_Lookup(Secondary_Model):
+    """"
+    Secondary model that uses precomputed secondary questions seeded with the answer
+    Used to evaluate the viability of Jeopardy-style training
+    """
+    def __init__(self, precomputed_jeopardy_path: str, model_name="alexpaca_precomputed"):
+        self.model_name = model_name
+        self.precomputed_jeopardy_path = precomputed_jeopardy_path
+        self.df = pd.read_json(self.precomputed_jeopardy_path, lines=True)
+        # set  fc_masked as the index
+        self.df.set_index("q1", inplace=True)
+
+    def forward(self, example, question_col, answer_col):
+        key = example["q1"]
+        return self.df.loc[key, "jeopardy_q"]
 
 
 class Flan_Secondary_Model(Secondary_Model):

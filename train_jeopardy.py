@@ -1,6 +1,7 @@
 # %%
 # https://colab.research.google.com/drive/1PEQyJO1-f6j0S_XJ8DV50NkpzasXkrzd?usp=sharing#scrollTo=OJXpOgBFuSrc
 
+import main
 
 import torch
 from datasets import load_dataset, load_from_disk
@@ -22,6 +23,16 @@ from datasets import Dataset
 import pandas as pd
 
 from secondary_model import Alpaca_Secondary_Model
+import wandb
+import os
+
+######## W&B Setup ########
+os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
+os.environ["WANDB_LOG_MODEL"] = "checkpoint"  # log all model checkpoints
+os.environ["WANDB_DIR"] = os.path.join(os.getcwd(), "wandb")  # save W&B logs locally
+os.environ["WANDB_CACHE_DIR"] = os.path.join(os.getcwd(), "wandb/cache")  # save W&B cache locally
+os.environ["WANDB_CONFIG_DIR"] = os.path.join(os.getcwd(), "wandb/config")  # save W&B config locally
+
 
 
 ######## Helper Functions ########
@@ -84,9 +95,9 @@ tokenizer.padding_side = "left"
 ### Dataset Setup ###
 
 dataset_train = Dataset.from_pandas(
-    pd.read_json("data/jeopardy/jeopardy_full_train.jsonl", lines=True)
+    pd.read_json("data/jeopardy/jeopardy_gpt_full_train.jsonl", lines=True)
 )
-# dataset_train = dataset_train.select(range(4))  # testing
+dataset_train = dataset_train.select(range(9000))
 dataset_train = dataset_train.filter(lambda x: x["jeopardy_q"] is not None)
 dataset_train = dataset_train.map(
     lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
@@ -120,12 +131,20 @@ model.config.use_cache = (
 
 # model = prepare_model_for_kbit_training(model)
 lora_config = LoraConfig(
-    r=32,
-    lora_alpha=64,
+    r=256,
+    lora_alpha=128,
     lora_dropout=0.05,
     bias="none",
     task_type="CAUSAL_LM",
-    target_modules=["q_proj", "v_proj"],
+    target_modules=[
+        "q_proj",
+        "v_proj",
+        "k_proj",
+        "o_proj",
+        "gate_proj",
+        "down_proj",
+        "up_proj",
+    ],
 )
 
 model = get_peft_model(model, lora_config)
@@ -138,7 +157,7 @@ def generate(prompt):
     generation_output = model.generate(
         input_ids=input_ids,
         generation_config=GenerationConfig(
-            temperature=1.0, top_p=1.0, top_k=50, num_beams=1
+            temperature=0.0, top_p=1.0, top_k=50, num_beams=1
         ),
         return_dict_in_generate=True,
         output_scores=True,
@@ -186,33 +205,34 @@ data_collator = collator = CustomCollator(response_template, tokenizer=tokenizer
 
 run_name = "alpaca-jeopardy"
 training_arguments = TrainingArguments(
-    output_dir="./models",
+    output_dir=f"./models/alexpaca/{str(now)}",
     evaluation_strategy="steps",
     do_eval=True,
-    per_device_train_batch_size=8,
+    per_device_train_batch_size=4,
     gradient_accumulation_steps=1,
     per_device_eval_batch_size=8,
     log_level="debug",
     optim="paged_adamw_32bit",
-    save_steps=3000,
-    # save_steps=300,
+    save_strategy="epoch",
+    save_steps=1,
+    # save_steps=3,
     logging_steps=1000,
     logging_first_step=True,
     save_total_limit=2,
-    learning_rate=1e-4,
+    learning_rate=1e-5,
     eval_steps=1000,
     # eval_steps=1,  # testing
     max_grad_norm=0.3,
     num_train_epochs=1,
     # max_steps=2,  # testing
     warmup_ratio=0.03,
-    lr_scheduler_type="constant",
-    report_to="tensorboard",
+    lr_scheduler_type="cosine",
+    report_to="wandb",
     run_name=f"{run_name}-{now}",
     eval_accumulation_steps=1,
 )
-
-os.environ["WANDB_DISABLED"] = "true"
+wandb.init(project="qq", name=f"{run_name}-{now}", config=training_arguments)
+# os.environ["WANDB_DISABLED"] = "true"
 trainer = SFTTrainer(
     model=model,
     train_dataset=dataset_train,
@@ -227,15 +247,32 @@ trainer = SFTTrainer(
 )
 
 # %%
-
-# for i in range(3):
-#     generate(dataset_val["text"][i].split("### Response: ")[0] + "### Response: ")
-# trainer.evaluate()
+eval_results = trainer.evaluate()
 trainer.train()
 for i in range(3):
     generate(dataset_val["text"][i].split("### Response: ")[0] + "### Response: ")
 
-# save the model with a name containing the run_name and the current time and parameters
-model.save_pretrained(f"./models/alexpaca/{now}")
+save_path = f"./models/alexpaca/{now}"
+model.save_pretrained(save_path)
+
+main.main(
+    split="validation",
+    m1_arch="t5-base",
+    oracle_arch="t5",
+    oracle_size="base",
+    m2_arch="alexpaca",
+    alexpaca_path=save_path,
+    save_dir="results/3_alexpaca/main",
+    # defaults
+    m1_path=None,
+    template_id=None,
+    pm_eval_batch_size=1,
+    oracle_eval_batch_size=1,
+    downsample_pt_size=None,
+    ds_shift=0,
+    oai_cache_path=None,
+    results_filename=None,
+    gt_subset=False,
+)
 
 # %%

@@ -6,7 +6,7 @@
 import click
 import torch
 from datasets import load_from_disk, Dataset
-from oracles import *  # T5_Bool_Oracle, Bloom_Bool_Oracle, Dolly_Bool_Oracle
+from oracles import *  # T5_Bool_Oracle
 from primary_models import get_m1
 from secondary_model import (
     Repeater_Secondary_Model,
@@ -23,7 +23,6 @@ import numpy as np
 
 # from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 from masking import (
-    adversarial_dataset,
     randsentence_dataset,
     randdist_dataset,
 )
@@ -161,7 +160,9 @@ class Alpaca_Secondary_Model:
     help="Path to save/load cached chatGPT responses.",
 )
 @click.option("--results_filename", help="path to save results")
-@click.option("--save_dir", help="directory to save results to", default="data/jeopardy")
+@click.option(
+    "--save_dir", help="directory to save results to", default="data/jeopardy"
+)
 @click.option(
     "--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons"
 )
@@ -185,11 +186,7 @@ def main(
 ):
     masking_scheme = "randsentence"
     set_random_seed(0)
-    if max_adversarial_examples is None:
-        max_adversarial_examples = float("inf")
-        print(
-            "warning: failing to limit the number of adversarial examples may take a long time"
-        )
+
     if ds_shift:
         assert (
             downsample_pt_size is not None
@@ -267,7 +264,7 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}.jsonl",
+        f"jeopardy_gpt_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}.jsonl",
     )
 
     # df.to_hdf(save_path, "ds")

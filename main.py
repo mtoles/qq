@@ -6,22 +6,15 @@
 import click
 import torch
 from datasets import Dataset
-from oracles import *  
+from oracles import *
 from primary_models import get_m1
-from secondary_model import (
-    Repeater_Secondary_Model,
-    OpenAI_Secondary_Model,
-    Gt_Secondary_Model,
-    Alpaca_Secondary_Model,
-)
+from secondary_model import *
 from utils import set_random_seed
 from datetime import datetime
 import numpy as np
 
 from masking import (
-    # adversarial_dataset,
     randsentence_dataset,
-    randdist_dataset,
 )
 from pathlib import PurePath
 import pandas as pd
@@ -31,7 +24,6 @@ from tqdm import tqdm
 
 np.random.seed(42)
 
-
 @click.command()
 @click.option(
     "--split", default="validation", help="HotpotQA split {train, validation}"
@@ -39,7 +31,8 @@ np.random.seed(42)
 @click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
 @click.option(
-    "--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, alpaca, alexpaca, gt}"
+    "--m2_arch",
+    help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, alpaca, alexpaca, alexpaca_precomputed, gt}",
 )
 @click.option("--alexpaca_path", help="path to trained alexpaca model", default=None)
 @click.option(
@@ -80,6 +73,11 @@ np.random.seed(42)
 @click.option(
     "--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons"
 )
+def click_main(**args):
+    main(
+        **args
+    )
+
 def main(
     split,
     m1_path,
@@ -99,7 +97,9 @@ def main(
     results_filename,
     save_dir,
 ):
-    assert alexpaca_path and m2_arch == "alexpaca", "alexpaca path required iff m2_arch is alexpaca"
+    assert (alexpaca_path and m2_arch == "alexpaca") or (
+        not alexpaca_path and not m2_arch == "alexpaca"
+    ), "alexpaca path required iff m2_arch is alexpaca"
     masking_scheme = "randsentence"
     set_random_seed(0)
     # if max_adversarial_examples is None:
@@ -156,37 +156,20 @@ def main(
     )
     # select and mask examples where the primary
     ds = randsentence_dataset(ds, m1, do_gt=False)
-    # if masking_scheme == "bfsentence":
-    #     raise NotImplementedError
-    # elif masking_scheme == "randsentence":
-    #     do_gt = m2_arch == "gt" or gt_subset
-    #     ds = randsentence_dataset(ds, m1, do_gt)
-    # elif masking_scheme == "randdistsentence":
-    #     raise NotImplementedError
-    #     # ds = randdist_dataset(
-    #     #     ds, m1, max_adversarial_examples
-    #     # )  # set drop thresh to -1 so no filtering happens
+
 
     # select only ground truth examples if we are doing analysis using the ground truth model
     if m2_arch == "gt" or gt_subset:
-        # gt_df = pd.read_csv("q2_gt_dataset.csv")
-        # gt_qs = set(gt_df["prepped_bfdelsentence_None"].tolist())
+
         gt_masked_sentences = set(gt_df["masked_sentence"].tolist())
 
-        # gt_df["masked_sentence"][~gt_df["masked_sentence"].isin(set(ds["masked_sentence"]))] # 36 issues
-        # df = ds.to_pandas()
         df = ds.to_pandas()
         before_len = len(ds)
         # filter based on the question cuz i forgot to include the full id in the labeling doc
         # and it wouldn't be ideal anyway cuz of suffix inconsistency
-        # ds = ds.filter(lambda example: example["prepped_masked_None"] in gt_qs)
         ds = ds.filter(lambda x: x["masked_sentence"] in gt_masked_sentences)
         # select a random set of questions with one distractor added that match the annotated examples' masked sentences
-        # df = ds.to_pandas()
-        # pd.concat(list(x[1].head(1) for x in df.groupby("masked_sentence")))
-        # dist_ds = retroactively_add_distractors(ds)
         print(len(set(ds["masked_sentence"])))
-        # print(len(set(ds["distractor_sentence"])))
         print(len(set(ds["id"])))
         # get only the first example of each masked sentence
         used = set()
@@ -197,13 +180,6 @@ def main(
                 used.add(x["masked_sentence"])
         ds = Dataset.from_pandas(pd.DataFrame(data=relevant_examples))
         print
-    # for gt dataset gen
-    # tmp_df = ds.to_pandas()
-    # tmp_df = tmp_df[[
-    #     "id", "q1", "a1", "fc_masked", "masked_sentence", "masked_sentence_title"
-    # ]].head(600)
-    # tmp_df.to_csv("gt_dataset_source_v2_600.csv", index=False)
-    # tmp_df.to_excel("gt_dataset_source_v2_600.xlsx", index=False)
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
@@ -219,10 +195,15 @@ def main(
         )
     elif m2_arch == "alexpaca":
         m2 = Alpaca_Secondary_Model(
-            "alpaca",
+            "alexpaca",
             alexpaca_path,
-            tokenizer_path=".model_cache/alpaca/tuned", # use the original alpaca tokenizer
-            prompt_id="p1", # always use p1 since thats what it was trained on
+            tokenizer_path=".model_cache/alpaca/tuned",  # use the original alpaca tokenizer
+            prompt_id="p1",  # always use p1 since thats what it was trained on
+        )
+    elif m2_arch == "alexpaca_precomputed":
+        m2 = Alpaca_Secondary_Model_Jeopardy_Lookup(
+            precomputed_jeopardy_path="data/jeopardy/jeopardy_full_validation.jsonl",
+            model_name="alexpaca_precomputed",
         )
     else:
         raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
@@ -261,8 +242,6 @@ def main(
     # Bring back the primary model
     m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
     # Evaluate the primary model on the masked examples
-    # print("m1 second pass...")
-    # ds, metrics["masked"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col=None)
 
     # Evaluate the primary model on the answered examples
     print("m1 second pass...")
@@ -303,5 +282,6 @@ def main(
     print
 
 
+
 if __name__ == "__main__":
-    main()
+    click_main()

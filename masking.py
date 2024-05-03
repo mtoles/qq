@@ -412,13 +412,16 @@ def randsentence_dataset(ds, m1, do_gt):
     )
 
     # evaluate the reference col
-    output_ds, _metrics = m1.evaluate(
-        masking_scheme="bfdelsentence",
-        ds=ds_delsentence,
-        a2_col=None,
-        # max_adversarial_examples=max_adversarial_examples,
-        # threshold=-1,
-    )
+    if m1 is not None:
+        output_ds, _metrics = m1.evaluate(
+            masking_scheme="bfdelsentence",
+            ds=ds_delsentence,
+            a2_col=None,
+            # max_adversarial_examples=max_adversarial_examples,
+            # threshold=-1,
+        )
+    else:
+        output_ds = ds_delsentence
 
     # rename bfdelsentence -> bf_randsentence
 
