@@ -144,7 +144,7 @@ def sublist_is_in_list(sl, l):
 def get_save_path(save_dir, downsample_pt_size, m1_arch, m2_arch, oracle_arch, template_id, step):
     save_path = os.path.join(
         save_dir,
-        f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}_{oracle_arch}_{template_id}_{step}.hd5",
+        f"analysis_dataset_{'full' if downsample_pt_size is None else downsample_pt_size}_{m1_arch}_{m2_arch}_{oracle_arch}_{template_id}_{step}.json",
     )
     return save_path
 

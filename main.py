@@ -256,7 +256,7 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"analysis_dataset_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}.hd5",
+        f"analysis_dataset_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}_{now}.json",
     )
     desrcribe_path = PurePath(save_path + "_" + str(datetime.now())).with_suffix(".csv")
     describe_df = (
@@ -276,7 +276,7 @@ def main(
     )
     describe_df.to_csv(desrcribe_path)
 
-    df.to_hdf(save_path, "ds")
+    df.to_json(save_path, orient="records", lines=True)
     print(f"dataset saved to {save_path}")
 
     print

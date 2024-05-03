@@ -24,7 +24,7 @@ dependencies:
   - scikit-learn>=1.2.0
   - openai
   - nltk
-  - pytables=3.7.0 # df.to_hdf()
+  # - pytables=3.7.0 # df.to_hdf()
   - xlwt # df.to_xls()
   # - h5py
   - fire

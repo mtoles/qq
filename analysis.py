@@ -8,7 +8,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 @click.command()
 @click.option(
-    "--hdfs_dir",
+    "--json_dir",
     help="Path to cached dataset file generated at end of main.py",
 )
 @click.option(
@@ -16,20 +16,20 @@ pd.options.mode.chained_assignment = None  # default='warn'
     flag_value=True,
     help="Filter out all examples not present in ground truth",
 )
-def main(hdfs_dir, gt_only):
-    # get a list of all files in hdfs_dir
-    if os.path.isdir(hdfs_dir):
-        for root, dirs, files in os.walk(hdfs_dir):
-            hdf_ds_paths = [os.path.join(root, f) for f in files]
+def main(json_dir, gt_only):
+    # get a list of all files in json_dir
+    if os.path.isdir(json_dir):
+        for root, dirs, files in os.walk(json_dir):
+            json_ds_path = [os.path.join(root, f) for f in files]
     else:
-        hdf_ds_paths = [hdfs_dir]
-    hdf_ds_paths = sorted(hdf_ds_paths)
-    # keep only the hdf files
-    hdf_ds_paths = [f for f in hdf_ds_paths if f.endswith(".hd5")]
+        json_ds_path = [json_dir]
+    json_ds_path = sorted(json_ds_path)
+    # keep only the json files
+    json_ds_path = [f for f in json_ds_path if f.endswith(".json")]
 
     sankey_txts = []
-    for hdf_ds_path in hdf_ds_paths:
-        df_raw = pd.read_hdf(hdf_ds_path, "ds")
+    for json_ds_path in json_ds_path:
+        df_raw = pd.read_json(json_ds_path)
         interesting_cols = [
             "id",
             "prepped_masked_None",
@@ -103,7 +103,7 @@ def main(hdfs_dir, gt_only):
         print(f"avg_num_words: {avg_num_answer_words}")
 
         # print for csv file
-        print(f"{hdf_ds_path},,")
+        print(f"{json_ds_path},,")
         print(f",num_questions,{num_questions}")
         print(f",num_a2_is_masked_sentence,{num_a2_is_masked_sentence}")
         print(f",num_a2_is_distractor,{num_a2_is_distractor}")
@@ -192,7 +192,7 @@ meta mentionsankeymatic N
         print
     for i, sankey_txts in enumerate(sankey_txts):
         # write to a txt file
-        sankey_path = hdf_ds_paths[i].replace(".hd5", ".txt")
+        sankey_path = json_ds_path[i].replace(".json", ".txt")
         with open(sankey_path, "w") as f:
             f.write(sankey_txts)
 

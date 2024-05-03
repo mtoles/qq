@@ -23,17 +23,17 @@ def confidence_interval_binary(series):
 
 @click.command()
 @click.option(
-    "--hdf_location",
+    "--json_location",
     help="Path or dir to cached dataset file generated at end of main.py",
 )
-def main(hdf_location):
-    if os.path.isdir(hdf_location):
-        for root, dirs, files in os.walk(hdf_location):
-            hdf_ds_paths = [os.path.join(root, f) for f in files if f.endswith(".hd5")]
+def main(json_location):
+    if os.path.isdir(json_location):
+        for root, dirs, files in os.walk(json_location):
+            json_ds_paths = [os.path.join(root, f) for f in files if f.endswith(".json")]
     else:
-        hdf_ds_paths = [hdf_location]
-    for hdf_ds_path in hdf_ds_paths:
-        df = pd.read_hdf(hdf_ds_path, "ds")
+        json_ds_paths = [json_location]
+    for json_ds_path in json_ds_paths:
+        df = pd.read_json(json_ds_path, "ds")
         df["f1_recovery"] = df.apply(
             lambda x: recovery(
                 x["m1_masked_a2_f1"], x["m1_masked_None_f1"], x["m1_supporting_None_f1"]
@@ -46,7 +46,7 @@ def main(hdf_location):
             ),
             axis=1,
         )
-        print(hdf_ds_path)
+        print(json_ds_path)
         print(f"f1: {confidence_interval(df['f1_recovery'])}")
         print(f"em: {confidence_interval(df['em_recovery'])}")
         print(f"mfrr: {confidence_interval_binary(df['a2_is_correct_masked'])}")

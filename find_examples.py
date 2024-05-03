@@ -5,19 +5,19 @@ import os
 
 @click.command()
 @click.option(
-    "--hdfs_dir",
+    "--json_dir",
     help="Path to cached dataset file generated at end of main.py",  # probably the gt folder
 )
-def main(hdfs_dir):
-    # get a list of all files in hdfs_dir
-    if os.path.isdir(hdfs_dir):
-        for root, dirs, files in os.walk(hdfs_dir):
-            hdf_ds_paths = [os.path.join(root, f) for f in files]
+def main(json_dir):
+    # get a list of all files in json_dir
+    if os.path.isdir(json_dir):
+        for root, dirs, files in os.walk(json_dir):
+            json_ds_paths = [os.path.join(root, f) for f in files]
     else:
-        hdf_ds_paths = [hdfs_dir]
-    hdf_ds_paths = sorted(hdf_ds_paths)
-    # keep only the hdf files
-    hdf_ds_paths = [f for f in hdf_ds_paths if f.endswith(".hd5")]
+        json_ds_paths = [json_dir]
+    json_ds_paths = sorted(json_ds_paths)
+    # keep only the json files
+    json_ds_paths = [f for f in json_ds_paths if f.endswith(".json")]
 
     interesting_cols = [
         "id",  # shared
@@ -35,11 +35,11 @@ def main(hdfs_dir):
 
     single_dfs = []
     df_gt, df_alpaca, df_gpt35, df_gpt4, df_repeater = None, None, None, None, None
-    for hdf_ds_path in hdf_ds_paths:
+    for json_ds_path in json_ds_paths:
         # get the m2 name from the filename
-        m2_name = hdf_ds_path.split("_")[6]
+        m2_name = json_ds_path.split("_")[6]
 
-        single_df = pd.read_hdf(hdf_ds_path, "ds")
+        single_df = pd.read_json(json_ds_path)
         single_df = single_df[interesting_cols]
         single_df["m2"] = m2_name
 
