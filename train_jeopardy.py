@@ -30,9 +30,12 @@ import os
 os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
 os.environ["WANDB_LOG_MODEL"] = "checkpoint"  # log all model checkpoints
 os.environ["WANDB_DIR"] = os.path.join(os.getcwd(), "wandb")  # save W&B logs locally
-os.environ["WANDB_CACHE_DIR"] = os.path.join(os.getcwd(), "wandb/cache")  # save W&B cache locally
-os.environ["WANDB_CONFIG_DIR"] = os.path.join(os.getcwd(), "wandb/config")  # save W&B config locally
-
+os.environ["WANDB_CACHE_DIR"] = os.path.join(
+    os.getcwd(), "wandb/cache"
+)  # save W&B cache locally
+os.environ["WANDB_CONFIG_DIR"] = os.path.join(
+    os.getcwd(), "wandb/config"
+)  # save W&B config locally
 
 
 ######## Helper Functions ########
@@ -97,7 +100,7 @@ tokenizer.padding_side = "left"
 dataset_train = Dataset.from_pandas(
     pd.read_json("data/jeopardy/jeopardy_gpt_full_train.jsonl", lines=True)
 )
-dataset_train = dataset_train.select(range(9000))
+dataset_train = dataset_train.select(range(20000))
 dataset_train = dataset_train.filter(lambda x: x["jeopardy_q"] is not None)
 dataset_train = dataset_train.map(
     lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
@@ -216,7 +219,7 @@ training_arguments = TrainingArguments(
     save_strategy="epoch",
     save_steps=1,
     # save_steps=3,
-    logging_steps=1000,
+    logging_steps=500,
     logging_first_step=True,
     save_total_limit=2,
     learning_rate=1e-5,

@@ -151,9 +151,11 @@ def main(
 
     # first pass
     print("m1 first pass...")
-    ds, metrics["supporting"] = m1.evaluate(
-        masking_scheme="supporting", ds=ds, a2_col=None
-    )
+    # ds, metrics["supporting"] = m1.evaluate(
+    #     masking_scheme="supporting", ds=ds, a2_col=None
+    # )
+    # fill with -1 isntead
+    metrics["supporting"] = -1
     # select and mask examples where the primary
     ds = randsentence_dataset(ds, m1, do_gt=False)
 
@@ -191,14 +193,14 @@ def main(
         m2 = Alpaca_Secondary_Model(
             "alpaca",
             ".model_cache/alpaca/tuned",
-            prompt_id=template_id,
+            # prompt_id=template_id,
         )
     elif m2_arch == "alexpaca":
         m2 = Alpaca_Secondary_Model(
             "alexpaca",
             alexpaca_path,
             tokenizer_path=".model_cache/alpaca/tuned",  # use the original alpaca tokenizer
-            prompt_id="p1",  # always use p1 since thats what it was trained on
+            # prompt_id="p1",  # always use p1 since thats what it was trained on
         )
     elif m2_arch == "alexpaca_precomputed":
         m2 = Alpaca_Secondary_Model_Jeopardy_Lookup(
@@ -262,11 +264,11 @@ def main(
     describe_df = (
         df[
             [
-                "m1_supporting_None_f1",
-                "m1_masked_None_f1",
+                # "m1_supporting_None_f1",
+                # "m1_masked_None_f1",
                 "m1_masked_a2_f1",
-                "m1_supporting_None_em",
-                "m1_masked_None_em",
+                # "m1_supporting_None_em",
+                # "m1_masked_None_em",
                 "m1_masked_a2_em",
                 "a2_is_correct_masked",
             ]
