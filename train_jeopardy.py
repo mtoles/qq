@@ -26,6 +26,13 @@ from secondary_model import Alpaca_Secondary_Model
 import wandb
 import os
 
+###### Testing Setup ######
+
+# DEBUG_MODE = True
+DEBUG_MODE = False
+if DEBUG_MODE:
+    print("DEBUG MODE ENABLED")
+
 ######## W&B Setup ########
 os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
 os.environ["WANDB_LOG_MODEL"] = "checkpoint"  # log all model checkpoints
@@ -111,7 +118,7 @@ dataset_train = dataset_train.map(
 
 dataset_val = Dataset.from_pandas(
     pd.read_json("data/jeopardy/jeopardy_full_validation.jsonl", lines=True)
-).select(range(1000))
+).select(range(1000 if not DEBUG_MODE else 128))
 # dataset_val = dataset_val.select(range(4))  # testing
 dataset_val = dataset_val.filter(lambda x: x["jeopardy_q"] is not None)
 dataset_val = dataset_val.map(
@@ -133,24 +140,24 @@ model.config.use_cache = (
 )
 
 # model = prepare_model_for_kbit_training(model)
-lora_config = LoraConfig(
-    r=256,
-    lora_alpha=128,
-    lora_dropout=0.05,
-    bias="none",
-    task_type="CAUSAL_LM",
-    target_modules=[
-        "q_proj",
-        "v_proj",
-        "k_proj",
-        "o_proj",
-        "gate_proj",
-        "down_proj",
-        "up_proj",
-    ],
-)
+# lora_config = LoraConfig(
+#     r=256,
+#     lora_alpha=128,
+#     lora_dropout=0.05,
+#     bias="none",
+#     task_type="CAUSAL_LM",
+#     target_modules=[
+#         "q_proj",
+#         "v_proj",
+#         "k_proj",
+#         "o_proj",
+#         "gate_proj",
+#         "down_proj",
+#         "up_proj",
+#     ],
+# )
 
-model = get_peft_model(model, lora_config)
+# model = get_peft_model(model, lora_config)
 
 
 def generate(prompt):
@@ -211,7 +218,7 @@ training_arguments = TrainingArguments(
     output_dir=f"./models/alexpaca/{str(now)}",
     evaluation_strategy="steps",
     do_eval=True,
-    per_device_train_batch_size=4,
+    per_device_train_batch_size=8,
     gradient_accumulation_steps=1,
     per_device_eval_batch_size=8,
     log_level="debug",
@@ -222,8 +229,8 @@ training_arguments = TrainingArguments(
     logging_steps=500,
     logging_first_step=True,
     save_total_limit=2,
-    learning_rate=1e-5,
-    eval_steps=1000,
+    learning_rate=2e-5,
+    eval_steps=1000 if not DEBUG_MODE else 64,
     # eval_steps=1,  # testing
     max_grad_norm=0.3,
     num_train_epochs=1,
