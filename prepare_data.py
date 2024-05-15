@@ -289,7 +289,7 @@ def append_a2(example, masking_scheme, a2_col, sep_str):
     assert sep_str is not None
     # masking_str = f"fc_{masking_scheme}"
     context = example[f"prepped_{masking_scheme}_{str(a2_col)}"]
-    a2 = example[f"{str(a2_col)}_{masking_scheme}"]
+    a2 = example[f"{str(a2_col)}"]
     example[f"prepped_{masking_scheme}_{str(a2_col)}"] = " ".join(
         " ".join([context, sep_str, a2]).split()
     )

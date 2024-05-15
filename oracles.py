@@ -21,9 +21,9 @@ class Oracle:
     def __init__(self):
         print("subclass this method")
 
-    def process(self, ds, q2_masking_scheme):
+    def process(self, ds):
         new_ds = ds.map(
-            lambda x: self.forward(x, q2_masking_scheme),
+            lambda x: self.forward(x),
             load_from_cache_file=False,
             batched=True,
             batch_size=1,  # batching happens internally
@@ -52,10 +52,10 @@ class T5_Bool_Oracle(Oracle):
         ).cuda()
         self.model.eval()
 
-    def forward(self, example, q2_masking_scheme):
+    def forward(self, example):
         """Perform forward pass on a single example. Not sure what happens with padding if you pass multiple examples."""
         with torch.no_grad():
-            q2 = example[f"q2_{q2_masking_scheme}"][0]
+            q2 = example[f"q2"][0]
             masked_sentence = example["masked_sentence"][0]
             masked_sentence_title = example["masked_sentence_title"][0]
             # Build the corpus
@@ -107,12 +107,12 @@ class T5_Bool_Oracle(Oracle):
 
             # process logits in batches
             example = self._fw0(
-                c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme
+                c, example, input_ids, label_ids, corpus_strs
             )
-            # example1 = self._fw1(c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme)
+            # example1 = self._fw1(c, example, input_ids, label_ids, corpus_strs)
             return example
 
-    def _fw0(self, c, example, input_ids, label_ids, corpus_strs, q2_masking_scheme):
+    def _fw0(self, c, example, input_ids, label_ids, corpus_strs):
         # normal
         num_batches = math.ceil(c / self.batch_size)
         probs = []
@@ -139,7 +139,7 @@ class T5_Bool_Oracle(Oracle):
         oracle_answer = corpus_strs[best_index]
         oracle_answer_is_correct = bool(best_index == 0)
 
-        example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
+        example[f"a2"] = [oracle_answer]
         example[f"a2_is_correct"] = [oracle_answer_is_correct]
         return example
 
@@ -150,8 +150,8 @@ class OpenAI_Oracle(Oracle):
         assert model in ["gpt-3.5-turbo", "gpt-4"]
         self.model = model
 
-    def forward(self, example, q2_masking_scheme):
-        q2 = example[f"q2_{q2_masking_scheme}"][0]
+    def forward(self, example):
+        q2 = example[f"q2"][0]
         masked_sentence = example["masked_sentence"][0]
         masked_sentence_title = example["masked_sentence_title"][0]
         # Build the corpus
@@ -226,6 +226,6 @@ class OpenAI_Oracle(Oracle):
             generation_idx = random.randint(0, len(corpus_strs) - 1)
         oracle_answer = corpus_strs[generation_idx]
         oracle_answer_is_correct = bool(generation_idx == correct_index)
-        example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
+        example[f"a2"] = [oracle_answer]
         example[f"a2_is_correct"] = [oracle_answer_is_correct]
         return example

@@ -100,7 +100,6 @@ def main(
     assert (alexpaca_path and m2_arch == "alexpaca") or (
         not alexpaca_path and not m2_arch == "alexpaca"
     ), "alexpaca path required iff m2_arch is alexpaca"
-    masking_scheme = "randsentence"
     set_random_seed(0)
     # if max_adversarial_examples is None:
     #     max_adversarial_examples = float("inf")
@@ -112,12 +111,10 @@ def main(
             downsample_pt_size is not None
         ), "There is no reason to shift the dataset without downsampling"
     start = datetime.now()
-    ds_masking_scheme = (
-        "None" if masking_scheme == "bfdelsentence" else "masking_scheme"
-    )
+
     now = datetime.now().strftime("Y%m%d-%H%M%S")
     if results_filename is None:
-        results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
+        results_filename = f"{m1_arch}-{downsample_pt_size}-{now}"
 
     # Evaluate the primary model
     m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
@@ -215,7 +212,6 @@ def main(
     ds = m2.process(
         ds,
         q1_col="q1",
-        masking_scheme="masked",
     )
     # Save memory by moving m1 to CPU
     if type(m1.model) == T5ForConditionalGeneration:
@@ -236,7 +232,7 @@ def main(
 
     # Answer questions with the oracle
     print("oracle...")
-    ds = oracle.process(ds, q2_masking_scheme="masked")
+    ds = oracle.process(ds)
     if type(oracle.model) == T5ForConditionalGeneration:
         oracle.model.cpu()
     torch.cuda.empty_cache()  # free up memory
@@ -258,7 +254,7 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"analysis_dataset_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{masking_scheme}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}_{now}.json",
+        f"{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}_{now}.json",
     )
     desrcribe_path = PurePath(save_path + "_" + str(datetime.now())).with_suffix(".csv")
     describe_df = (

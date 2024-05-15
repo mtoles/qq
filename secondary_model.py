@@ -124,22 +124,20 @@ class Secondary_Model:
         }
         self.template = self.prompt_dict[self.prompt_id]
 
-    def prepare_data(self, masking_scheme):
+    def prepare_data(self):
         pass
 
     def forward(self, example, question_col, context_col):
         return "What is six times seven?"
 
-    def process(self, ds, q1_col, masking_scheme):
+    def process(self, ds, q1_col):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
 
         def _add_q2(example):
-            example[f"q2_{masking_scheme}"] = self.forward(
-                example, q1_col, f"fc_{masking_scheme}"
-            )
+            example[f"q2"] = self.forward(example, q1_col, "fc_masked")
             return example
 
-        ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
+        ds = ds.add_column(name=f"q2", column=[""] * len(ds))
         ds = ds.map(
             lambda x: _add_q2(x),
             load_from_cache_file=False,
@@ -174,6 +172,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
         super(Alpaca_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
         self.device = device
+        self.eval_batch_size = eval_batch_size
 
         # if loading the alepaca model you need to manually pass in the original tokenizer
         # because i forgot to save the tokenzier with the model
@@ -194,7 +193,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
                 quantization_config=quantization_config,
             )
         # low-memory fine tuning option
-        elif precision == "bnb_4": 
+        elif precision == "bnb_4":
             print("loading alpaca in bnb_4 bit")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
@@ -202,7 +201,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
                 device_map="auto",
                 trust_remote_code=True,
             )
-            
+
             # self.model = PeftModel.from_pretrained(
             #     normal_model, "models/alpaca-jeopardy-1-epoch"
             # )
@@ -285,16 +284,18 @@ class Alpaca_Secondary_Model(Secondary_Model):
         }
         with torch.no_grad():
             eos_token_id = self.tokenizer.eos_token_id
-            outputs = self.model.generate(**inputs, max_length=self.max_length, eos_token_id=eos_token_id)
+            outputs = self.model.generate(
+                **inputs, max_length=self.max_length, eos_token_id=eos_token_id
+            )
             q2 = self.tokenizer.decode(
                 outputs[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False
             )
 
         return q2
-    
-    def process(self, ds, q1_col, masking_scheme):
+
+    def process(self, ds, q1_col):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
-        ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
+        ds = ds.add_column(name=f"q2", column=[""] * len(ds))
         num_batches = math.ceil(len(ds) / self.eval_batch_size)
         q2s = []
         for i in tqdm(range(num_batches)):
@@ -306,13 +307,17 @@ class Alpaca_Secondary_Model(Secondary_Model):
                 # incomplete. pickup here.
 
         return ds
-    
+
+
 class Alpaca_Secondary_Model_Jeopardy_Lookup(Secondary_Model):
-    """"
+    """ "
     Secondary model that uses precomputed secondary questions seeded with the answer
     Used to evaluate the viability of Jeopardy-style training
     """
-    def __init__(self, precomputed_jeopardy_path: str, model_name="alexpaca_precomputed"):
+
+    def __init__(
+        self, precomputed_jeopardy_path: str, model_name="alexpaca_precomputed"
+    ):
         self.model_name = model_name
         self.precomputed_jeopardy_path = precomputed_jeopardy_path
         self.df = pd.read_json(self.precomputed_jeopardy_path, lines=True)
