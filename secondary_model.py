@@ -1,3 +1,4 @@
+import math
 import torch
 from transformers import (
     PreTrainedModel,
@@ -168,6 +169,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
         precision="bf16",
         quantization_config=None,
         tokenizer_path=None,
+        eval_batch_size=1,
     ):
         super(Alpaca_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
@@ -289,6 +291,21 @@ class Alpaca_Secondary_Model(Secondary_Model):
             )
 
         return q2
+    
+    def process(self, ds, q1_col, masking_scheme):
+        """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
+        ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
+        num_batches = math.ceil(len(ds) / self.eval_batch_size)
+        q2s = []
+        for i in tqdm(range(num_batches)):
+            start = i * self.eval_batch_size
+            end = min((i + 1) * self.eval_batch_size, len(ds))
+            batch = ds.select(list(range(start, end)))
+            for j in range(len(batch)):
+                q1 = batch[j][q1_col]
+                # incomplete. pickup here.
+
+        return ds
     
 class Alpaca_Secondary_Model_Jeopardy_Lookup(Secondary_Model):
     """"

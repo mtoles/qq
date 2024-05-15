@@ -270,7 +270,7 @@ def main(
                 # "m1_supporting_None_em",
                 # "m1_masked_None_em",
                 "m1_masked_a2_em",
-                "a2_is_correct_masked",
+                "a2_is_correct",
             ]
         ]
         .astype(float)

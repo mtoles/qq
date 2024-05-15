@@ -49,7 +49,7 @@ def main(json_location):
         print(json_ds_path)
         print(f"f1: {confidence_interval(df['f1_recovery'])}")
         print(f"em: {confidence_interval(df['em_recovery'])}")
-        print(f"mfrr: {confidence_interval_binary(df['a2_is_correct_masked'])}")
+        print(f"mfrr: {confidence_interval_binary(df['a2_is_correct'])}")
         pass
 
 

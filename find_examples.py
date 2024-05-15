@@ -29,7 +29,7 @@ def main(json_dir):
         "a2_masked",  # not shared
         "m1_masked_None_f1",  # shared
         "m1_masked_a2_f1",  # not shared
-        "a2_is_correct_masked",  # not shared
+        "a2_is_correct",  # not shared
         "m1_masked_a2_gen",  # not shared
     ]
 
@@ -99,14 +99,14 @@ def main(json_dir):
     #             (df_gt.m1_masked_a2_f1 > df_gpt35.m1_masked_a2_f1)
     #             | (df_gt.m1_masked_a2_f1 > df_alpaca.m1_masked_a2_f1)
     #         )
-    #         & ~df_gt.a2_is_correct_masked
+    #         & ~df_gt.a2_is_correct
     #     )
     #     | (
     #         (
     #             (df_gpt4.m1_masked_a2_f1 > df_gpt35.m1_masked_a2_f1)
     #             | (df_gpt4.m1_masked_a2_f1 > df_alpaca.m1_masked_a2_f1)
     #         )
-    #         & (~df_gpt4.a2_is_correct_masked)
+    #         & (~df_gpt4.a2_is_correct)
     #     )
     #     # & (df_shared.m1_masked_None_f1 < max(df_gpt4.m1_masked_a2_f1, df_gt.m1_masked_a2_f1))
     # ]
@@ -118,10 +118,10 @@ def main(json_dir):
             "alpaca_m2",
             "gpt35_m2",
             "gpt4_m2",
-            "gpt4_a2_is_correct_masked",
-            "gpt35_a2_is_correct_masked",
-            "alpaca_a2_is_correct_masked",
-            "gt_a2_is_correct_masked",
+            "gpt4_a2_is_correct",
+            "gpt35_a2_is_correct",
+            "alpaca_a2_is_correct",
+            "gt_a2_is_correct",
         ],
         axis=1,
     )

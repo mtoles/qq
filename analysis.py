@@ -39,7 +39,7 @@ def main(json_dir, gt_only):
             "a2_masked",
             "m1_masked_None_f1",
             "m1_masked_a2_f1",
-            "a2_is_correct_masked",
+            "a2_is_correct",
             "m1_masked_a2_gen",
         ]
         # df = df_raw[interesting_cols]
@@ -65,7 +65,7 @@ def main(json_dir, gt_only):
         df["did_improve"] = df["m1_masked_None_f1"] < df["m1_masked_a2_f1"]
         df["got_worse"] = df["m1_masked_None_f1"] > df["m1_masked_a2_f1"]
         df["stayed_same"] = df["m1_masked_None_f1"] == df["m1_masked_a2_f1"]
-        df["wrong_answer_but_improved"] = (df["a2_is_correct_masked"] == False) & df[
+        df["wrong_answer_but_improved"] = (df["a2_is_correct"] == False) & df[
             "did_improve"
         ]
         df["delta_l"] = df["m1_masked_a2_f1"] - df["m1_masked_None_f1"]
@@ -203,7 +203,7 @@ def get_answer_type(example):
     supporting = [item for sublist in supporting for item in sublist]
     distractor = example["context_distractor"]["sentences"]
     distractor = [item for sublist in distractor for item in sublist]
-    if example["a2_is_correct_masked"]:
+    if example["a2_is_correct"]:
         return "correct"
     elif example["a2_masked"] in supporting:
         return "supporting"

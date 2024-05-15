@@ -140,7 +140,7 @@ class T5_Bool_Oracle(Oracle):
         oracle_answer_is_correct = bool(best_index == 0)
 
         example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
-        example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
+        example[f"a2_is_correct"] = [oracle_answer_is_correct]
         return example
 
 
@@ -227,5 +227,5 @@ class OpenAI_Oracle(Oracle):
         oracle_answer = corpus_strs[generation_idx]
         oracle_answer_is_correct = bool(generation_idx == correct_index)
         example[f"a2_{q2_masking_scheme}"] = [oracle_answer]
-        example[f"a2_is_correct_{q2_masking_scheme}"] = [oracle_answer_is_correct]
+        example[f"a2_is_correct"] = [oracle_answer_is_correct]
         return example
