@@ -25,13 +25,20 @@ import pandas as pd
 from secondary_model import Alpaca_Secondary_Model
 import wandb
 import os
+import argparse
 
 ###### Testing Setup ######
 
-# DEBUG_MODE = True
-DEBUG_MODE = False
+parser = argparse.ArgumentParser()
+parser.add_argument("--debug", action="store_true", default=False)
+parser.add_argument("--model_load_path", type=str, default=".model_cache/alpaca/tuned")
+args = parser.parse_args()
+DEBUG_MODE = args.debug
+MODEL_LOAD_PATH = args.model_load_path
+
 if DEBUG_MODE:
     print("DEBUG MODE ENABLED")
+
 
 ######## W&B Setup ########
 os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
@@ -48,7 +55,7 @@ os.environ["WANDB_CONFIG_DIR"] = os.path.join(
 ######## Helper Functions ########
 
 
-def compute_perplexity(eval_preds):
+def custom_metrics(eval_preds):
     logits = torch.tensor(eval_preds.predictions)
     labels = torch.tensor(eval_preds.label_ids)
     batch_size, seq_length, vocab_size = logits.shape
@@ -73,9 +80,15 @@ def compute_perplexity(eval_preds):
     mean_nll = nll.sum(axis=1) / num_non_pad
     ppl = torch.exp(mean_nll).mean()
 
-    correct_tokens = (shift_logits.argmax(-1) == shift_labels).float().mean()
+    # print the first 5 examples
+    for i in range(5):
+        print(
+            f"Example {i}: {tokenizer.decode(shift_labels[i])} | {tokenizer.decode(shift_logits[i].argmax(-1))}"
+        )
 
-    return {"perplexity": ppl, "correct_tokens": correct_tokens.item()}
+    # correct_tokens = (shift_logits.argmax(-1) == shift_labels).float().mean()
+
+    return {"perplexity": ppl, }
 
 
 ######## Main ########
@@ -86,7 +99,7 @@ now = datetime.now().strftime("%Y-%m-%d-%H-%M")
 
 alpaca = Alpaca_Secondary_Model(
     "alpaca",
-    ".model_cache/alpaca/tuned",
+    MODEL_LOAD_PATH,
     # precision="bnb_4",
     # quantization_config=bnb_config,
 )
@@ -219,7 +232,7 @@ training_arguments = TrainingArguments(
     evaluation_strategy="steps",
     do_eval=True,
     per_device_train_batch_size=8,
-    gradient_accumulation_steps=1,
+    gradient_accumulation_steps=4,
     per_device_eval_batch_size=8,
     log_level="debug",
     optim="paged_adamw_32bit",
@@ -229,7 +242,7 @@ training_arguments = TrainingArguments(
     logging_steps=500,
     logging_first_step=True,
     save_total_limit=2,
-    learning_rate=2e-5,
+    learning_rate=(2e-5),
     eval_steps=1000 if not DEBUG_MODE else 64,
     # eval_steps=1,  # testing
     max_grad_norm=0.3,
@@ -252,7 +265,7 @@ trainer = SFTTrainer(
     max_seq_length=512,
     tokenizer=tokenizer,
     args=training_arguments,
-    compute_metrics=compute_perplexity,
+    compute_metrics=custom_metrics,
     data_collator=data_collator,
 )
 

@@ -82,7 +82,7 @@ class T5_Bool_Oracle(Oracle):
                     title = example["context_None"][0]["title"][i]
                     corpus_str = cs_template % (title, supporting)
                     # corpus_str = supporting
-                    if corpus_str != masked_sentence:
+                    if corpus_str != corpus_strs[0]:
                         corpus_strs.append(corpus_str)
             # drop the masked sentence from corpus_strs
             input_strs = [
@@ -130,12 +130,12 @@ class T5_Bool_Oracle(Oracle):
             ).scores[0]
             yn_scores = batch_logits[:, label_ids.T.squeeze()].softmax(dim=1)
             probs.append(yn_scores)
-        probs = torch.cat(probs, dim=0)
+        probs = torch.cat(probs, dim=0) # shape: (c, 2)
         assert len(probs) == len(corpus_strs)
 
         best_index = probs[:, 0].argmax()
         best_prob = probs[:, 0].max()
-        # always answer mode
+        # always answer mod
         oracle_answer = corpus_strs[best_index]
         oracle_answer_is_correct = bool(best_index == 0)
 
