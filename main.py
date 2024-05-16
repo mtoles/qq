@@ -24,6 +24,7 @@ from tqdm import tqdm
 
 np.random.seed(42)
 
+
 @click.command()
 @click.option(
     "--split", default="validation", help="HotpotQA split {train, validation}"
@@ -44,9 +45,10 @@ np.random.seed(42)
     "--oracle_size",
     help="oracle size, t5: {small, base, large, xl, xxl}",
 )
-@click.option("--pm_eval_batch_size", help="batch size for eval", default=1, type=int)
+@click.option("--m1_eval_batch_size", help="batch size for eval", default=2, type=int)
+@click.option("--m2_eval_batch_size", help="batch size for eval", default=2, type=int)
 @click.option(
-    "--oracle_eval_batch_size", help="batch size for eval", default=1, type=int
+    "--oracle_eval_batch_size", help="batch size for eval", default=2, type=int
 )
 # @click.option(
 #     "--max_adversarial_examples",
@@ -74,9 +76,8 @@ np.random.seed(42)
     "--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons"
 )
 def click_main(**args):
-    main(
-        **args
-    )
+    main(**args)
+
 
 def main(
     split,
@@ -87,7 +88,8 @@ def main(
     template_id,
     oracle_arch,
     oracle_size,
-    pm_eval_batch_size,
+    m1_eval_batch_size,
+    m2_eval_batch_size,
     oracle_eval_batch_size,
     # max_adversarial_examples,
     downsample_pt_size,
@@ -117,7 +119,7 @@ def main(
         results_filename = f"{m1_arch}-{downsample_pt_size}-{now}"
 
     # Evaluate the primary model
-    m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
+    m1 = get_m1(m1_path, m1_arch, m1_eval_batch_size)
     # Receive and prepare the primary task
     metrics = {}
 
@@ -156,7 +158,6 @@ def main(
     # select and mask examples where the primary
     ds = randsentence_dataset(ds, m1, do_gt=False)
 
-
     # select only ground truth examples if we are doing analysis using the ground truth model
     if m2_arch == "gt" or gt_subset:
 
@@ -191,6 +192,7 @@ def main(
             "alpaca",
             ".model_cache/alpaca/tuned",
             # prompt_id=template_id,
+            eval_batch_size=m2_eval_batch_size,
         )
     elif m2_arch == "alexpaca":
         m2 = Alpaca_Secondary_Model(
@@ -198,6 +200,7 @@ def main(
             alexpaca_path,
             tokenizer_path=".model_cache/alpaca/tuned",  # use the original alpaca tokenizer
             # prompt_id="p1",  # always use p1 since thats what it was trained on
+            eval_batch_size=m2_eval_batch_size,
         )
     elif m2_arch == "alexpaca_precomputed":
         m2 = Alpaca_Secondary_Model_Jeopardy_Lookup(
@@ -238,7 +241,7 @@ def main(
     torch.cuda.empty_cache()  # free up memory
 
     # Bring back the primary model
-    m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
+    m1 = get_m1(m1_path, m1_arch, m1_eval_batch_size)
     # Evaluate the primary model on the masked examples
 
     # Evaluate the primary model on the answered examples
@@ -278,7 +281,6 @@ def main(
     print(f"dataset saved to {save_path}")
 
     print
-
 
 
 if __name__ == "__main__":

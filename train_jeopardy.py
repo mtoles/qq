@@ -88,7 +88,9 @@ def custom_metrics(eval_preds):
 
     # correct_tokens = (shift_logits.argmax(-1) == shift_labels).float().mean()
 
-    return {"perplexity": ppl, }
+    return {
+        "perplexity": ppl,
+    }
 
 
 ######## Main ########
@@ -289,7 +291,7 @@ main.main(
     # defaults
     m1_path=None,
     template_id=None,
-    pm_eval_batch_size=1,
+    m1_eval_batch_size=1,
     oracle_eval_batch_size=1,
     downsample_pt_size=None,
     ds_shift=0,

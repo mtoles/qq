@@ -298,7 +298,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
         ds = ds.add_column(name=f"q2", column=[""] * len(ds))
         num_batches = math.ceil(len(ds) / self.eval_batch_size)
         q2s = []
-        
+
         for i in tqdm(range(num_batches)):
             start = i * self.eval_batch_size
             end = min((i + 1) * self.eval_batch_size, len(ds))
@@ -309,7 +309,11 @@ class Alpaca_Secondary_Model(Secondary_Model):
                 context = batch[j]["fc_masked"]
                 prompts.append(self.fit_template(q1, context))
             inputs = self.tokenizer(
-                prompts, return_tensors="pt", truncation=True, max_length=self.max_length
+                prompts,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+                padding=True,
             )
             inputs = {
                 k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
@@ -321,12 +325,12 @@ class Alpaca_Secondary_Model(Secondary_Model):
                 )
                 q2s.extend(
                     self.tokenizer.batch_decode(
-                        outputs[:, len(inputs["input_ids"][0]) :], skip_special_tokens=True
+                        outputs[:, len(inputs["input_ids"][0]) :],
+                        skip_special_tokens=True,
                     )
                 )
         for i in range(len(ds)):
             ds[i]["q2"] = q2s[i]
-            
 
         return ds
 
