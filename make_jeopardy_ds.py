@@ -121,29 +121,10 @@ class Alpaca_Secondary_Model:
 @click.option(
     "--split", default="validation", help="HotpotQA split {train, validation}"
 )
-@click.option("--m1_path", help="path to primary model")
-@click.option("--m1_arch", help="primary model architecture")
 @click.option(
     "--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, gt}"
 )
-@click.option(
-    "--template_id",
-    help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
-)
-@click.option("--oracle_arch", default="t5", help="oracle architecture {t5, bloom}")
-@click.option(
-    "--oracle_size",
-    help="oracle size, t5: {small, base, large, xl, xxl}",
-)
-@click.option("--pm_eval_batch_size", help="batch size for eval", default=1, type=int)
-@click.option(
-    "--oracle_eval_batch_size", help="batch size for eval", default=1, type=int
-)
-@click.option(
-    "--max_adversarial_examples",
-    default=1,
-    help="create at most this many adversarial examples per example",
-)
+
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -154,11 +135,6 @@ class Alpaca_Secondary_Model:
     default=0,
     help="Shift the dataset by this many examples before downsampling. Useful for debugging specific examples.",
 )
-@click.option(
-    "--oai_cache_path",
-    default=None,
-    help="Path to save/load cached chatGPT responses.",
-)
 @click.option("--results_filename", help="path to save results")
 @click.option(
     "--save_dir", help="directory to save results to", default="data/jeopardy"
@@ -168,18 +144,11 @@ class Alpaca_Secondary_Model:
 )
 def main(
     split,
-    m1_path,
     m1_arch,
     m2_arch,
-    template_id,
-    oracle_arch,
-    oracle_size,
-    pm_eval_batch_size,
-    oracle_eval_batch_size,
     max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
-    oai_cache_path,
     gt_subset,
     results_filename,
     save_dir,
