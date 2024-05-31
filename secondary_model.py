@@ -162,7 +162,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
         model_name,
         model_path,
         max_length=512,
-        prompt_id="p1",
+        prompt_id="p3",
         device="cuda",
         precision="bf16",
         quantization_config=None,
@@ -227,7 +227,6 @@ class Alpaca_Secondary_Model(Secondary_Model):
         self.max_length = max_length
         self.alpaca_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
         self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
-
     def fit_template(self, q1, context):
         instruction_templates = {
             "p1": "Ask another question that would help you answer the following question:",
@@ -295,7 +294,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
 
     def process(self, ds, q1_col):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
-        ds = ds.add_column(name=f"q2", column=[""] * len(ds))
+        # ds = ds.add_column(name=f"q2", column=[""] * len(ds))
         num_batches = math.ceil(len(ds) / self.eval_batch_size)
         q2s = []
 
@@ -329,9 +328,10 @@ class Alpaca_Secondary_Model(Secondary_Model):
                         skip_special_tokens=True,
                     )
                 )
-        for i in range(len(ds)):
-            ds[i]["q2"] = q2s[i]
+        # for i in range(len(ds)):
+        #     ds[i]["q2"] = q2s[i]
 
+        ds = ds.add_column(name=f"q2", column=q2s)
         return ds
 
 

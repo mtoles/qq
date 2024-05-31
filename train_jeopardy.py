@@ -14,6 +14,7 @@ from transformers import (
     TrainingArguments,
     GenerationConfig,
     DataCollatorForLanguageModeling,
+    Trainer,
 )
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 from datetime import datetime
@@ -42,7 +43,7 @@ if DEBUG_MODE:
 
 ######## W&B Setup ########
 os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
-os.environ["WANDB_LOG_MODEL"] = "checkpoint"  # log all model checkpoints
+os.environ["WANDB_LOG_MODEL"] = "false"  # false/end/checkpoint
 os.environ["WANDB_DIR"] = os.path.join(os.getcwd(), "wandb")  # save W&B logs locally
 os.environ["WANDB_CACHE_DIR"] = os.path.join(
     os.getcwd(), "wandb/cache"
@@ -55,42 +56,42 @@ os.environ["WANDB_CONFIG_DIR"] = os.path.join(
 ######## Helper Functions ########
 
 
-def custom_metrics(eval_preds):
-    logits = torch.tensor(eval_preds.predictions)
-    labels = torch.tensor(eval_preds.label_ids)
-    batch_size, seq_length, vocab_size = logits.shape
+# def custom_metrics(eval_preds):
+#     logits = torch.tensor(eval_preds.predictions)
+#     labels = torch.tensor(eval_preds.label_ids)
+#     batch_size, seq_length, vocab_size = logits.shape
 
-    # steal from inside llama
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-    # Flatten the tokens
-    # loss_fct = CrossEntropyLoss()
-    # shift_logits = shift_logits.view(-1, vocab_size)
-    # shift_labels = shift_labels.view(-1)
+#     # steal from inside llama
+#     shift_logits = logits[..., :-1, :].contiguous()
+#     shift_labels = labels[..., 1:].contiguous()
+#     # Flatten the tokens
+#     # loss_fct = CrossEntropyLoss()
+#     # shift_logits = shift_logits.view(-1, vocab_size)
+#     # shift_labels = shift_labels.view(-1)
 
-    probs = torch.nn.functional.softmax(shift_logits, dim=-1)
-    p_true_tokens = probs.view(-1, vocab_size)[
-        torch.arange(batch_size * (seq_length - 1)), shift_labels.view(-1)
-    ].view(batch_size, (seq_length - 1))
+#     probs = torch.nn.functional.softmax(shift_logits, dim=-1)
+#     p_true_tokens = probs.view(-1, vocab_size)[
+#         torch.arange(batch_size * (seq_length - 1)), shift_labels.view(-1)
+#     ].view(batch_size, (seq_length - 1))
 
-    nll = -torch.log(p_true_tokens)
-    # set likelihoods to 0 for padding tokens
-    nll[shift_labels == -100] = 0
-    num_non_pad = (shift_labels != -100).sum(axis=1)
-    mean_nll = nll.sum(axis=1) / num_non_pad
-    ppl = torch.exp(mean_nll).mean()
+#     nll = -torch.log(p_true_tokens)
+#     # set likelihoods to 0 for padding tokens
+#     nll[shift_labels == -100] = 0
+#     num_non_pad = (shift_labels != -100).sum(axis=1)
+#     mean_nll = nll.sum(axis=1) / num_non_pad
+#     ppl = torch.exp(mean_nll).mean()
 
-    # print the first 5 examples
-    for i in range(5):
-        print(
-            f"Example {i}: {tokenizer.decode(shift_labels[i])} | {tokenizer.decode(shift_logits[i].argmax(-1))}"
-        )
+#     # print the first 5 examples
+#     for i in range(5):
+#         print(
+#             f"Example {i}: {tokenizer.decode(shift_labels[i][shift_labels[i] != -100])} | {tokenizer.decode(shift_logits[i][shift_labels[i] != -100].argmax(-1))}"
+#         )
 
-    # correct_tokens = (shift_logits.argmax(-1) == shift_labels).float().mean()
+#     # correct_tokens = (shift_logits.argmax(-1) == shift_labels).float().mean()
 
-    return {
-        "perplexity": ppl,
-    }
+#     return {
+#         "perplexity": ppl,
+#     }
 
 
 ######## Main ########
@@ -122,7 +123,7 @@ tokenizer.padding_side = "left"
 dataset_train = Dataset.from_pandas(
     pd.read_json("data/jeopardy/jeopardy_gpt_full_train.jsonl", lines=True)
 )
-dataset_train = dataset_train.select(range(20000))
+dataset_train = dataset_train.select(range(2000 if not DEBUG_MODE else 512))
 dataset_train = dataset_train.filter(lambda x: x["jeopardy_q"] is not None)
 dataset_train = dataset_train.map(
     lambda x: {"prompt": alpaca.fit_template(x["q1"], x["fc_masked"])}
@@ -133,7 +134,7 @@ dataset_train = dataset_train.map(
 
 dataset_val = Dataset.from_pandas(
     pd.read_json("data/jeopardy/jeopardy_full_validation.jsonl", lines=True)
-).select(range(1000 if not DEBUG_MODE else 128))
+).select(range(500 if not DEBUG_MODE else 128))
 # dataset_val = dataset_val.select(range(4))  # testing
 dataset_val = dataset_val.filter(lambda x: x["jeopardy_q"] is not None)
 dataset_val = dataset_val.map(
@@ -233,52 +234,54 @@ training_arguments = TrainingArguments(
     output_dir=f"./models/alexpaca/{str(now)}",
     evaluation_strategy="steps",
     do_eval=True,
-    per_device_train_batch_size=8,
+    per_device_train_batch_size=4,
     gradient_accumulation_steps=4,
-    per_device_eval_batch_size=8,
+    per_device_eval_batch_size=4,
     log_level="debug",
     optim="paged_adamw_32bit",
     save_strategy="epoch",
     save_steps=1,
     # save_steps=3,
-    logging_steps=500,
+    logging_steps=25,
     logging_first_step=True,
     save_total_limit=2,
-    learning_rate=(2e-5),
-    eval_steps=1000 if not DEBUG_MODE else 64,
+    learning_rate=1e-5,
+    eval_steps=25 if not DEBUG_MODE else 5,
     # eval_steps=1,  # testing
     max_grad_norm=0.3,
     num_train_epochs=1,
     # max_steps=2,  # testing
     warmup_ratio=0.03,
-    lr_scheduler_type="cosine",
+    lr_scheduler_type="linear",
     report_to="wandb",
     run_name=f"{run_name}-{now}",
     eval_accumulation_steps=1,
 )
 wandb.init(project="qq", name=f"{run_name}-{now}", config=training_arguments)
 # os.environ["WANDB_DISABLED"] = "true"
-trainer = SFTTrainer(
+# trainer = SFTTrainer(
+trainer = Trainer(
     model=model,
-    train_dataset=dataset_train,
-    eval_dataset=dataset_val,
+    train_dataset=dataset_train["text"],
+    eval_dataset=dataset_val["text"],
     # peft_config=peft_config,
-    dataset_text_field="text",
-    max_seq_length=512,
+    # dataset_text_field="text",
+    # max_seq_length=512,
     tokenizer=tokenizer,
     args=training_arguments,
-    compute_metrics=custom_metrics,
+    # compute_metrics=custom_metrics,
     data_collator=data_collator,
 )
 
 # %%
-eval_results = trainer.evaluate()
+# eval_results = trainer.evaluate()
 trainer.train()
-for i in range(3):
-    generate(dataset_val["text"][i].split("### Response: ")[0] + "### Response: ")
 
 save_path = f"./models/alexpaca/{now}"
 model.save_pretrained(save_path)
+
+for i in range(3):
+    generate(dataset_val["text"][i].split("### Response: ")[0] + "### Response: ")
 
 main.main(
     split="validation",
@@ -291,8 +294,9 @@ main.main(
     # defaults
     m1_path=None,
     template_id=None,
-    m1_eval_batch_size=1,
-    oracle_eval_batch_size=1,
+    m1_eval_batch_size=64,
+    m2_eval_batch_size=32,
+    oracle_eval_batch_size=64,
     downsample_pt_size=None,
     ds_shift=0,
     oai_cache_path=None,

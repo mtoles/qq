@@ -13,9 +13,7 @@ from utils import set_random_seed
 from datetime import datetime
 import numpy as np
 
-from masking import (
-    randsentence_dataset,
-)
+from masking import randsentence_dataset
 from pathlib import PurePath
 import pandas as pd
 import os
@@ -46,7 +44,7 @@ np.random.seed(42)
     help="oracle size, t5: {small, base, large, xl, xxl}",
 )
 @click.option("--m1_eval_batch_size", help="batch size for eval", default=2, type=int)
-@click.option("--m2_eval_batch_size", help="batch size for eval", default=2, type=int)
+@click.option("--m2_eval_batch_size", help="batch size for eval", default=1, type=int)
 @click.option(
     "--oracle_eval_batch_size", help="batch size for eval", default=2, type=int
 )
@@ -99,6 +97,7 @@ def main(
     results_filename,
     save_dir,
 ):
+    assert m2_eval_batch_size == 1, "only batch size 1 is supported for m2"
     assert (alexpaca_path and m2_arch == "alexpaca") or (
         not alexpaca_path and not m2_arch == "alexpaca"
     ), "alexpaca path required iff m2_arch is alexpaca"
@@ -153,7 +152,7 @@ def main(
     # ds, metrics["supporting"] = m1.evaluate(
     #     masking_scheme="supporting", ds=ds, a2_col=None
     # )
-    # fill with -1 isntead
+    # fill with -1 instead
     metrics["supporting"] = -1
     # select and mask examples where the primary
     ds = randsentence_dataset(ds, m1, do_gt=False)
@@ -201,6 +200,7 @@ def main(
             tokenizer_path=".model_cache/alpaca/tuned",  # use the original alpaca tokenizer
             # prompt_id="p1",  # always use p1 since thats what it was trained on
             eval_batch_size=m2_eval_batch_size,
+            # precision="float32", # wrong?
         )
     elif m2_arch == "alexpaca_precomputed":
         m2 = Alpaca_Secondary_Model_Jeopardy_Lookup(
