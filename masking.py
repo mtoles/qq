@@ -57,7 +57,7 @@ def add_flat_contexts(
     # TODO: the list of three should be removed and sent in the call
     for masking_scheme in list(masking_schemes):
         # masking_str = f"context_{masking_scheme}"
-        disable_progress_bar()
+        # disable_progress_bar()
         new_ds = new_ds.map(
             lambda x: {
                 f"fc_{masking_scheme}": " ".join(x[f"fc_{masking_scheme}"].split())
@@ -65,7 +65,7 @@ def add_flat_contexts(
             cache_file_name=cache_file_name,
             load_from_cache_file=load_from_cache,
         )
-        enable_progress_bar()
+        # enable_progress_bar()
     # Rename Columns
     if "question" in new_ds.column_names:
         assert (

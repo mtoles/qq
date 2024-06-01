@@ -124,7 +124,6 @@ class Alpaca_Secondary_Model:
 @click.option(
     "--m2_arch", help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, gt}"
 )
-
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -135,7 +134,6 @@ class Alpaca_Secondary_Model:
     default=0,
     help="Shift the dataset by this many examples before downsampling. Useful for debugging specific examples.",
 )
-@click.option("--results_filename", help="path to save results")
 @click.option(
     "--save_dir", help="directory to save results to", default="data/jeopardy"
 )
@@ -144,13 +142,10 @@ class Alpaca_Secondary_Model:
 )
 def main(
     split,
-    m1_arch,
     m2_arch,
-    max_adversarial_examples,
     downsample_pt_size,
     ds_shift,
     gt_subset,
-    results_filename,
     save_dir,
 ):
     masking_scheme = "randsentence"
@@ -165,8 +160,6 @@ def main(
         "None" if masking_scheme == "bfdelsentence" else "masking_scheme"
     )
     now = datetime.now().strftime("Y%m%d-%H%M%S")
-    if results_filename is None:
-        results_filename = f"{m1_arch}-{downsample_pt_size}-{ds_masking_scheme}-{now}"
 
     # Evaluate the primary model
     # m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
@@ -194,11 +187,6 @@ def main(
         do_gt = m2_arch == "gt" or gt_subset
         m1 = None
         ds = randsentence_dataset(ds, m1, do_gt)
-    elif masking_scheme == "randdistsentence":
-        raise NotImplementedError
-        ds = randdist_dataset(
-            ds, m1, max_adversarial_examples
-        )  # set drop thresh to -1 so no filtering happens
 
     masked_sentences = ds["masked_sentence"]
     # downsample and shift
@@ -233,7 +221,7 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"jeopardy_gpt_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}.jsonl",
+        f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}.jsonl",
     )
 
     # df.to_hdf(save_path, "ds")
