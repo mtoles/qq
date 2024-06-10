@@ -27,13 +27,13 @@ np.random.seed(42)
 @click.option(
     "--split", default="validation", help="HotpotQA split {train, validation}"
 )
-@click.option("--m1_path", help="path to primary model")
 @click.option("--m1_arch", help="primary model architecture")
 @click.option(
     "--m2_arch",
     help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, alpaca, alexpaca, alexpaca_precomputed, gt}",
 )
 @click.option("--alexpaca_path", help="path to trained alexpaca model", default=None)
+@click.option("--alexpaca_precomputed_data_path", help="path to alexpaca lookup data", default="data/jeopardy/jeopardy_full_validation.jsonl")
 @click.option(
     "--template_id",
     help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
@@ -79,10 +79,10 @@ def click_main(**args):
 
 def main(
     split,
-    m1_path,
     m1_arch,
     m2_arch,
     alexpaca_path,
+    alexpaca_precomputed_data_path,
     template_id,
     oracle_arch,
     oracle_size,
@@ -118,7 +118,7 @@ def main(
         results_filename = f"{m1_arch}-{downsample_pt_size}-{now}"
 
     # Evaluate the primary model
-    m1 = get_m1(m1_path, m1_arch, m1_eval_batch_size)
+    m1 = get_m1(m1_arch, m1_eval_batch_size)
     # Receive and prepare the primary task
     metrics = {}
 
@@ -204,7 +204,7 @@ def main(
         )
     elif m2_arch == "alexpaca_precomputed":
         m2 = Alpaca_Secondary_Model_Jeopardy_Lookup(
-            precomputed_jeopardy_path="data/jeopardy/jeopardy_full_validation.jsonl",
+            precomputed_jeopardy_path=alexpaca_precomputed_data_path,
             model_name="alexpaca_precomputed",
         )
     else:
@@ -241,7 +241,7 @@ def main(
     torch.cuda.empty_cache()  # free up memory
 
     # Bring back the primary model
-    m1 = get_m1(m1_path, m1_arch, m1_eval_batch_size)
+    m1 = get_m1(m1_arch, m1_eval_batch_size)
     # Evaluate the primary model on the masked examples
 
     # Evaluate the primary model on the answered examples
@@ -280,8 +280,7 @@ def main(
     df.to_json(save_path, orient="records", lines=True)
     print(f"dataset saved to {save_path}")
 
-    print
-
+    return df
 
 if __name__ == "__main__":
     click_main()

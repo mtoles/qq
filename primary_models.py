@@ -347,7 +347,7 @@ class T5_PM(Primary_Model):
         return ds, metrics
 
 
-def get_m1(m1_path, m1_arch, batch_size):
+def get_m1(m1_arch, batch_size):
     # Unit Tests
     assert m1_arch in [
         "t5-small",
