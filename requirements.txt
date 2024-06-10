@@ -1,4 +1,3 @@
-# matt
 requests
 wandb
 datasets>=2.10.1
@@ -6,22 +5,18 @@ pandas
 numpy
 tqdm
 pip
-ujson # hotpot
+ujson 
 ipykernel
 black
 click
-# tensorboard
 scikit-learn>=1.2.0
 openai
 nltk
-# tables #>=3.7.0 # df.to_hdf()
-xlwt # df.to_xls()
-# transformers==4.28.1 # new version which include tokenizer for alpaca
+xlwt 
 transformers>=4.31
-fire # alpaca loading
+fire
 python-dotenv
 
-# alpaca training
 peft
 bitsandbytes
 trl
