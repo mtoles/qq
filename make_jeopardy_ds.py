@@ -8,15 +8,11 @@ import torch
 from datasets import load_from_disk, Dataset
 from oracles import *  # T5_Bool_Oracle
 from primary_models import get_m1
-from secondary_model import (
-    Repeater_Secondary_Model,
-    OpenAI_Secondary_Model,
-    Gt_Secondary_Model,
-    Flan_Secondary_Model,
-    Alpaca_Secondary_Model,
-)
-from utils import set_random_seed
+from secondary_model import Alpaca_Secondary_Model_Jeopardy_Lookup
 from dataset_utils import bf_filtering, combine_adversarial_ds
+from main import main as analyze
+
+from utils import set_random_seed
 from datetime import datetime
 from time import sleep
 import numpy as np
@@ -82,7 +78,6 @@ class Alpaca_Secondary_Model:
             k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
         }
         tries = 0
-        # while tries < 3:
         attempts = []
         while tries < 10:
             with torch.no_grad():
@@ -140,6 +135,11 @@ class Alpaca_Secondary_Model:
 @click.option(
     "--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons"
 )
+@click.option(
+    "--active_filter",
+    flag_value=True,
+    help="only include examples where the cq is useful",
+)
 def main(
     split,
     m2_arch,
@@ -147,6 +147,7 @@ def main(
     ds_shift,
     gt_subset,
     save_dir,
+    active_filter,
 ):
     masking_scheme = "randsentence"
     set_random_seed(0)
@@ -156,15 +157,7 @@ def main(
             downsample_pt_size is not None
         ), "There is no reason to shift the dataset without downsampling"
     start = datetime.now()
-    ds_masking_scheme = (
-        "None" if masking_scheme == "bfdelsentence" else "masking_scheme"
-    )
     now = datetime.now().strftime("Y%m%d-%H%M%S")
-
-    # Evaluate the primary model
-    # m1 = get_m1(m1_path, m1_arch, pm_eval_batch_size)
-    # Receive and prepare the primary task
-    metrics = {}
 
     print("preprocessing...")
     # ds = get_preprocessed_ds("validation", downsample_pt_size)
@@ -202,15 +195,8 @@ def main(
         masked_sentences = batch["masked_sentence"]
         batch_output = alpaca.forward(masked_sentences)
         jeopardy_qs.append(batch_output)
-
+    del alpaca
     ds = ds.add_column("jeopardy_q", jeopardy_qs)
-
-    # keep only necessary cols
-    # q1s = ds["prepped_bfdelsentence_None"][0].split("\n\n")[0]
-
-    # ds.to_hdf("results/jeopardy/jeopardy_ds.hd5", key="ds")
-
-    print
 
     # # Analysis
     df = pd.DataFrame(ds)
@@ -223,10 +209,41 @@ def main(
         save_dir,
         f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}.jsonl",
     )
+    df.to_json(save_path, orient="records", lines=True)
+
+    if active_filter:
+        analyze_df = analyze(
+            split=split,
+            m1_arch="t5-base",
+            m2_arch="alexpaca_precomputed",
+            alexpaca_precomputed_data_path=save_path,
+            oracle_arch="t5",
+            oracle_size="base",
+            save_dir="results/tmp",
+            oracle_eval_batch_size=64,
+            m1_eval_batch_size=64,
+            # defaults
+            alexpaca_path=None,
+            template_id=None,
+            m2_eval_batch_size=1,
+            # max_adversarial_examples,
+            downsample_pt_size=downsample_pt_size,
+            ds_shift=ds_shift,
+            oai_cache_path=None,
+            gt_subset=False,
+            results_filename="RESULTS_FILENAME", 
+        )
+
+        # df = df[analyze_df["a2_is_correct"]]
+        df = df[analyze_df["m1_masked_a2_f1"]-analyze_df["m1_masked_None_f1"] > 0]
+    filtered_save_path = os.path.join(
+        save_dir,
+        f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}{'_active_filtered' if active_filter else ''}.jsonl",
+    )
+    df.to_json(filtered_save_path, orient="records", lines=True)
 
     # df.to_hdf(save_path, "ds")
-    df.to_json(save_path, orient="records", lines=True)
-    print(f"dataset saved to {save_path}")
+    print(f"dataset saved to {filtered_save_path}")
 
     print
 

@@ -261,7 +261,7 @@ def train():
     )
     trainer.train()
     trainer.save_state()
-    trainer.save_model(output_dir=f"training_args.output_dir_{training_args.examples}_{now}")
+    trainer.save_model(output_dir=f"{training_args.output_dir}_{training_args.examples}_{now}")
 
 
 if __name__ == "__main__":
