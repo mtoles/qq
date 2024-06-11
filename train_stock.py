@@ -24,6 +24,8 @@ from torch.utils.data import Dataset
 from transformers import Trainer
 from datetime import datetime
 
+from main import main as analyze
+
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
@@ -261,7 +263,32 @@ def train():
     )
     trainer.train()
     trainer.save_state()
-    trainer.save_model(output_dir=f"{training_args.output_dir}_{training_args.examples}_{now}")
+    output_dir = f"{training_args.output_dir}_{training_args.examples}_{now}"
+    trainer.save_model(output_dir=output_dir)
+
+    print("evaluating model")
+
+    analyze_df = analyze(
+        split="validation",
+        m1_arch="t5-base",
+        m2_arch="alexpaca",
+        alexpaca_precomputed_data_path=output_dir,
+        oracle_arch="t5",
+        oracle_size="base",
+        save_dir="results/alexpaca/checkpointed",
+        oracle_eval_batch_size=64,
+        m1_eval_batch_size=64,
+        # defaults
+        alexpaca_path=None,
+        template_id=None,
+        m2_eval_batch_size=1,
+        # max_adversarial_examples,
+        downsample_pt_size=None,
+        ds_shift=None,
+        oai_cache_path=None,
+        gt_subset=False,
+        results_filename="RESULTS_FILENAME", 
+    )
 
 
 if __name__ == "__main__":
