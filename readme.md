@@ -31,6 +31,9 @@ TRANSFORMERS_CACHE=<YOUR_PATH_TO_SAVE_HUGGINGFACE_MODELS>
 ```
 bash scripts/recover_alpaca.sh
 ```
+
+If you recieve an error "could not import openai_object from openai" then temporarily downgrade openai to 0.29.1.
+
 ### Prepare Datasets
 Run preprocess with 
 ```

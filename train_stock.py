@@ -23,6 +23,19 @@ import alpaca.utils as utils
 from torch.utils.data import Dataset
 from transformers import Trainer
 from datetime import datetime
+import wandb
+import os
+
+######## W&B Setup ########
+os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
+os.environ["WANDB_LOG_MODEL"] = "false"  # false/end/checkpoint
+os.environ["WANDB_DIR"] = os.path.join(os.getcwd(), "wandb")  # save W&B logs locally
+os.environ["WANDB_CACHE_DIR"] = os.path.join(
+    os.getcwd(), "wandb/cache"
+)  # save W&B cache locally
+os.environ["WANDB_CONFIG_DIR"] = os.path.join(
+    os.getcwd(), "wandb/config"
+)  # save W&B config locally
 
 from main import main as analyze
 
@@ -219,6 +232,8 @@ def make_supervised_data_module(
 
 def train():
     now = datetime.now().strftime("%m_%d-%H:%M:%S")
+    run_name = "alpaca-jeopardy"
+
     parser = transformers.HfArgumentParser(
         (ModelArguments, DataArguments, TrainingArguments)
     )
@@ -228,6 +243,10 @@ def train():
     training_args.max_steps = training_args.examples // (
         training_args.per_device_train_batch_size or 1
     )
+    print(f"training on {training_args.examples} examples")
+    # training_args.report_to = "wandb"
+    wandb.init(project="qq", name=f"{run_name}-{now}", config=training_args)
+
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
