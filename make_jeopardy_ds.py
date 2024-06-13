@@ -5,31 +5,39 @@
 
 import click
 import torch
-from datasets import load_from_disk, Dataset
 from oracles import *  # T5_Bool_Oracle
-from primary_models import get_m1
 from secondary_model import Alpaca_Secondary_Model_Jeopardy_Lookup
-from dataset_utils import bf_filtering, combine_adversarial_ds
 from main import main as analyze
 
 from utils import set_random_seed
 from datetime import datetime
-from time import sleep
 import numpy as np
 
 # from masking import bf_del_sentences, bf_add_sentences, reduce_to_n
 from masking import (
     randsentence_dataset,
-    randdist_dataset,
 )
 from pathlib import PurePath
 import pandas as pd
 import os
 from preprocess import get_preprocessed_ds
 import re
+import json
 
 np.random.seed(42)
 
+def fit_template(q1, context):
+    prompt_id = "p1"
+
+    input_template = "Question:\n{q1}\nContext:\n{context}"
+    instruction_prefix = (
+        "What question can you ask to help you answer the final question:"  # p3
+    )
+    inpt = input_template.format(context=context, q1=q1)
+    instruction = f"{instruction_prefix}\n\n{inpt}"
+    # prompt = self.alpaca_template.format(instruction=instruction, input=inpt)
+
+    return instruction
 
 class Alpaca_Secondary_Model:
     def __init__(
@@ -61,10 +69,13 @@ class Alpaca_Secondary_Model:
         # self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
         self.device = self.device
 
-    def forward(self, masked_sentence):
+    def forward(self, batch):
+        masked_sentence = batch["masked_sentence"]
+        q1 = batch["q1"]
+        inpt = f"Task: {q1}\n\nContext: {masked_sentence}"
         prompt = self.alpaca_template.format(
-            instruction="Ask a question that can be answered by the context. Begin with who, what, where, or when.",
-            input=masked_sentence,
+            instruction="Ask a question that can help you with the task and can be answered by the context. Begin with who, what, where, or when.",
+            input=inpt,
         )
 
         inputs = self.tokenizer(
@@ -192,8 +203,9 @@ def main(
     print("generating jeopardy questions...")
     for i in tqdm(range(0, len(ds))):
         batch = ds[i : i + 1]
-        masked_sentences = batch["masked_sentence"]
-        batch_output = alpaca.forward(masked_sentences)
+        # masked_sentences = batch["masked_sentence"]
+        # batch_output = alpaca.forward(masked_sentences)
+        batch_output = alpaca.forward(batch)
         jeopardy_qs.append(batch_output)
     del alpaca
     ds = ds.add_column("jeopardy_q", jeopardy_qs)
@@ -238,9 +250,20 @@ def main(
         df = df[analyze_df["m1_masked_a2_f1"]-analyze_df["m1_masked_None_f1"] > 0]
     filtered_save_path = os.path.join(
         save_dir,
-        f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}{'_active_filtered' if active_filter else ''}.jsonl",
+        f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}{'_active_filtered' if active_filter else ''}_tatsu.jsonl",
     )
-    df.to_json(filtered_save_path, orient="records", lines=True)
+    # df.to_json(filtered_save_path, orient="records", lines=True)
+
+    df["instruction"] = df.apply(lambda x: fit_template(x["q1"], x["fc_masked"]), axis=1)
+    df["output"] = df["jeopardy_q"]
+    df["input"] = ""
+
+    # write instructions, output, and input to a jsonl file as a list of dicts
+    output_list = df[["instruction", "input", "output"]].to_dict(orient="records")
+    with open(filtered_save_path, "w") as f:
+        f.write("[")
+        f.write(",\n".join([json.dumps(line) for line in output_list]))
+        f.write("]")
 
     # df.to_hdf(save_path, "ds")
     print(f"dataset saved to {filtered_save_path}")

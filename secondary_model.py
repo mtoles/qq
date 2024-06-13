@@ -225,8 +225,9 @@ class Alpaca_Secondary_Model(Secondary_Model):
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "right"
         self.max_length = max_length
-        self.alpaca_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
-        self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
+        self.alpaca_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\nResponse:"
+        # self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
+
     def fit_template(self, q1, context):
         instruction_templates = {
             "p1": "Ask another question that would help you answer the following question:",
@@ -355,48 +356,6 @@ class Alpaca_Secondary_Model_Jeopardy_Lookup(Secondary_Model):
         return self.df.loc[key, "jeopardy_q"]
 
 
-class Flan_Secondary_Model(Secondary_Model):
-    def __init__(
-        self,
-        model_name="flan-t5-small",
-        prompt_id="p1",
-        max_length=4096,
-        device="cuda",
-        precision="bf16",
-    ):
-        super(Flan_Secondary_Model, self).__init__(prompt_id)
-        self.model_name = model_name
-        self.device = device
-        model_path = f"google/{model_name}"
-        if precision == "int8":
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(
-                model_path, device_map="auto", load_in_8bit=True
-            )
-        elif precision == "bf16":
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(
-                model_path, torch_dtype=torch.bfloat16
-            )
-        else:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
-        self.model.to(self.device)
-
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.max_length = max_length
-
-    def forward(self, example, question_col, context_col):
-        q1 = example[question_col]
-        context = example[context_col]
-        prompt = self.template.format(context=context, q1=q1)
-        inputs = self.tokenizer(
-            prompt, return_tensors="pt", truncation=True, max_length=self.max_length
-        )
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        with torch.no_grad():
-            outputs = self.model.generate(**inputs)
-        q2 = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
-        return q2
-
-
 class OpenAI_Secondary_Model(Secondary_Model):
     def __init__(self, cache_path, model_name, prompt_id="p1"):
         super(OpenAI_Secondary_Model, self).__init__(prompt_id)
@@ -513,3 +472,189 @@ class Gt_Secondary_Model(Secondary_Model):
                 )
         else:
             raise NotImplementedError(f"id {example['id']} not found in self.gt_df")
+
+
+class Llama3_Secondary_Model(Secondary_Model):
+    def __init__(
+        self,
+        model_path,
+        prompt_id,
+        model_name="llama3",
+        max_length=1024,
+        device="cuda",
+        precision="bf16",
+        # quantization_config=None,
+        # tokenizer_path=None,
+        eval_batch_size=1,
+    ):
+        super(Llama3_Secondary_Model, self).__init__(prompt_id)
+        self.model_name = model_name
+        self.device = device
+        self.eval_batch_size = eval_batch_size
+
+        # if loading the alepaca model you need to manually pass in the original tokenizer
+        # because i forgot to save the tokenzier with the model
+        # if tokenizer_path is None:
+        #     self.tokenizer_path = model_path
+        # else:
+        #     self.tokenizer_path = tokenizer_path
+
+        # if precision == "bf16":
+        self.model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16
+        )
+
+        # self.model = PeftModel.from_pretrained(
+        #     normal_model, "models/alpaca-jeopardy-1-epoch"
+        # )
+
+        # # trainer = SFTTrainer(
+        # #     model=self.model,
+        # #     # peft_config=peft_config,
+        # #     dataset_text_field="training_example",
+        # #     max_seq_length=max_seq_length,
+        # #     tokenizer=tokenizer,
+        # #     args=training_arguments,
+        # #     packing=packing,
+        # # )
+
+        # else:
+        #     self.model = AutoModelForCausalLM.from_pretrained(model_path)
+        if str(self.model.device) == "cpu":
+            self.model.to(self.device)
+
+        # self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Meta-Llama-3-8B-Instruct"
+        )
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "left"
+        self.max_length = max_length
+        # self.llama3_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+        self.messages = [
+            {
+                "role": "system",
+                "content": "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request. Only write the response, nothing else.",
+            },
+            {
+                "role": "user",
+                "content": "Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:",
+            },
+        ]
+        # self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
+
+    def fit_template(self, q1, context):
+        instruction_templates = {
+            "p1": "Ask another question that would help you answer the following question:",
+            "p2": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
+            "p3": "What question can you ask to help you answer the final question?",
+            "p4": "Ask another question that would help you answer the following question:",
+            "p5": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
+            "p6": "What question can you ask to help you answer the final question?",
+        }
+        input_templates = {
+            "p1": "Question:\n{q1}\nContext:\n{context}",
+            "p2": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
+            "p3": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
+            "p4": "Question:\n{q1}\nContext:\n{context}",
+            "p5": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
+            "p6": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
+        }
+
+        if self.prompt_id in ["p1", "p2", "p3", "p4", "p5", "p6"]:
+            instruction = instruction_templates[self.prompt_id]
+            inpt = input_templates[self.prompt_id].format(context=context, q1=q1)
+            # prompt = self.llama3_template.format(instruction=instruction, input=inpt)
+            if self.prompt_id in ["p4", "p5", "p6"]:
+                inputs = []
+                for i, ex in enumerate(EXAMPLES):
+                    inpt = input_templates[self.prompt_id].format(
+                        context=ex["context"], q1=ex["q1"]
+                    )
+                    # inputs.append(self.alpaca_template.format(instruction=instruction, input=input) + "\n" + ex['q2'])
+                    inputs.append(inpt + "\nResponse:\n" + ex["q2"])
+                inputs.append(
+                    input_templates[self.prompt_id].format(context=context, q1=q1)
+                )
+                in_context_examples = "\n\n".join(inputs)
+                # prompt = self.llama3_template.format(
+                #     instruction=instruction, input=inputs
+                # )
+                inpt += in_context_examples
+            prompt = self.messages
+            prompt[1]["content"] = prompt[1]["content"].format(
+                instruction=instruction, input=inpt
+            )
+
+        else:
+            raise Exception("No such prompt")
+        prompt = self.tokenizer.decode(
+            self.tokenizer.apply_chat_template(prompt)
+        )  # dumb but i don't want to rewrite stuff
+        return prompt
+
+    def forward(self, example, question_col, context_col):
+        q1 = example[question_col]
+        context = example[context_col]
+        prompt = self.fit_template(q1, context)
+
+        inputs = self.tokenizer(
+            prompt, return_tensors="pt", truncation=True, max_length=self.max_length
+        )
+        inputs = {
+            k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
+        }
+        with torch.no_grad():
+            eos_token_id = self.tokenizer.eos_token_id
+            outputs = self.model.generate(
+                **inputs, max_length=self.max_length, eos_token_id=eos_token_id
+            )
+            q2 = self.tokenizer.decode(
+                outputs[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False
+            )
+
+        return q2
+
+    def process(self, ds, q1_col):
+        """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
+        # ds = ds.add_column(name=f"q2", column=[""] * len(ds))
+        num_batches = math.ceil(len(ds) / self.eval_batch_size)
+        q2s = []
+
+        for i in tqdm(range(num_batches)):
+            start = i * self.eval_batch_size
+            end = min((i + 1) * self.eval_batch_size, len(ds))
+            batch = ds.select(list(range(start, end)))
+            prompts = []
+            for j in range(len(batch)):
+                q1 = batch[j][q1_col]
+                context = batch[j]["fc_masked"]
+                prompts.append(self.fit_template(q1, context))
+            inputs = self.tokenizer(
+                prompts,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+                padding=True,
+            )
+            inputs = {
+                k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
+            }
+            with torch.no_grad():
+                eos_token_id = self.tokenizer.eos_token_id
+                outputs = self.model.generate(
+                    **inputs, max_length=self.max_length, eos_token_id=eos_token_id, pad_token_id=eos_token_id
+                )
+                clean_outputs = []
+                decoded = self.tokenizer.batch_decode(
+                    outputs[:, len(inputs["input_ids"][0]) :],
+                    skip_special_tokens=True,
+                )
+                for output in decoded:
+                    clean_output = output.split("assistant\n\n")[1].strip()
+                    q2s.append(clean_output)
+        # for i in range(len(ds)):
+        #     ds[i]["q2"] = q2s[i]
+
+        ds = ds.add_column(name=f"q2", column=q2s)
+        return ds

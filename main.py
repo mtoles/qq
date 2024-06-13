@@ -207,6 +207,12 @@ def main(
             precomputed_jeopardy_path=alexpaca_precomputed_data_path,
             model_name="alexpaca_precomputed",
         )
+    elif m2_arch == "llama3":
+        m2 = Llama3_Secondary_Model(
+            "llama3",
+            prompt_id=template_id,
+            eval_batch_size=m2_eval_batch_size,
+        )
     else:
         raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
 
