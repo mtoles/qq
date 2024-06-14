@@ -244,7 +244,7 @@ def train():
         training_args.per_device_train_batch_size or 1
     )
     print(f"training on {training_args.examples} examples")
-    # training_args.report_to = "wandb"
+    training_args.report_to = "wandb"
     wandb.init(project="qq", name=f"{run_name}-{now}", config=training_args)
 
 
@@ -302,7 +302,6 @@ def train():
         alexpaca_path=output_path,
         template_id=None,
         m2_eval_batch_size=1,
-        # max_adversarial_examples,
         downsample_pt_size=None,
         ds_shift=None,
         oai_cache_path=None,

@@ -23,8 +23,10 @@ import os
 from preprocess import get_preprocessed_ds
 import re
 import json
+from nltk.tokenize import sent_tokenize
 
 np.random.seed(42)
+
 
 def fit_template(q1, context):
     prompt_id = "p1"
@@ -38,6 +40,7 @@ def fit_template(q1, context):
     # prompt = self.alpaca_template.format(instruction=instruction, input=inpt)
 
     return instruction
+
 
 class Alpaca_Secondary_Model:
     def __init__(
@@ -70,13 +73,16 @@ class Alpaca_Secondary_Model:
         self.device = self.device
 
     def forward(self, batch):
-        masked_sentence = batch["masked_sentence"]
-        q1 = batch["q1"]
-        inpt = f"Task: {q1}\n\nContext: {masked_sentence}"
-        prompt = self.alpaca_template.format(
-            instruction="Ask a question that can help you with the task and can be answered by the context. Begin with who, what, where, or when.",
-            input=inpt,
-        )
+        masked_sentence = batch["masked_sentence"][0]
+        q1 = batch["q1"][0]
+        # inpt = f"Task:\n\n{q1}\n\nContext:\n\n{masked_sentence}"
+        # prompt = self.alpaca_template.format(
+        #     instruction="Ask a question can be answered by the context and will help fill in missing information when answering the task. Begin with who, what, where, or when.",
+        #     input=inpt,
+        # )
+        instruction = f"Context:\n\n{masked_sentence}\n\nAsk a question can be answered by the context. Begin with who, what, where, or when."
+        inpt = ""
+        prompt = self.alpaca_template.format(instruction=instruction, input=inpt)
 
         inputs = self.tokenizer(
             prompt,
@@ -113,6 +119,9 @@ class Alpaca_Secondary_Model:
             if re_finds:
                 jeopardy_q = re_finds.group(0)
                 return jeopardy_q
+            # sentences = [s for s in sent_tokenize(jeopardy_q) if s[-1] == "?"]
+            # if sentences:
+            #     return sentences[-1]
             tries += 1
             attempts.append(jeopardy_q)
         print("failed to generate valid question for masked sentence:")
@@ -243,18 +252,20 @@ def main(
             ds_shift=ds_shift,
             oai_cache_path=None,
             gt_subset=False,
-            results_filename="RESULTS_FILENAME", 
+            results_filename="RESULTS_FILENAME",
         )
 
         # df = df[analyze_df["a2_is_correct"]]
-        df = df[analyze_df["m1_masked_a2_f1"]-analyze_df["m1_masked_None_f1"] > 0]
+        df = df[analyze_df["m1_masked_a2_f1"] - analyze_df["m1_masked_None_f1"] >= 0.5]
     filtered_save_path = os.path.join(
         save_dir,
         f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}{'_active_filtered' if active_filter else ''}_tatsu.jsonl",
     )
     # df.to_json(filtered_save_path, orient="records", lines=True)
 
-    df["instruction"] = df.apply(lambda x: fit_template(x["q1"], x["fc_masked"]), axis=1)
+    df["instruction"] = df.apply(
+        lambda x: fit_template(x["q1"], x["fc_masked"]), axis=1
+    )
     df["output"] = df["jeopardy_q"]
     df["input"] = ""
 
