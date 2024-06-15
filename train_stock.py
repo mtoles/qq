@@ -244,7 +244,7 @@ def train():
         training_args.per_device_train_batch_size or 1
     )
     print(f"training on {training_args.examples} examples")
-    training_args.report_to = "wandb"
+    training_args.report_to = ["wandb"]
     wandb.init(project="qq", name=f"{run_name}-{now}", config=training_args)
 
 
