@@ -121,6 +121,7 @@ class Secondary_Model:
                     "\n\nContext:\n{context}\nQuestion 1:\n{q1}\nQuestion 2:\n",
                 ]
             ),
+            "p2_jeopardy": "Some information is missing from this context. Ask a simpler question that would help you answer it.\n\nContext:\n\n{context}\n\nMain Question:\n\n{q1}\n\nSimpler question:\n\nMake sure your question could be answered by this passage:\n\n{masked_sentence}",
         }
         self.template = self.prompt_dict[self.prompt_id]
 
@@ -418,6 +419,102 @@ class OpenAI_Secondary_Model(Secondary_Model):
         context = example[context_col]
         # prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
         prompt = self.template.format(context=context, q1=q1)
+
+        # if self.oai_model_id is not None:
+        #     idx = f"{self.oai_model_id} {prompt}"
+        # else:
+        #     # Check if the response is cached
+        #     # If not, call the API to get the model id
+        #     output = call_oai_api(prompt)
+        # if idx in self.cache_df.index and self.oai_model_id is not None:
+        #     output = self.cache_df.loc[idx, "response"]
+        # else:
+        #     output = call_oai_api(prompt)
+        output = call_oai_api(prompt)
+        # assert type(output) == str, f"OpenAI API call failed: {output}"
+        return output
+
+    def process(self, ds, q1_col, masking_scheme):
+        """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
+
+        def _add_q2(example):
+            example[f"q2_{masking_scheme}"] = self.forward(
+                example, q1_col, f"fc_{masking_scheme}"
+            )
+            return example
+
+        ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
+        # for i in tqdm(range(len(ds))):
+        #     _add_q2(ds[i])  # debugging
+        ds = ds.map(
+            lambda x: _add_q2(x),
+            load_from_cache_file=False,
+        )
+        return ds
+
+class OpenAI_Jeopardy_Secondary_Model(Secondary_Model):
+    def __init__(self, cache_path, model_name):
+        super(OpenAI_Jeopardy_Secondary_Model, self).__init__("p2_jeopardy")
+        # self.model_name = "chatGPT"
+        self.model_name = model_name
+        # self.model = "gpt-3.5-turbo"
+        self.cache_path = cache_path
+        self.oai_model_id = (
+            None  # the current openai model id. set on the first api call
+        )
+        if self.cache_path is None:
+            self.cache_df = pd.DataFrame(columns=["response"])
+        else:
+            if not os.path.exists(self.cache_path):
+                self.cache_df = pd.DataFrame(columns=["response"])
+                self.cache_df.to_csv(self.cache_path)
+                # Create the cache file
+            else:
+                self.cache_df = pd.read_csv(self.cache_path, index_col=0)
+
+    def prepare_data(self, masking_scheme):
+        pass
+
+    def forward(self, example, question_col, context_col, masked_sentence_col):
+        idx = None
+
+        def call_oai_api(prompt):
+            while True:
+                try:
+                    response = openai.ChatCompletion.create(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "user", "content": prompt},
+                        ],
+                    )
+                    break
+                except Exception as e:
+                    print(e)
+                    print("Retrying...")
+                    # pause a second
+                    time.sleep(1)
+                    continue
+
+            q2 = response["choices"][0]["message"]["content"].strip()
+            self.oai_model_id = response.model
+            idx = f"{self.oai_model_id} {prompt}"
+            # Cache the response in ram
+            if idx in self.cache_df.index:
+                self.cache_df.loc[idx, "response"] = q2
+                self.cache_df.to_csv(self.cache_path)
+            else:
+                new_line = pd.DataFrame(columns=["response"], index=[idx], data=[q2])
+                self.cache_df = pd.concat([self.cache_df, new_line])
+                new_line.to_csv(
+                    self.cache_path, mode="a", header=False, escapechar="🦆"
+                )
+            return q2
+
+        q1 = example[question_col]
+        context = example[context_col]
+        masked_sentence = example[masked_sentence_col]
+        # prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
+        prompt = self.template.format(context=context, q1=q1, masked_sentence=masked_sentence)
 
         # if self.oai_model_id is not None:
         #     idx = f"{self.oai_model_id} {prompt}"

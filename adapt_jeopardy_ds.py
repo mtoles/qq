@@ -22,7 +22,7 @@ def fit_template(q1, context):
     return instruction
 
 
-input_ds_path = "data/jeopardy/jeopardy_4000_train_active_filtered.jsonl"
+input_ds_path = "data/jeopardy/jeopardy_gpt_1000_train.jsonl"
 output_ds_path = input_ds_path.split(".")[-2] + "_tatsu.jsonl"
 # output_ds_path = "data/jeopardy/jeopardy_4000_train_active_filtered_tatsu.jsonl"
 

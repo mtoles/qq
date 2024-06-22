@@ -8,6 +8,7 @@ import torch
 from datasets import load_from_disk, Dataset
 from secondary_model import (
     OpenAI_Secondary_Model,
+    OpenAI_Jeopardy_Secondary_Model,
 )
 from utils import set_random_seed
 from datetime import datetime
@@ -91,7 +92,11 @@ def main(
     masked_sentences = ds["masked_sentence"]
     # downsample and shift
     print("loading language model...")
-    model = OpenAI_Secondary_Model(
+    # model = OpenAI_Secondary_Model(
+    #     None,
+    #     "gpt-4-turbo",
+    # )
+    model = OpenAI_Jeopardy_Secondary_Model(
         None,
         "gpt-4-turbo",
     )
@@ -100,7 +105,7 @@ def main(
     for i in tqdm(range(0, len(ds))):
         batch = ds[i]
         masked_sentences = batch["masked_sentence"]
-        batch_output = model.forward(batch, "q1", "fc_masked")
+        batch_output = model.forward(batch, "q1", "fc_masked", "masked_sentence")
         jeopardy_qs.append(batch_output)
 
     ds = ds.add_column("jeopardy_q", jeopardy_qs)
