@@ -190,7 +190,7 @@ def main(
         m2 = Alpaca_Secondary_Model(
             "alpaca",
             ".model_cache/alpaca/tuned",
-            # prompt_id=template_id,
+            prompt_id=template_id,
             eval_batch_size=m2_eval_batch_size,
         )
     elif m2_arch == "alexpaca":

@@ -65,7 +65,10 @@ class OpenAI_PM(Primary_Model):
         # call the parent constructor
         super().__init__()
         # self.model_name = "chatGPT"
-        self.model = model
+        if model == "gpt-3.5-turbo":
+            self.model = "gpt-3.5-turbo-1106"
+        elif model == "gpt-4":
+            self.model = "gpt-4-0314"
         self.batch_size = 1
 
     def evaluate(

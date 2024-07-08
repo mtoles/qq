@@ -17,47 +17,13 @@ from tqdm import tqdm
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 from trl import SFTTrainer
-
+from copy import deepcopy
 
 # Set up the API once for all models
 config = configparser.ConfigParser()
 config.read("config.ini")
 openai.api_key = config.get("API_KEYS", "openai_api_key")
 
-in_context_examples = """Context:
-House of Anubis: House of Anubis is a mystery television series developed for Nickelodeon based on the Dutch-Belgian television series "Het Huis Anubis".
-Question 1:
-The Dutch-Belgian television series that "House of Anubis" was based on first aired in what year?
-Question 2:
-In what year did "Het Huis Anubis" air?
-
-Context:
-Oberoi family: The Oberoi family is an Indian family that is famous for its involvement in hotels, namely through The Oberoi Group.'
-Question 1:
-The Oberoi family is part of a hotel company that has a head office in what city?
-Question 2:
-What city holds the head office of The Oberoi Group?
-
-Context:
-Zilpo Road: The nine mile byway starts south of Morehead, Kentucky and can be accessed by U.S. Highway 60. Arkansas Highway 113: The route runs 29.48 mi from Arkansas Highway 10 to Morrilton.
-Question 1:
-What U.S Highway gives access to Zilpo Road, and is also known as Midland Trail?
-Question 2:
-what U.S. Highway is also known as Midland Trail?
-
-Context:
-My Finale: "My Finale" is the hour-long season finale for season eight of the American sitcom "Scrubs". Human Error (House): "Human Error" is the twenty-fourth episode and season finale of the third season of "House" and the seventieth episode overall.
-Question 1:
-Human Error" is the season finale of the third season of a tv show that aired on what network?
-Question 2:
-What network aired the season finale of the third season of "House"?
-
-Context:
-Annette Bening: Annette Carol Bening (born May 29, 1958) is an American actress. She is a four-time Academy Award nominee; for "The Grifters" (1990), "American Beauty" (1999), "Being Julia" (2004) and "The Kids Are All Right" (2010). In 2006, she received a star on the Hollywood Walk of Fame. The Great Outdoors (film): The Great Outdoors is a 1988 American comedy film directed by Howard Deutch, and written and produced by John Hughes. John Lithgow: John Arthur Lithgow ( ; born October 19 , 1945) is an American actor, musician, singer, comedian, voice actor, and author.
-Question 1:
-The 1988 American comedy film, The Great Outdoors, starred a four-time Academy Award nominee, who received a star on the Hollywood Walk of Fame in what year?
-Question 2:
-Who starred in the 1988 American comedy film, The Great Outdoors?"""
 
 EXAMPLES = [
     {
@@ -86,6 +52,12 @@ EXAMPLES = [
         "q2": "Who starred in the 1988 American comedy film, The Great Outdoors?",
     },
 ]
+
+in_context_examples = ""
+for i, ex in enumerate(EXAMPLES):
+    in_context_examples += (
+        f"Context:\n{ex['context']}\nQuestion 1:\n{ex['q1']}\nQuestion 2:\n{ex['q2']}\n"
+    )
 
 
 # Abstract class for secondary models
@@ -162,7 +134,7 @@ class Alpaca_Secondary_Model(Secondary_Model):
         self,
         model_name,
         model_path,
-        max_length=512,
+        max_length=2048,
         prompt_id="p3",
         device="cuda",
         precision="bf16",
@@ -361,7 +333,11 @@ class OpenAI_Secondary_Model(Secondary_Model):
     def __init__(self, cache_path, model_name, prompt_id="p1"):
         super(OpenAI_Secondary_Model, self).__init__(prompt_id)
         # self.model_name = "chatGPT"
-        self.model_name = model_name
+        # self.model_name = model_name
+        if model_name == "gpt-3.5-turbo":
+            self.model_name = "gpt-3.5-turbo-1106"
+        elif model_name == "gpt-4":
+            self.model_name = "gpt-4-0314"
         # self.model = "gpt-3.5-turbo"
         self.cache_path = cache_path
         self.oai_model_id = (
@@ -434,16 +410,14 @@ class OpenAI_Secondary_Model(Secondary_Model):
         # assert type(output) == str, f"OpenAI API call failed: {output}"
         return output
 
-    def process(self, ds, q1_col, masking_scheme):
+    def process(self, ds, q1_col):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
 
         def _add_q2(example):
-            example[f"q2_{masking_scheme}"] = self.forward(
-                example, q1_col, f"fc_{masking_scheme}"
-            )
+            example[f"q2"] = self.forward(example, q1_col, f"fc_masked")
             return example
 
-        ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
+        ds = ds.add_column(name=f"q2", column=[""] * len(ds))
         # for i in tqdm(range(len(ds))):
         #     _add_q2(ds[i])  # debugging
         ds = ds.map(
@@ -451,6 +425,7 @@ class OpenAI_Secondary_Model(Secondary_Model):
             load_from_cache_file=False,
         )
         return ds
+
 
 class OpenAI_Jeopardy_Secondary_Model(Secondary_Model):
     def __init__(self, cache_path, model_name):
@@ -514,7 +489,9 @@ class OpenAI_Jeopardy_Secondary_Model(Secondary_Model):
         context = example[context_col]
         masked_sentence = example[masked_sentence_col]
         # prompt = f"Ask another question that would help you answer the following question:\n\n{context}\n\n{q1}"
-        prompt = self.template.format(context=context, q1=q1, masked_sentence=masked_sentence)
+        prompt = self.template.format(
+            context=context, q1=q1, masked_sentence=masked_sentence
+        )
 
         # if self.oai_model_id is not None:
         #     idx = f"{self.oai_model_id} {prompt}"
@@ -530,16 +507,14 @@ class OpenAI_Jeopardy_Secondary_Model(Secondary_Model):
         # assert type(output) == str, f"OpenAI API call failed: {output}"
         return output
 
-    def process(self, ds, q1_col, masking_scheme):
+    def process(self, ds, q1_col):
         """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
 
         def _add_q2(example):
-            example[f"q2_{masking_scheme}"] = self.forward(
-                example, q1_col, f"fc_{masking_scheme}"
-            )
+            example[f"q2"] = self.forward(example, q1_col, f"fc_masked")
             return example
 
-        ds = ds.add_column(name=f"q2_{masking_scheme}", column=[""] * len(ds))
+        ds = ds.add_column(name=f"q2", column=[""] * len(ds))
         # for i in tqdm(range(len(ds))):
         #     _add_q2(ds[i])  # debugging
         ds = ds.map(
@@ -577,7 +552,7 @@ class Llama3_Secondary_Model(Secondary_Model):
         model_path,
         prompt_id,
         model_name="llama3",
-        max_length=1024,
+        max_length=2048,
         device="cuda",
         precision="bf16",
         # quantization_config=None,
@@ -678,7 +653,7 @@ class Llama3_Secondary_Model(Secondary_Model):
                 #     instruction=instruction, input=inputs
                 # )
                 inpt += in_context_examples
-            prompt = self.messages
+            prompt = deepcopy(self.messages)
             prompt[1]["content"] = prompt[1]["content"].format(
                 instruction=instruction, input=inpt
             )
@@ -740,7 +715,10 @@ class Llama3_Secondary_Model(Secondary_Model):
             with torch.no_grad():
                 eos_token_id = self.tokenizer.eos_token_id
                 outputs = self.model.generate(
-                    **inputs, max_length=self.max_length, eos_token_id=eos_token_id, pad_token_id=eos_token_id
+                    **inputs,
+                    max_length=self.max_length,
+                    eos_token_id=eos_token_id,
+                    pad_token_id=eos_token_id,
                 )
                 clean_outputs = []
                 decoded = self.tokenizer.batch_decode(

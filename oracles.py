@@ -148,7 +148,10 @@ class OpenAI_Oracle(Oracle):
     def __init__(self, model):
         # model_size and batch_size are unused but are here for compatibility with T5_Oracle
         assert model in ["gpt-3.5-turbo", "gpt-4"]
-        self.model = model
+        if model == "gpt-3.5-turbo":
+            self.model = "gpt-3.5-turbo-1106"
+        elif model == "gpt-4": 
+            self.model = "gpt-4-0314"
 
     def forward(self, example):
         q2 = example[f"q2"][0]
