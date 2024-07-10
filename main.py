@@ -33,7 +33,11 @@ np.random.seed(42)
     help="secondary model architecture {t5, gpt-3.5-turbo, gpt-4, alpaca, alexpaca, alexpaca_precomputed, gt}",
 )
 @click.option("--alexpaca_path", help="path to trained alexpaca model", default=None)
-@click.option("--alexpaca_precomputed_data_path", help="path to alexpaca lookup data", default="data/jeopardy/jeopardy_full_validation.jsonl")
+@click.option(
+    "--alexpaca_precomputed_data_path",
+    help="path to alexpaca lookup data",
+    default="data/jeopardy/jeopardy_full_validation.jsonl",
+)
 @click.option(
     "--template_id",
     help="Which prompt template to use for the secondary model. {p1, p2, p3, p4, p5, p6}",
@@ -98,8 +102,8 @@ def main(
     save_dir,
 ):
     assert m2_eval_batch_size == 1, "only batch size 1 is supported for m2"
-    assert (alexpaca_path and m2_arch == "alexpaca") or (
-        not alexpaca_path and not m2_arch == "alexpaca"
+    assert (alexpaca_path and m2_arch in ["alexpaca", "llama3_ft"]) or (
+        not alexpaca_path and not m2_arch in ["alexpaca", "llama3_ft"]
     ), "alexpaca path required iff m2_arch is alexpaca"
     set_random_seed(0)
     # if max_adversarial_examples is None:
@@ -168,8 +172,6 @@ def main(
         # and it wouldn't be ideal anyway cuz of suffix inconsistency
         ds = ds.filter(lambda x: x["masked_sentence"] in gt_masked_sentences)
         # select a random set of questions with one distractor added that match the annotated examples' masked sentences
-        print(len(set(ds["masked_sentence"])))
-        print(len(set(ds["id"])))
         # get only the first example of each masked sentence
         used = set()
         relevant_examples = []
@@ -178,7 +180,6 @@ def main(
                 relevant_examples.append(x)
                 used.add(x["masked_sentence"])
         ds = Dataset.from_pandas(pd.DataFrame(data=relevant_examples))
-        print
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
@@ -212,6 +213,10 @@ def main(
             "llama3",
             prompt_id=template_id,
             eval_batch_size=m2_eval_batch_size,
+        )
+    elif m2_arch == "llama3_ft":
+        m2 = Llama3_FT_Secondary_Model(
+            alexpaca_path,
         )
     else:
         raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
@@ -287,6 +292,7 @@ def main(
     print(f"dataset saved to {save_path}")
 
     return df
+
 
 if __name__ == "__main__":
     click_main()

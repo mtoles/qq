@@ -19,9 +19,25 @@ from typing import Dict, Optional, Sequence
 
 import torch
 import transformers
-import utils
+import alpaca.utils as utils
 from torch.utils.data import Dataset
 from transformers import Trainer
+from datetime import datetime
+import wandb
+import os
+
+######## W&B Setup ########
+os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
+os.environ["WANDB_LOG_MODEL"] = "false"  # false/end/checkpoint
+os.environ["WANDB_DIR"] = os.path.join(os.getcwd(), "wandb")  # save W&B logs locally
+os.environ["WANDB_CACHE_DIR"] = os.path.join(
+    os.getcwd(), "wandb/cache"
+)  # save W&B cache locally
+os.environ["WANDB_CONFIG_DIR"] = os.path.join(
+    os.getcwd(), "wandb/config"
+)  # save W&B config locally
+
+from main import main as analyze
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -29,15 +45,20 @@ DEFAULT_EOS_TOKEN = "</s>"
 DEFAULT_BOS_TOKEN = "<s>"
 DEFAULT_UNK_TOKEN = "<unk>"
 PROMPT_DICT = {
-    "prompt_input": (
-        "Below is an instruction that describes a task, paired with an input that provides further context. "
-        "Write a response that appropriately completes the request.\n\n"
-        "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
-    ),
-    "prompt_no_input": (
-        "Below is an instruction that describes a task. "
-        "Write a response that appropriately completes the request.\n\n"
-        "### Instruction:\n{instruction}\n\n### Response:"
+    # "prompt_input": (
+    #     "Below is an instruction that describes a task, paired with an input that provides further context. "
+    #     "Write a response that appropriately completes the request.\n\n"
+    #     "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+    # ),
+    # "prompt_no_input": (
+    #     "Below is an instruction that describes a task. "
+    #     "Write a response that appropriately completes the request.\n\n"
+    #     "### Instruction:\n{instruction}\n\n### Response:"
+    # ),
+    "prompt_no_input": (  # llama3
+        "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
+        "{instruction}\n"
+        "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     ),
 }
 
@@ -49,7 +70,9 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default=None, metadata={"help": "Path to the training data."})
+    data_path: str = field(
+        default=None, metadata={"help": "Path to the training data."}
+    )
 
 
 @dataclass
@@ -58,7 +81,12 @@ class TrainingArguments(transformers.TrainingArguments):
     optim: str = field(default="adamw_torch")
     model_max_length: int = field(
         default=512,
-        metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
+        metadata={
+            "help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."
+        },
+    )
+    examples: int = field(
+        default=1000, metadata={"help": "Number of examples to train on."}
     )
 
 
@@ -78,14 +106,20 @@ def smart_tokenizer_and_embedding_resize(
         input_embeddings = model.get_input_embeddings().weight.data
         output_embeddings = model.get_output_embeddings().weight.data
 
-        input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
-        output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+        input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(
+            dim=0, keepdim=True
+        )
+        output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(
+            dim=0, keepdim=True
+        )
 
         input_embeddings[-num_new_tokens:] = input_embeddings_avg
         output_embeddings[-num_new_tokens:] = output_embeddings_avg
 
 
-def _tokenize_fn(strings: Sequence[str], tokenizer: transformers.PreTrainedTokenizer) -> Dict:
+def _tokenize_fn(
+    strings: Sequence[str], tokenizer: transformers.PreTrainedTokenizer
+) -> Dict:
     """Tokenize a list of strings."""
     tokenized_list = [
         tokenizer(
@@ -99,7 +133,8 @@ def _tokenize_fn(strings: Sequence[str], tokenizer: transformers.PreTrainedToken
     ]
     input_ids = labels = [tokenized.input_ids[0] for tokenized in tokenized_list]
     input_ids_lens = labels_lens = [
-        tokenized.input_ids.ne(tokenizer.pad_token_id).sum().item() for tokenized in tokenized_list
+        tokenized.input_ids.ne(tokenizer.pad_token_id).sum().item()
+        for tokenized in tokenized_list
     ]
     return dict(
         input_ids=input_ids,
@@ -116,7 +151,9 @@ def preprocess(
 ) -> Dict:
     """Preprocess the data by tokenizing."""
     examples = [s + t for s, t in zip(sources, targets)]
-    examples_tokenized, sources_tokenized = [_tokenize_fn(strings, tokenizer) for strings in (examples, sources)]
+    examples_tokenized, sources_tokenized = [
+        _tokenize_fn(strings, tokenizer) for strings in (examples, sources)
+    ]
     input_ids = examples_tokenized["input_ids"]
     labels = copy.deepcopy(input_ids)
     for label, source_len in zip(labels, sources_tokenized["input_ids_lens"]):
@@ -133,12 +170,25 @@ class SupervisedDataset(Dataset):
         list_data_dict = utils.jload(data_path)
 
         logging.warning("Formatting inputs...")
-        prompt_input, prompt_no_input = PROMPT_DICT["prompt_input"], PROMPT_DICT["prompt_no_input"]
+        # prompt_input, prompt_no_input = (
+        #     PROMPT_DICT["prompt_input"],
+        #     PROMPT_DICT["prompt_no_input"],
+        # )
+        prompt_no_input = PROMPT_DICT["prompt_no_input"]
         sources = [
-            prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(example)
+            # (
+            #     prompt_input.format_map(example)
+            #     if example.get("input", "") != ""
+            #     else prompt_no_input.format_map(example)
+            # )
+            prompt_no_input.format_map(example)
             for example in list_data_dict
         ]
-        targets = [f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict]
+        print("sources: ")
+        print(sources[0])
+        targets = [
+            f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict
+        ]
 
         logging.warning("Tokenizing inputs... This may take some time...")
         data_dict = preprocess(sources, targets, tokenizer)
@@ -160,11 +210,15 @@ class DataCollatorForSupervisedDataset(object):
     tokenizer: transformers.PreTrainedTokenizer
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
+        input_ids, labels = tuple(
+            [instance[key] for instance in instances] for key in ("input_ids", "labels")
+        )
         input_ids = torch.nn.utils.rnn.pad_sequence(
             input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
-        labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX)
+        labels = torch.nn.utils.rnn.pad_sequence(
+            labels, batch_first=True, padding_value=IGNORE_INDEX
+        )
         return dict(
             input_ids=input_ids,
             labels=labels,
@@ -172,16 +226,35 @@ class DataCollatorForSupervisedDataset(object):
         )
 
 
-def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args) -> Dict:
+def make_supervised_data_module(
+    tokenizer: transformers.PreTrainedTokenizer, data_args
+) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path)
+    train_dataset = SupervisedDataset(
+        tokenizer=tokenizer, data_path=data_args.data_path
+    )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
-    return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
+    return dict(
+        train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator
+    )
 
 
 def train():
-    parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
+    now = datetime.now().strftime("%m_%d-%H:%M:%S")
+    run_name = "alpaca-jeopardy"
+
+    parser = transformers.HfArgumentParser(
+        (ModelArguments, DataArguments, TrainingArguments)
+    )
+
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    training_args.max_steps = training_args.examples // (
+        training_args.per_device_train_batch_size or 1
+    )
+    print(f"training on {training_args.examples} examples")
+    training_args.report_to = ["wandb"]
+    wandb.init(project="qq", name=f"{run_name}-{now}", config=training_args)
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
@@ -212,10 +285,37 @@ def train():
     )
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
-    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    trainer = Trainer(
+        model=model, tokenizer=tokenizer, args=training_args, **data_module
+    )
     trainer.train()
     trainer.save_state()
-    trainer.save_model(output_dir=training_args.output_dir)
+    output_path = f"{training_args.output_dir}_{training_args.examples}_{now}"
+    trainer.save_model(output_dir=output_path)
+    print(f"saving model to {output_path}")
+
+    print("evaluating model")
+
+    analyze_df = analyze(
+        split="validation",
+        m1_arch="t5-base",
+        m2_arch="llama3_ft",
+        alexpaca_precomputed_data_path=None,
+        oracle_arch="t5",
+        oracle_size="base",
+        save_dir="results/llama3_ft/checkpointed",
+        oracle_eval_batch_size=64,
+        m1_eval_batch_size=64,
+        # defaults
+        alexpaca_path=output_path,
+        template_id=None,
+        m2_eval_batch_size=1,
+        downsample_pt_size=None,
+        ds_shift=None,
+        oai_cache_path=None,
+        gt_subset=False,
+        results_filename="RESULTS_FILENAME",
+    )
 
 
 if __name__ == "__main__":

@@ -47,9 +47,10 @@ export CUDA_VISIBLE_DEVICES=7
 
 python3 main.py --m1_arch t5-base --m2_arch repeater --oracle_arch t5 --oracle_size base --save_dir results/1_paper/main/ 
 python3 main.py --m1_arch t5-base --m2_arch alpaca --template_id p3 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/main/
+
 python3 main.py --m1_arch t5-base --m2_arch gpt-3.5-turbo --template_id p3 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/main/ 
 python3 main.py --m1_arch t5-base --m2_arch gpt-4 --template_id p2 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/main/ 
-python3 main.py --m1_arch t5-base --m2_arch llama3 --template_id p2 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/main/ 
+python3 main.py --m1_arch t5-base --m2_arch llama3 --template_id p3 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/main/ 
 
 
 # ### Generate main figure ground truth subset results
@@ -58,7 +59,7 @@ python3 main.py --m1_arch t5-base --m2_arch repeater --oracle_arch t5 --oracle_s
 python3 main.py --m1_arch t5-base --m2_arch alpaca --template_id p3 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/gt/ --gt_subset
 python3 main.py --m1_arch t5-base --m2_arch gpt-3.5-turbo --template_id p3 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/gt/ --gt_subset 
 python3 main.py --m1_arch t5-base --m2_arch gpt-4 --template_id p2 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/gt/ --gt_subset 
-python3 main.py --m1_arch t5-base --m2_arch llama3 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/gt/ --gt_subset 
+python3 main.py --m1_arch t5-base --m2_arch llama3 --template_id p3 --oracle_arch t5 --oracle_size base --save_dir results/1_paper/gt/ --gt_subset 
 python3 main.py --m1_arch t5-base --m2_arch gt --oracle_arch t5 --oracle_size base --save_dir results/1_paper/gt/ --gt_subset 
 
 
@@ -71,6 +72,8 @@ python3 main.py --m1_arch t5-base --m2_arch gt --oracle_arch t5 --oracle_size xl
 python3 main.py --m1_arch t5-base --m2_arch gt --oracle_arch t5 --oracle_size xxl --save_dir results/1_paper/oracle/ 
 python3 main.py --m1_arch t5-base --m2_arch gt --oracle_arch gpt-3.5-turbo --template_id p3 --save_dir results/1_paper/oracle/ 
 python3 main.py --m1_arch t5-base --m2_arch gt --oracle_arch gpt-4 --template_id p2 --save_dir results/1_paper/oracle/ 
+python3 main.py --m1_arch t5-base --m2_arch gt --oracle_arch llama3 --template_id p3 --save_dir results/1_paper/oracle/ 
+
 
 
 # ### generate the m1 size ablation results

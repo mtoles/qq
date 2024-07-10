@@ -733,3 +733,127 @@ class Llama3_Secondary_Model(Secondary_Model):
 
         ds = ds.add_column(name=f"q2", column=q2s)
         return ds
+
+
+class Llama3_FT_Secondary_Model(Secondary_Model):
+    def __init__(
+        self,
+        model_path,
+        model_name="llama3",
+        max_length=2048,
+        device="cuda",
+        precision="bf16",
+        # quantization_config=None,
+        # tokenizer_path=None,
+        eval_batch_size=1,
+    ):
+        self.model_name = model_name
+        self.device = device
+        self.eval_batch_size = eval_batch_size
+
+        # if loading the alepaca model you need to manually pass in the original tokenizer
+        # because i forgot to save the tokenzier with the model
+        # if tokenizer_path is None:
+        #     self.tokenizer_path = model_path
+        # else:
+        #     self.tokenizer_path = tokenizer_path
+
+        # if precision == "bf16":
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path, torch_dtype=torch.bfloat16
+        )
+
+        # else:
+        #     self.model = AutoModelForCausalLM.from_pretrained(model_path)
+        if str(self.model.device) == "cpu":
+            self.model.to(self.device)
+
+        # self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "left"
+        self.max_length = max_length
+        # self.llama3_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+
+        # self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
+
+    def fit_template(self, q1, context):
+        prompt = (
+            "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
+            "Ask another question that would help you answer the following question:\n\nQuestion:\n{q1}\nContext:\n{context}\n"
+            "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+        ).format(context=context, q1=q1)
+        return prompt
+
+    def forward(self, example, question_col, context_col):
+        q1 = example[question_col]
+        context = example[context_col]
+        prompt = self.fit_template(q1, context)
+
+        inputs = self.tokenizer(
+            prompt, return_tensors="pt", truncation=True, max_length=self.max_length
+        )
+        inputs = {
+            k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
+        }
+        with torch.no_grad():
+            eos_token_id = self.tokenizer.eos_token_id
+            outputs = self.model.generate(
+                **inputs, max_length=self.max_length, eos_token_id=eos_token_id
+            )
+            q2 = self.tokenizer.decode(
+                outputs[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False
+            )
+
+        return q2
+
+    def process(self, ds, q1_col):
+        """Ask a secondary question about each primary question. Returns a new dataset with the secondary question added as a column called 'q2'."""
+        # ds = ds.add_column(name=f"q2", column=[""] * len(ds))
+        num_batches = math.ceil(len(ds) / self.eval_batch_size)
+        q2s = []
+
+        for i in tqdm(range(num_batches)):
+            start = i * self.eval_batch_size
+            end = min((i + 1) * self.eval_batch_size, len(ds))
+            batch = ds.select(list(range(start, end)))
+            prompts = []
+            for j in range(len(batch)):
+                q1 = batch[j][q1_col]
+                context = batch[j]["fc_masked"]
+                prompts.append(self.fit_template(q1, context))
+            inputs = self.tokenizer(
+                prompts,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+                padding=True,
+            )
+            inputs = {
+                k: v.to(self.device) for k, v in inputs.items() if k != "token_type_ids"
+            }
+            with torch.no_grad():
+                eos_token_id = self.tokenizer.eos_token_id
+                outputs = self.model.generate(
+                    **inputs,
+                    max_length=self.max_length,
+                    eos_token_id=eos_token_id,
+                    pad_token_id=eos_token_id,
+                )
+                clean_outputs = []
+                # print(self.tokenizer.batch_decode(outputs))
+                decoded = self.tokenizer.batch_decode(
+                    outputs[:, len(inputs["input_ids"][0]) :],
+                    skip_special_tokens=True,
+                )
+                # for output in decoded:
+                #     print(output)
+                #     clean_output = output.split(
+                #         "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+                #     )[1].strip()
+                q2s.extend(decoded)
+        # for i in range(len(ds)):
+        #     ds[i]["q2"] = q2s[i]
+
+        ds = ds.add_column(name=f"q2", column=q2s)
+        return ds
