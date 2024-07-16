@@ -102,9 +102,9 @@ def main(
     save_dir,
 ):
     assert m2_eval_batch_size == 1, "only batch size 1 is supported for m2"
-    assert (alexpaca_path and m2_arch in ["alexpaca", "llama3_ft"]) or (
-        not alexpaca_path and not m2_arch in ["alexpaca", "llama3_ft"]
-    ), "alexpaca path required iff m2_arch is alexpaca"
+    # assert (alexpaca_path and m2_arch in ["alexpaca", "llama3_ft", "llama3"]) or (
+    #     not alexpaca_path and not m2_arch in ["alexpaca", "llama3_ft"]
+    # ), "alexpaca path required iff m2_arch is alexpaca"
     set_random_seed(0)
     # if max_adversarial_examples is None:
     #     max_adversarial_examples = float("inf")
@@ -210,14 +210,12 @@ def main(
         )
     elif m2_arch == "llama3":
         m2 = Llama3_Secondary_Model(
-            "llama3",
+            model_path=alexpaca_path,
             prompt_id=template_id,
             eval_batch_size=m2_eval_batch_size,
         )
-    elif m2_arch == "llama3_ft":
-        m2 = Llama3_FT_Secondary_Model(
-            alexpaca_path,
-        )
+    # elif m2_arch == "llama3_ft":
+    #     m2 = Llama3_Secondary_Model("p3", mdoel_path=)
     else:
         raise NotImplementedError(f"m2_arch {m2_arch} not implemented")
 

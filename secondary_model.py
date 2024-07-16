@@ -546,11 +546,79 @@ class Gt_Secondary_Model(Secondary_Model):
             raise NotImplementedError(f"id {example['id']} not found in self.gt_df")
 
 
+# llama3_messages_template = [
+#     {
+#         "role": "system",
+#         "content": "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request. Only write the response, nothing else.",
+#     },
+#     {
+#         "role": "user",
+#         "content": "Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:",
+#     },
+# ]
+
+
+def get_input_and_instruction(q1, context, prompt_id):
+    instruction_templates = {
+        "p1": "Ask another question that would help you answer the following question:",
+        "p2": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
+        "p3": "What question can you ask to help you answer the final question?",
+        "p4": "Ask another question that would help you answer the following question:",
+        "p5": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
+        "p6": "What question can you ask to help you answer the final question?",
+    }
+    input_templates = {
+        "p1": "Question:\n{q1}\nContext:\n{context}",
+        "p2": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
+        "p3": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
+        "p4": "Question:\n{q1}\nContext:\n{context}",
+        "p5": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
+        "p6": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
+    }
+
+    assert prompt_id in ["p1", "p2", "p3", "p4", "p5", "p6"]
+    instruction = instruction_templates[prompt_id]
+    inpt = input_templates[prompt_id].format(context=context, q1=q1)
+    if prompt_id in ["p4", "p5", "p6"]:
+        inputs = []
+        for i, ex in enumerate(EXAMPLES):
+            inpt = input_templates[prompt_id].format(context=ex["context"], q1=ex["q1"])
+            # inputs.append(self.alpaca_template.format(instruction=instruction, input=input) + "\n" + ex['q2'])
+            inputs.append(inpt + "\nResponse:\n" + ex["q2"])
+        inputs.append(input_templates[prompt_id].format(context=context, q1=q1))
+        in_context_examples = "\n\n".join(inputs)
+        # prompt = self.llama3_template.format(
+        #     instruction=instruction, input=inputs
+        # )
+        inpt += in_context_examples
+    return inpt, instruction
+
+
+def format_instruction_llama3(q1, context, prompt_id):
+    inpt, instruction = get_input_and_instruction(q1, context, prompt_id)
+    # prompt = self.llama3_template.format(instruction=instruction, input=inpt)
+    # prompt = deepcopy(llama3_messages_template)
+    # prompt[1]["content"] = prompt[1]["content"].format(
+    #     instruction=instruction, input=inpt
+    # )
+    llama3_template = (
+        "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
+        "{instruction}\n"
+        "Context:\n"
+        "{context}\n"
+        "Question:\n"
+        "{q1}\n"
+        "You can ask:<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"
+    )
+    prompt = llama3_template.format(instruction=instruction, context=context, q1=q1)
+    return prompt
+
+
 class Llama3_Secondary_Model(Secondary_Model):
     def __init__(
         self,
-        model_path,
         prompt_id,
+        model_path=None,
         model_name="llama3",
         max_length=2048,
         device="cuda",
@@ -558,11 +626,15 @@ class Llama3_Secondary_Model(Secondary_Model):
         # quantization_config=None,
         # tokenizer_path=None,
         eval_batch_size=1,
+        temperature=0.0,
+        do_sample=False,
     ):
         super(Llama3_Secondary_Model, self).__init__(prompt_id)
         self.model_name = model_name
         self.device = device
         self.eval_batch_size = eval_batch_size
+        self.temperature = temperature
+        self.do_sample = do_sample
 
         # if loading the alepaca model you need to manually pass in the original tokenizer
         # because i forgot to save the tokenzier with the model
@@ -572,26 +644,14 @@ class Llama3_Secondary_Model(Secondary_Model):
         #     self.tokenizer_path = tokenizer_path
 
         # if precision == "bf16":
-        self.model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16
-        )
-
-        # self.model = PeftModel.from_pretrained(
-        #     normal_model, "models/alpaca-jeopardy-1-epoch"
-        # )
-
-        # # trainer = SFTTrainer(
-        # #     model=self.model,
-        # #     # peft_config=peft_config,
-        # #     dataset_text_field="training_example",
-        # #     max_seq_length=max_seq_length,
-        # #     tokenizer=tokenizer,
-        # #     args=training_arguments,
-        # #     packing=packing,
-        # # )
-
-        # else:
-        #     self.model = AutoModelForCausalLM.from_pretrained(model_path)
+        if model_path is None:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                "meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16
+            )
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path, torch_dtype=torch.bfloat16
+            )
         if str(self.model.device) == "cpu":
             self.model.to(self.device)
 
@@ -603,73 +663,17 @@ class Llama3_Secondary_Model(Secondary_Model):
         self.tokenizer.padding_side = "left"
         self.max_length = max_length
         # self.llama3_template = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
-        self.messages = [
-            {
-                "role": "system",
-                "content": "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request. Only write the response, nothing else.",
-            },
-            {
-                "role": "user",
-                "content": "Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:",
-            },
-        ]
+
         # self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
 
-    def fit_template(self, q1, context):
-        instruction_templates = {
-            "p1": "Ask another question that would help you answer the following question:",
-            "p2": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
-            "p3": "What question can you ask to help you answer the final question?",
-            "p4": "Ask another question that would help you answer the following question:",
-            "p5": "Some information is missing from this context. Ask a simpler question that would help you answer it.",
-            "p6": "What question can you ask to help you answer the final question?",
-        }
-        input_templates = {
-            "p1": "Question:\n{q1}\nContext:\n{context}",
-            "p2": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
-            "p3": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
-            "p4": "Question:\n{q1}\nContext:\n{context}",
-            "p5": "Context:\n{context}\nMain Question:\n{q1}\nSimpler question:",
-            "p6": "Context:\n{context}\nQuestion:\n{q1}\nYou can ask:",
-        }
-
-        if self.prompt_id in ["p1", "p2", "p3", "p4", "p5", "p6"]:
-            instruction = instruction_templates[self.prompt_id]
-            inpt = input_templates[self.prompt_id].format(context=context, q1=q1)
-            # prompt = self.llama3_template.format(instruction=instruction, input=inpt)
-            if self.prompt_id in ["p4", "p5", "p6"]:
-                inputs = []
-                for i, ex in enumerate(EXAMPLES):
-                    inpt = input_templates[self.prompt_id].format(
-                        context=ex["context"], q1=ex["q1"]
-                    )
-                    # inputs.append(self.alpaca_template.format(instruction=instruction, input=input) + "\n" + ex['q2'])
-                    inputs.append(inpt + "\nResponse:\n" + ex["q2"])
-                inputs.append(
-                    input_templates[self.prompt_id].format(context=context, q1=q1)
-                )
-                in_context_examples = "\n\n".join(inputs)
-                # prompt = self.llama3_template.format(
-                #     instruction=instruction, input=inputs
-                # )
-                inpt += in_context_examples
-            prompt = deepcopy(self.messages)
-            prompt[1]["content"] = prompt[1]["content"].format(
-                instruction=instruction, input=inpt
-            )
-
-        else:
-            raise Exception("No such prompt")
-        prompt = self.tokenizer.decode(
-            self.tokenizer.apply_chat_template(prompt)
-        )  # dumb but i don't want to rewrite stuff
-        return prompt
+    # def fit_template(self, q1, context):
+    #     prompt = format_instruction(q1, context, self.prompt_id)
+    #     return prompt
 
     def forward(self, example, question_col, context_col):
         q1 = example[question_col]
         context = example[context_col]
         prompt = self.fit_template(q1, context)
-
         inputs = self.tokenizer(
             prompt, return_tensors="pt", truncation=True, max_length=self.max_length
         )
@@ -701,7 +705,13 @@ class Llama3_Secondary_Model(Secondary_Model):
             for j in range(len(batch)):
                 q1 = batch[j][q1_col]
                 context = batch[j]["fc_masked"]
-                prompts.append(self.fit_template(q1, context))
+                prompts.append(format_instruction_llama3(q1, context, self.prompt_id))
+                # prompts.append(format_instruction(q1, context, self.prompt_id))
+
+            # tokenized_prompts = self.tokenizer.decode(
+            #     self.tokenizer.apply_chat_template(prompt)
+            # )  # dumb but i don't want to rewrite stuff
+            # prompts = format_instruction(q1, context, self.prompt_id)
             inputs = self.tokenizer(
                 prompts,
                 return_tensors="pt",
@@ -719,15 +729,17 @@ class Llama3_Secondary_Model(Secondary_Model):
                     max_length=self.max_length,
                     eos_token_id=eos_token_id,
                     pad_token_id=eos_token_id,
+                    temperature=self.temperature,
+                    do_sample=self.do_sample,
                 )
                 clean_outputs = []
                 decoded = self.tokenizer.batch_decode(
                     outputs[:, len(inputs["input_ids"][0]) :],
                     skip_special_tokens=True,
                 )
-                for output in decoded:
-                    clean_output = output.split("assistant\n\n")[1].strip()
-                    q2s.append(clean_output)
+                # for output in decoded:
+                #     clean_output = output.split("assistant\n\n")[1].strip()
+                q2s.extend(decoded)
         # for i in range(len(ds)):
         #     ds[i]["q2"] = q2s[i]
 
@@ -777,18 +789,21 @@ class Llama3_FT_Secondary_Model(Secondary_Model):
 
         # self.alpaca_template_no_input = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n"
 
-    def fit_template(self, q1, context):
-        prompt = (
-            "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
-            "Ask another question that would help you answer the following question:\n\nQuestion:\n{q1}\nContext:\n{context}\n"
-            "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
-        ).format(context=context, q1=q1)
-        return prompt
+    # @staticmethod
+    # def fit_template(instruction):
+    #     prompt = (
+    #         "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
+    #         "{instruction}"
+    #         "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    #     ).format(instruction=instruction)
+    #     return prompt
 
     def forward(self, example, question_col, context_col):
         q1 = example[question_col]
         context = example[context_col]
-        prompt = self.fit_template(q1, context)
+        # prompt = self.fit_template(q1, context)
+        instruction = format_instruction(q1, context, "p3")
+        prompt = self.fit_template(instruction)
 
         inputs = self.tokenizer(
             prompt, return_tensors="pt", truncation=True, max_length=self.max_length

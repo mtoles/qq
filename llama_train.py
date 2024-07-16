@@ -26,6 +26,9 @@ from datetime import datetime
 import wandb
 import os
 
+from secondary_model import format_instruction_llama3
+
+
 ######## W&B Setup ########
 os.environ["WANDB_PROJECT"] = "qq"  # name your W&B project
 os.environ["WANDB_LOG_MODEL"] = "false"  # false/end/checkpoint
@@ -40,32 +43,35 @@ os.environ["WANDB_CONFIG_DIR"] = os.path.join(
 from main import main as analyze
 
 IGNORE_INDEX = -100
-DEFAULT_PAD_TOKEN = "[PAD]"
-DEFAULT_EOS_TOKEN = "</s>"
-DEFAULT_BOS_TOKEN = "<s>"
-DEFAULT_UNK_TOKEN = "<unk>"
-PROMPT_DICT = {
-    # "prompt_input": (
-    #     "Below is an instruction that describes a task, paired with an input that provides further context. "
-    #     "Write a response that appropriately completes the request.\n\n"
-    #     "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
-    # ),
-    # "prompt_no_input": (
-    #     "Below is an instruction that describes a task. "
-    #     "Write a response that appropriately completes the request.\n\n"
-    #     "### Instruction:\n{instruction}\n\n### Response:"
-    # ),
-    "prompt_no_input": (  # llama3
-        "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
-        "{instruction}\n"
-        "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
-    ),
-}
+# DEFAULT_PAD_TOKEN = "[PAD]"
+# DEFAULT_EOS_TOKEN = "</s>"
+# DEFAULT_BOS_TOKEN = "<s>"
+# DEFAULT_UNK_TOKEN = "<unk>"
+# DEFAULT_PAD_TOKEN = "<pad>"
+# PROMPT_DICT = {
+#     # "prompt_input": (
+#     #     "Below is an instruction that describes a task, paired with an input that provides further context. "
+#     #     "Write a response that appropriately completes the request.\n\n"
+#     #     "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+#     # ),
+#     # "prompt_no_input": (
+#     #     "Below is an instruction that describes a task. "
+#     #     "Write a response that appropriately completes the request.\n\n"
+#     #     "### Instruction:\n{instruction}\n\n### Response:"
+#     # ),
+#     "prompt_no_input": (  # llama3
+#         "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
+#         "{instruction}\n"
+#         "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+#     ),
+# }
 
 
 @dataclass
 class ModelArguments:
-    model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
+    model_name_or_path: Optional[str] = field(
+        default="meta-llama/Meta-Llama-3-8B-Instruct"
+    )
 
 
 @dataclass
@@ -126,7 +132,8 @@ def _tokenize_fn(
             text,
             return_tensors="pt",
             padding="longest",
-            max_length=tokenizer.model_max_length,
+            # max_length=tokenizer.model_max_length,
+            max_length=275,
             truncation=True,
         )
         for text in strings
@@ -164,7 +171,12 @@ def preprocess(
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer):
+    def __init__(
+        self,
+        data_path: str,
+        tokenizer: transformers.PreTrainedTokenizer,
+        formatting_fn: callable,
+    ):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
         list_data_dict = utils.jload(data_path)
@@ -174,21 +186,21 @@ class SupervisedDataset(Dataset):
         #     PROMPT_DICT["prompt_input"],
         #     PROMPT_DICT["prompt_no_input"],
         # )
-        prompt_no_input = PROMPT_DICT["prompt_no_input"]
-        sources = [
-            # (
-            #     prompt_input.format_map(example)
-            #     if example.get("input", "") != ""
-            #     else prompt_no_input.format_map(example)
-            # )
-            prompt_no_input.format_map(example)
-            for example in list_data_dict
-        ]
+        # prompt_no_input = PROMPT_DICT["prompt_no_input"]
+
+        # sources0 = [
+        #     prompt_no_input.format_map(example)
+        #     for example in list_data_dict
+        # ]
+
+        q1s = [example["q1"] for example in list_data_dict]
+        contexts = [example["fc_masked"] for example in list_data_dict]
+        sources = [formatting_fn(q1, context) for q1, context in zip(q1s, contexts)]
+
         print("sources: ")
         print(sources[0])
-        targets = [
-            f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict
-        ]
+        # targets = [f"{example['output']}" for example in list_data_dict]
+        targets = [f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict]
 
         logging.warning("Tokenizing inputs... This may take some time...")
         data_dict = preprocess(sources, targets, tokenizer)
@@ -227,11 +239,11 @@ class DataCollatorForSupervisedDataset(object):
 
 
 def make_supervised_data_module(
-    tokenizer: transformers.PreTrainedTokenizer, data_args
+    tokenizer: transformers.PreTrainedTokenizer, data_args, formatting_fn
 ) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     train_dataset = SupervisedDataset(
-        tokenizer=tokenizer, data_path=data_args.data_path
+        tokenizer=tokenizer, data_path=data_args.data_path, formatting_fn=formatting_fn
     )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(
@@ -268,15 +280,22 @@ def train():
         padding_side="right",
         use_fast=False,
     )
+    tokenizer.pad_token = tokenizer.eos_token
     special_tokens_dict = dict()
-    if tokenizer.pad_token is None:
-        special_tokens_dict["pad_token"] = DEFAULT_PAD_TOKEN
-    if tokenizer.eos_token is None:
-        special_tokens_dict["eos_token"] = DEFAULT_EOS_TOKEN
-    if tokenizer.bos_token is None:
-        special_tokens_dict["bos_token"] = DEFAULT_BOS_TOKEN
-    if tokenizer.unk_token is None:
-        special_tokens_dict["unk_token"] = DEFAULT_UNK_TOKEN
+    # if tokenizer.pad_token is None:
+    #     special_tokens_dict["pad_token"] = DEFAULT_PAD_TOKEN
+    # if tokenizer.eos_token is None:
+    #     special_tokens_dict["eos_token"] = DEFAULT_EOS_TOKEN
+    # if tokenizer.bos_token is None:
+    #     special_tokens_dict["bos_token"] = DEFAULT_BOS_TOKEN
+    # if tokenizer.unk_token is None:
+    #     special_tokens_dict["unk_token"] = DEFAULT_UNK_TOKEN
+    # assert None not in (
+    #     tokenizer.pad_token,
+    #     tokenizer.eos_token,
+    #     tokenizer.bos_token,
+    #     tokenizer.unk_token,
+    # )
 
     smart_tokenizer_and_embedding_resize(
         special_tokens_dict=special_tokens_dict,
@@ -284,13 +303,23 @@ def train():
         model=model,
     )
 
-    data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
+    # temporarily load llama3 to get the formatting fn
+    def format_for_llama3(q1, context):
+        # inpt, instruction = get_input_and_instruction(q1, context, "p3")
+        # chat_message = Llama3_FT_Secondary_Model.fit_template(inpt)
+        # chat_message = format_instruction(q1, context, "p3")
+        chat_message = format_instruction_llama3(q1, context, "p3")
+        return chat_message
+
+    data_module = make_supervised_data_module(
+        tokenizer=tokenizer, data_args=data_args, formatting_fn=format_for_llama3
+    )
     trainer = Trainer(
         model=model, tokenizer=tokenizer, args=training_args, **data_module
     )
     trainer.train()
     trainer.save_state()
-    output_path = f"{training_args.output_dir}_{training_args.examples}_{now}"
+    output_path = f"{training_args.output_dir}/{training_args.examples}_{now}"
     trainer.save_model(output_dir=output_path)
     print(f"saving model to {output_path}")
 
@@ -299,8 +328,9 @@ def train():
     analyze_df = analyze(
         split="validation",
         m1_arch="t5-base",
-        m2_arch="llama3_ft",
-        alexpaca_precomputed_data_path=None,
+        m2_arch="llama3",
+        template_id="p3",
+        alexpaca_precomputed_data_path=output_path,
         oracle_arch="t5",
         oracle_size="base",
         save_dir="results/llama3_ft/checkpointed",
@@ -308,7 +338,6 @@ def train():
         m1_eval_batch_size=64,
         # defaults
         alexpaca_path=output_path,
-        template_id=None,
         m2_eval_batch_size=1,
         downsample_pt_size=None,
         ds_shift=None,
