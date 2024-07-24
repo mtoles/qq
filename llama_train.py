@@ -94,6 +94,9 @@ class TrainingArguments(transformers.TrainingArguments):
     examples: int = field(
         default=1000, metadata={"help": "Number of examples to train on."}
     )
+    estring: str = field(
+        default="", metadata={"help": "identifier string for model and eval outputs"}
+    )
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -333,8 +336,8 @@ def train():
         alexpaca_precomputed_data_path=output_path,
         oracle_arch="t5",
         oracle_size="base",
-        save_dir="results/llama3_ft/checkpointed",
-        oracle_eval_batch_size=64,
+        save_dir=f"results/llama3_ft/checkpointed/{training_args.estring}",
+        oracle_eval_batch_size=16,
         m1_eval_batch_size=64,
         # defaults
         alexpaca_path=output_path,

@@ -23,6 +23,7 @@ import pandas as pd
 import os
 from preprocess import get_preprocessed_ds
 from tqdm import tqdm
+import json
 
 np.random.seed(42)
 
@@ -92,23 +93,24 @@ def main(
     masked_sentences = ds["masked_sentence"]
     # downsample and shift
     print("loading language model...")
-    # model = OpenAI_Secondary_Model(
+    model = OpenAI_Secondary_Model(
+        ".cache/shelved_cache",
+        "gpt-4",
+    )
+    # model = OpenAI_Jeopardy_Secondary_Model(
     #     None,
     #     "gpt-4-turbo",
     # )
-    model = OpenAI_Jeopardy_Secondary_Model(
-        None,
-        "gpt-4-turbo",
-    )
     jeopardy_qs = []
     print("generating jeopardy questions...")
     for i in tqdm(range(0, len(ds))):
         batch = ds[i]
         masked_sentences = batch["masked_sentence"]
-        batch_output = model.forward(batch, "q1", "fc_masked", "masked_sentence")
+        batch_output = model.forward(batch, "q1", "fc_masked")
+        # batch_output = model.forward(batch, "q1", "fc_masked", "masked_sentence")
         jeopardy_qs.append(batch_output)
 
-    ds = ds.add_column("jeopardy_q", jeopardy_qs)
+    ds = ds.add_column("output", jeopardy_qs)
 
     # keep only necessary cols
 
@@ -121,11 +123,16 @@ def main(
         os.makedirs(save_dir)
     save_path = os.path.join(
         save_dir,
-        f"jeopardy_gpt_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}.jsonl",
+        f"gpt_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}.jsonl",
     )
 
+    output_list = df[["q1", "fc_masked", "output"]].to_dict(orient="records")
+    with open(save_path, "w") as f:
+        f.write("[")
+        f.write(",\n".join([json.dumps(line) for line in output_list]))
+        f.write("]")
+
     # df.to_hdf(save_path, "ds")
-    df.to_json(save_path, orient="records", lines=True)
     print(f"dataset saved to {save_path}")
 
     print

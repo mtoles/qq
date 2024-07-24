@@ -338,6 +338,8 @@ class OpenAI_Secondary_Model(Secondary_Model):
             self.model_name = "gpt-3.5-turbo-1106"
         elif model_name == "gpt-4":
             self.model_name = "gpt-4-0314"
+        else:
+            raise NotImplementedError(f"model_name {model_name} not implemented or inconsistent with results in paper")
         # self.model = "gpt-3.5-turbo"
         self.cache_path = cache_path
         self.oai_model_id = (

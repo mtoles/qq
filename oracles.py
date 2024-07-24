@@ -106,9 +106,7 @@ class T5_Bool_Oracle(Oracle):
             ].cuda()  # different from bloom
 
             # process logits in batches
-            example = self._fw0(
-                c, example, input_ids, label_ids, corpus_strs
-            )
+            example = self._fw0(c, example, input_ids, label_ids, corpus_strs)
             # example1 = self._fw1(c, example, input_ids, label_ids, corpus_strs)
             return example
 
@@ -130,7 +128,7 @@ class T5_Bool_Oracle(Oracle):
             ).scores[0]
             yn_scores = batch_logits[:, label_ids.T.squeeze()].softmax(dim=1)
             probs.append(yn_scores)
-        probs = torch.cat(probs, dim=0) # shape: (c, 2)
+        probs = torch.cat(probs, dim=0)  # shape: (c, 2)
         assert len(probs) == len(corpus_strs)
 
         best_index = probs[:, 0].argmax()
@@ -150,7 +148,7 @@ class OpenAI_Oracle(Oracle):
         assert model in ["gpt-3.5-turbo", "gpt-4"]
         if model == "gpt-3.5-turbo":
             self.model = "gpt-3.5-turbo-1106"
-        elif model == "gpt-4": 
+        elif model == "gpt-4":
             self.model = "gpt-4-0314"
 
     def forward(self, example):
