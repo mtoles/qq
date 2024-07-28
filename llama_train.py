@@ -79,6 +79,10 @@ class DataArguments:
     data_path: str = field(
         default=None, metadata={"help": "Path to the training data."}
     )
+    round_cutoff: int = field(
+        default=None,
+        metadata={"help": "Drop data from the dataset generated on rounds on or after round_cutoff."},
+    )
 
 
 @dataclass
@@ -96,6 +100,9 @@ class TrainingArguments(transformers.TrainingArguments):
     )
     estring: str = field(
         default="", metadata={"help": "identifier string for model and eval outputs"}
+    )
+    save_on_each_node: bool = field(
+        default=False, metadata={"help": "Save model on each node."}
     )
 
 
@@ -179,10 +186,15 @@ class SupervisedDataset(Dataset):
         data_path: str,
         tokenizer: transformers.PreTrainedTokenizer,
         formatting_fn: callable,
+        round_cutoff: int,
     ):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
         list_data_dict = utils.jload(data_path)
+        if round_cutoff is not None:
+            list_data_dict = [
+                example for example in list_data_dict if example["round"] <= round_cutoff
+            ]
 
         logging.warning("Formatting inputs...")
         # prompt_input, prompt_no_input = (
@@ -246,7 +258,7 @@ def make_supervised_data_module(
 ) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     train_dataset = SupervisedDataset(
-        tokenizer=tokenizer, data_path=data_args.data_path, formatting_fn=formatting_fn
+        tokenizer=tokenizer, data_path=data_args.data_path, formatting_fn=formatting_fn, round_cutoff=data_args.round_cutoff
     )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(
@@ -321,6 +333,7 @@ def train():
         model=model, tokenizer=tokenizer, args=training_args, **data_module
     )
     trainer.train()
+    torch.cuda.synchronize()
     trainer.save_state()
     output_path = f"{training_args.output_dir}/{training_args.examples}_{now}"
     trainer.save_model(output_dir=output_path)
@@ -328,27 +341,33 @@ def train():
 
     print("evaluating model")
 
+    # make only the first gpu visible for eval
+    try:
+        os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["CUDA_VISIBLE_DEVICES"].split(",")[0]
+    except KeyError:
+        pass
+
     analyze_df = analyze(
         split="validation",
         m1_arch="t5-base",
         m2_arch="llama3",
         template_id="p3",
-        alexpaca_precomputed_data_path=output_path,
+        # alexpaca_precomputed_data_path=output_path,
+        alexpaca_precomputed_data_path=None,
         oracle_arch="t5",
         oracle_size="base",
         save_dir=f"results/llama3_ft/checkpointed/{training_args.estring}",
         oracle_eval_batch_size=16,
         m1_eval_batch_size=64,
-        # defaults
         alexpaca_path=output_path,
+        # defaults
         m2_eval_batch_size=1,
         downsample_pt_size=None,
-        ds_shift=None,
+        ds_shift=0,
         oai_cache_path=None,
         gt_subset=False,
         results_filename="RESULTS_FILENAME",
     )
-
 
 if __name__ == "__main__":
     train()

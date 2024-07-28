@@ -170,24 +170,10 @@ class Alpaca_Secondary_Model(Secondary_Model):
             print("loading alpaca in bnb_4 bit")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
-                quantization_config=quantization_config,  # Same quantization config as before
+                quantization_config=quantization_config,
                 device_map="auto",
                 trust_remote_code=True,
             )
-
-            # self.model = PeftModel.from_pretrained(
-            #     normal_model, "models/alpaca-jeopardy-1-epoch"
-            # )
-
-            # # trainer = SFTTrainer(
-            # #     model=self.model,
-            # #     # peft_config=peft_config,
-            # #     dataset_text_field="training_example",
-            # #     max_seq_length=max_seq_length,
-            # #     tokenizer=tokenizer,
-            # #     args=training_arguments,
-            # #     packing=packing,
-            # # )
 
         else:
             self.model = AutoModelForCausalLM.from_pretrained(model_path)
@@ -339,7 +325,9 @@ class OpenAI_Secondary_Model(Secondary_Model):
         elif model_name == "gpt-4":
             self.model_name = "gpt-4-0314"
         else:
-            raise NotImplementedError(f"model_name {model_name} not implemented or inconsistent with results in paper")
+            raise NotImplementedError(
+                f"model_name {model_name} not implemented or inconsistent with results in paper"
+            )
         # self.model = "gpt-3.5-turbo"
         self.cache_path = cache_path
         self.oai_model_id = (
@@ -651,8 +639,9 @@ class Llama3_Secondary_Model(Secondary_Model):
                 "meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16
             )
         else:
+            print("loading llama3 from path")
             self.model = AutoModelForCausalLM.from_pretrained(
-                model_path, torch_dtype=torch.bfloat16
+                model_path, torch_dtype=torch.bfloat16, use_safetensors=True
             )
         if str(self.model.device) == "cpu":
             self.model.to(self.device)

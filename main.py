@@ -36,7 +36,8 @@ np.random.seed(42)
 @click.option(
     "--alexpaca_precomputed_data_path",
     help="path to alexpaca lookup data",
-    default="data/jeopardy/jeopardy_full_validation.jsonl",
+    # default="data/jeopardy/jeopardy_full_validation.jsonl",
+    default=None
 )
 @click.option(
     "--template_id",
@@ -52,11 +53,6 @@ np.random.seed(42)
 @click.option(
     "--oracle_eval_batch_size", help="batch size for eval", default=2, type=int
 )
-# @click.option(
-#     "--max_adversarial_examples",
-#     default=1,
-#     help="create at most this many adversarial examples per example",
-# )
 @click.option(
     "--downsample_pt_size",
     default=None,
@@ -204,6 +200,7 @@ def main(
             # precision="float32", # wrong?
         )
     elif m2_arch == "alexpaca_precomputed":
+        raise NotImplementedError
         m2 = Alpaca_Secondary_Model_Jeopardy_Lookup(
             precomputed_jeopardy_path=alexpaca_precomputed_data_path,
             model_name="alexpaca_precomputed",
@@ -268,7 +265,7 @@ def main(
         save_dir,
         f"{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}_{now}.json",
     )
-    desrcribe_path = PurePath(save_path + "_" + str(datetime.now())).with_suffix(".csv")
+    desrcribe_path = PurePath(save_path).with_suffix(".csv")
     describe_df = (
         df[
             [
