@@ -104,6 +104,10 @@ class TrainingArguments(transformers.TrainingArguments):
     save_on_each_node: bool = field(
         default=False, metadata={"help": "Save model on each node."}
     )
+    do_eval: bool = field(
+        default=True, metadata={"help": "Run evaluation after training."}
+    )
+    
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -342,32 +346,34 @@ def train():
     print("evaluating model")
 
     # make only the first gpu visible for eval
+    torch.cuda.synchronize()
     try:
         os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["CUDA_VISIBLE_DEVICES"].split(",")[0]
     except KeyError:
         pass
-
-    analyze_df = analyze(
-        split="validation",
-        m1_arch="t5-base",
-        m2_arch="llama3",
-        template_id="p3",
-        # alexpaca_precomputed_data_path=output_path,
-        alexpaca_precomputed_data_path=None,
-        oracle_arch="t5",
-        oracle_size="base",
-        save_dir=f"results/llama3_ft/checkpointed/{training_args.estring}",
-        oracle_eval_batch_size=16,
-        m1_eval_batch_size=64,
-        alexpaca_path=output_path,
-        # defaults
-        m2_eval_batch_size=1,
-        downsample_pt_size=None,
-        ds_shift=0,
-        oai_cache_path=None,
-        gt_subset=False,
-        results_filename="RESULTS_FILENAME",
-    )
+    
+    if training_args.do_eval:
+        analyze_df = analyze(
+            split="validation",
+            m1_arch="t5-base",
+            m2_arch="llama3",
+            template_id="p3",
+            # alexpaca_precomputed_data_path=output_path,
+            alexpaca_precomputed_data_path=None,
+            oracle_arch="t5",
+            oracle_size="base",
+            save_dir=f"results/llama3_ft/checkpointed/{training_args.estring}",
+            oracle_eval_batch_size=16,
+            m1_eval_batch_size=64,
+            alexpaca_path=output_path,
+            # defaults
+            m2_eval_batch_size=1,
+            downsample_pt_size=None,
+            ds_shift=0,
+            oai_cache_path=None,
+            gt_subset=False,
+            results_filename="RESULTS_FILENAME",
+        )
 
 if __name__ == "__main__":
     train()
