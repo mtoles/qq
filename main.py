@@ -73,6 +73,11 @@ np.random.seed(42)
 @click.option(
     "--gt_subset", flag_value=True, help="filter in only gt examples for m2 comparisons"
 )
+@click.option(
+    "--supp_eval",
+    flag_value=True,
+    help="also eval masked and supporting columns",
+)
 def click_main(**args):
     main(**args)
 
@@ -96,6 +101,7 @@ def main(
     gt_subset,
     results_filename,
     save_dir,
+    supp_eval,
 ):
     if m2_arch == "gt":
         gt_subset = True
@@ -180,6 +186,14 @@ def main(
                 relevant_examples.append(x)
                 used.add(x["masked_sentence"])
         ds = Dataset.from_pandas(pd.DataFrame(data=relevant_examples))
+
+
+    if supp_eval:
+        print("m1 masked and supporting...")
+        ds, metrics["supporting"] = m1.evaluate(
+            masking_scheme="supporting", ds=ds, a2_col=None
+        )
+
     # Create the secondary model
     if m2_arch == "repeater":
         m2 = Repeater_Secondary_Model()
@@ -259,6 +273,7 @@ def main(
     ds, metrics["answered"] = m1.evaluate(masking_scheme="masked", ds=ds, a2_col="a2")
 
     # Analysis
+
     df = pd.DataFrame(ds)
     print(f"runtime: {datetime.now()-start}")
 
@@ -270,17 +285,29 @@ def main(
         f"{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{m1_arch}_{m2_arch}_{oracle_arch}_{oracle_size}_{template_id}_{now}.json",
     )
     desrcribe_path = PurePath(save_path).with_suffix(".csv")
+    if supp_eval:
+        output_cols = [
+            "m1_supporting_None_f1",
+            "m1_masked_None_f1",
+            "m1_masked_a2_f1",
+            "m1_supporting_None_em",
+            "m1_masked_None_em",
+            "m1_masked_a2_em",
+            "a2_is_correct",
+        ]
+    else:
+        output_cols = [
+            # "m1_supporting_None_f1",
+            # "m1_masked_None_f1",
+            "m1_masked_a2_f1",
+            # "m1_supporting_None_em",
+            # "m1_masked_None_em",
+            "m1_masked_a2_em",
+            "a2_is_correct",
+        ]
     describe_df = (
         df[
-            [
-                "m1_supporting_None_f1",
-                "m1_masked_None_f1",
-                "m1_masked_a2_f1",
-                "m1_supporting_None_em",
-                "m1_masked_None_em",
-                "m1_masked_a2_em",
-                "a2_is_correct",
-            ]
+            output_cols
         ]
         .astype(float)
         .describe()
