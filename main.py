@@ -269,11 +269,11 @@ def main(
     describe_df = (
         df[
             [
-                # "m1_supporting_None_f1",
-                # "m1_masked_None_f1",
+                "m1_supporting_None_f1",
+                "m1_masked_None_f1",
                 "m1_masked_a2_f1",
-                # "m1_supporting_None_em",
-                # "m1_masked_None_em",
+                "m1_supporting_None_em",
+                "m1_masked_None_em",
                 "m1_masked_a2_em",
                 "a2_is_correct",
             ]
