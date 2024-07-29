@@ -97,6 +97,8 @@ def main(
     results_filename,
     save_dir,
 ):
+    if m2_arch == "gt":
+        gt_subset = True
     assert m2_eval_batch_size == 1, "only batch size 1 is supported for m2"
     # assert (alexpaca_path and m2_arch in ["alexpaca", "llama3_ft", "llama3"]) or (
     #     not alexpaca_path and not m2_arch in ["alexpaca", "llama3_ft"]
@@ -155,7 +157,8 @@ def main(
     # fill with -1 instead
     metrics["supporting"] = -1
     # select and mask examples where the primary
-    ds = randsentence_dataset(ds, m1, do_gt=False)
+    # ds = randsentence_dataset(ds, m1, do_gt=False)
+    ds = randsentence_dataset(ds, m1, do_gt=gt_subset)
 
     # select only ground truth examples if we are doing analysis using the ground truth model
     if m2_arch == "gt" or gt_subset:
@@ -167,6 +170,7 @@ def main(
         # filter based on the question cuz i forgot to include the full id in the labeling doc
         # and it wouldn't be ideal anyway cuz of suffix inconsistency
         ds = ds.filter(lambda x: x["masked_sentence"] in gt_masked_sentences)
+        assert len(ds) != before_len
         # select a random set of questions with one distractor added that match the annotated examples' masked sentences
         # get only the first example of each masked sentence
         used = set()
