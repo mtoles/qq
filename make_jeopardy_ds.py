@@ -253,6 +253,7 @@ def main(
             oai_cache_path=None,
             gt_subset=False,
             results_filename="RESULTS_FILENAME",
+            supp_eval=False,
         )
 
         # df = df[analyze_df["a2_is_correct"]]

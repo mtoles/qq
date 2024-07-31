@@ -374,6 +374,7 @@ def train():
             oai_cache_path=None,
             gt_subset=False,
             results_filename="RESULTS_FILENAME",
+            supp_eval=False,
         )
 
 if __name__ == "__main__":

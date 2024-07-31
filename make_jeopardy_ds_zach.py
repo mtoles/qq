@@ -175,7 +175,7 @@ def main(
 
     filtered_save_path = os.path.join(
         save_dir,
-        f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}_zach_filtered_tatsu_seed-{initial_seed}_E9.jsonl",
+        f"jeopardy_{'full' if str(downsample_pt_size) == 'None' else downsample_pt_size}_{split}_zach_filtered_tatsu_seed-{initial_seed}_E12.jsonl",
     )
     # df.to_json(filtered_save_path, orient="records", lines=True)
 
