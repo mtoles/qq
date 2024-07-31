@@ -150,12 +150,12 @@ def main(
             # & active_df["m1_masked_None_f1"] == 0
 
             # E4
-            # active_df["a2_is_correct"]
+            active_df["a2_is_correct"]
             
             # E5
-            ((active_df["m1_masked_a2_f1"] - active_df["m1_masked_None_f1"] > 0)
-            | (active_df["m1_masked_a2_f1"] > 0.5))
-            | active_df["a2_is_correct"]
+            # ((active_df["m1_masked_a2_f1"] - active_df["m1_masked_None_f1"] > 0)
+            # | (active_df["m1_masked_a2_f1"] > 0.5))
+            # | active_df["a2_is_correct"]
         ]["id"]
         print(f"it: {i}\timproved {len(improved_id)}/{len(ds)}")
         df.loc[improved_id, "filtered_q2"] = active_df.set_index("id").loc[

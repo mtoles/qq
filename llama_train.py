@@ -339,7 +339,8 @@ def train():
     trainer.train()
     torch.cuda.synchronize()
     trainer.save_state()
-    output_path = f"{training_args.output_dir}/{training_args.examples}_{now}"
+    cutoff_str = f"_cuttoff_{data_args.round_cutoff}" if data_args.round_cutoff is not None else ""
+    output_path = f"{training_args.output_dir}/{training_args.estring}/{training_args.examples}{cutoff_str}_{now}"
     trainer.save_model(output_dir=output_path)
     print(f"saving model to {output_path}")
 
